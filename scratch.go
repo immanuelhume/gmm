@@ -19,11 +19,22 @@ func baz(key string) {
 	}
 
 	var c chan string
-	var x *Point = nil
+	var p Point
 
 	go bar(key, key)
 
-	c = make(chan string)
+	ch = make(chan string)
+	ch <- "hello world"
+
+	<-ch
+
+	s := p.x + p.y
+
+	if s > 9 {
+	} else if s > 8 {
+	} else {
+		fmt.Println("peko peko")
+	}
 }
 
 type Point struct {
@@ -32,4 +43,3 @@ type Point struct {
 }
 
 type IpAddr float32
-

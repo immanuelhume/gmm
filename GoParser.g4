@@ -4,17 +4,23 @@ options { tokenVocab = GoLexer ; }
 
 prog : stmt* ;
 
-stmt : (decl 
-	| shortVarDecl 
-	| assignment 
-	| returnStmt 
-	| forStmt 
-	| goStmt 
-	| breakStmt 
-	| continueStmt 
+stmt : (decl
+	| shortVarDecl
+	| assignment
+	| returnStmt
+	| forStmt
+	| goStmt
+	| breakStmt
+	| continueStmt
 	| sendStmt
-	| exprStmt 
+	| ifStmt
+	| block
+	| exprStmt
 	) eos ;
+
+// [defer] statements would be good to add
+
+ifStmt : 'if' cond=expr cons=block ('else' (ifStmt | alt=block)) ;
 
 sendStmt : channel=expr '<-' rhs=expr ;
 
@@ -33,11 +39,13 @@ exprStmt : expr ;
 
 returnStmt : 'return' expr ;
 
-expr : primaryExpr | unaryOp expr | expr binaryOp expr ;
+expr : primaryExpr | unaryOp expr | lhs=expr binaryOp rhs=expr ;
 
-primaryExpr : ident | lit | primaryExpr args ;
+primaryExpr : ident | lit | primaryExpr args | primaryExpr selector ;
 
-args : '(' arg (',' arg)* ','? | arg? ')';
+selector : '.' ident ;
+
+args : '(' arg (',' arg)* ','? | ')';
 arg : expr | type ; // functions like [make] take in types as params...
 
 block : '{' stmt* '}' ;
@@ -66,13 +74,10 @@ param : ident typeName ;
 
 type : typeName | typeLit ;
 typeName : ident ;
-typeLit : structType | channelType | pointerType ;
+typeLit : structType | channelType ; // exclude pointer types for now - we probably won't need them
 
 channelType : 'chan' elementType ;
 elementType : type ;
-
-pointerType : '*' baseType ;
-baseType : type ;
 
 structType : 'struct' '{' (fieldDecl eos)* '}' ;
 fieldDecl : ident type ;

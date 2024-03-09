@@ -17,6 +17,10 @@ NIL : 'nil' -> mode(NLSEMI) ;
 GO : 'go' ;
 BREAK : 'break' -> mode(NLSEMI) ;
 CONTINUE : 'continue' -> mode(NLSEMI) ;
+IF : 'if' ;
+ELSE : 'else' ;
+
+PERIOD : '.' ;
 
 L_BRACE : '{' ;
 R_BRACE : '}' -> mode(NLSEMI) ;
