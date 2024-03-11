@@ -2,11 +2,9 @@ parser grammar GoParser ;
 
 options { tokenVocab = GoLexer ; }
 
-prog : stmt* ;
+prog : (stmt eos)* ;
 
-stmt : (decl
-	| shortVarDecl
-	| assignment
+stmt : decl
 	| returnStmt
 	| forStmt
 	| goStmt
@@ -15,8 +13,10 @@ stmt : (decl
 	| sendStmt
 	| ifStmt
 	| block
-	| exprStmt
-	) eos ;
+	| simpleStmt
+	;
+
+simpleStmt : assignment | shortVarDecl | exprStmt ;
 
 // [defer] statements would be good to add
 
@@ -31,15 +31,20 @@ goStmt : 'go' primaryExpr ; // [primaryExpr] has to be a function call
 
 assignment : lhs=expr '=' rhs=expr ;
 
-forStmt : 'for' (condition) block ;
+forStmt : 'for' (condition | forClause | rangeClause) block ;
 
 condition : expr ;
+
+forClause : init=simpleStmt? ';' cond=condition? ';' post=simpleStmt? ;
+
+rangeClause : ( exprList '=' | identList ':=' ) 'range' expr ;
 
 exprStmt : expr ;
 
 returnStmt : 'return' expr ;
 
 expr : primaryExpr | unaryOp expr | lhs=expr binaryOp rhs=expr ;
+exprList : expr (',' expr)* ;
 
 primaryExpr : ident | lit | primaryExpr args | primaryExpr selector ;
 
@@ -48,7 +53,7 @@ selector : '.' ident ;
 args : '(' arg (',' arg)* ','? | ')';
 arg : expr | type ; // functions like [make] take in types as params...
 
-block : '{' stmt* '}' ;
+block : '{' (stmt eos)* '}' ;
 
 unaryOp : '-' | '+' | '<-' ;
 
@@ -83,6 +88,7 @@ structType : 'struct' '{' (fieldDecl eos)* '}' ;
 fieldDecl : ident type ;
 
 ident : WORD ;
+identList : ident (',' ident)* ;
 
 lit : number | litStr | litNil | litFunc;
 
