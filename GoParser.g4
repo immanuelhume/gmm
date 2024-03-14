@@ -46,7 +46,11 @@ returnStmt : 'return' expr ;
 expr : primaryExpr | unaryOp expr | lhs=expr binaryOp rhs=expr ;
 exprList : expr (',' expr)* ;
 
-primaryExpr : ident | lit | primaryExpr args | primaryExpr selector ;
+primaryExpr : ident 
+	| lit
+	| fn=primaryExpr args
+	| base=primaryExpr selector
+	;
 
 selector : '.' ident ;
 

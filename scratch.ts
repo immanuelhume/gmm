@@ -2,9 +2,10 @@
 
 import { CharStream, CommonTokenStream } from 'antlr4'
 import GoLexer from './antlr/GoLexer'
-import GoParser, { BlockContext, ExprContext, FuncDeclContext, GoStmtContext, IfStmtContext, LitStrContext, NumberContext, ReturnStmtContext, SendStmtContext, StmtContext, VarDeclContext } from './antlr/GoParser'
+import GoParser, { BlockContext, ExprContext, FuncDeclContext, GoStmtContext, IdentContext, IfStmtContext, LitStrContext, NumberContext, PrimaryExprContext, ProgContext, ReturnStmtContext, SendStmtContext, StmtContext, VarDeclContext } from './antlr/GoParser'
 import GoVisitor from './antlr/GoParserVisitor'
 import { readFileSync } from 'fs'
+import assert from 'assert'
 
 
 interface Stack<T> {
@@ -13,8 +14,6 @@ interface Stack<T> {
   forEach: <S>(f: (t: T) => S) => void
 }
 
-type Operator<T> = (lhs: T, rhs: T) => T
-
 /*
 Memory model:
 
@@ -22,159 +21,457 @@ Memory model:
 - Each node consists of >= 1 words
 - Each word is 64 bits
 
+  ┌──────────────────┬─────────────┬───┐
+  │data type (8 bits)│size (8 bits)│...│
+  └──────────────────┴─────────────┴───┘
 - The first word of each node is a metadata block
-- Metadata block: [ 8 bit data type | 8 bit size | ... ]
   - The size refers to no. of words in this node (must be >= 1)
 */
 
 type Address = number
 
-class NodeViewer {
-  private readonly heap: DataView
-  private readonly addr: Address
+/* [NodeView] encapsulates how we access parts of nodes. */
+class NodeView {
+  protected readonly heap: DataView
+  readonly addr: Address
 
-  constructor(heap: Readonly<DataView>, addr: Address) {
+  protected constructor(heap: DataView, addr: Address) {
     this.heap = heap
     this.addr = addr
   }
 
-  getAddr(): Address { return this.addr }
-  getDataType(): DataType { return this.heap.getUint8(this.addr) }
-  getSize(): number { return this.heap.getUint8(this.addr + 1) }
+  static getDataType(heap: DataView, addr: Address): DataType { return heap.getUint8(addr) }
 
-  isNumeric(): boolean {
-    const dataType = this.getDataType()
-    return dataType in [DataType.Float64, DataType.Int64]
-  }
+  dataType(): DataType { return NodeView.getDataType(this.heap, this.addr) }
+  size(): number { return this.heap.getUint8(this.addr + 1) }
 
-  childByteOffset(i: number): number {
+  protected childByteOffset(i: number): Address {
     return this.addr + (i + 1) * 8
   }
 
-  getChild<T>(i: number, f: (addr: Address) => T): T {
-    return f.call(this.heap, this.childByteOffset(i))
+  protected getChild(i: number): number {
+    return this.heap.getFloat64(this.childByteOffset(i))
   }
 
-  setChild<T>(i: number, t: T, f: (addr: Address, t: T) => void): void {
-    return f.call(this.heap, this.childByteOffset(i), t)
+  protected setChild(i: number, value: number): void {
+    this.heap.setFloat64(this.childByteOffset(i), value)
+  }
+
+  checkType(type: DataType) {
+    assert(this.dataType() === type)
+  }
+}
+
+class Float64View extends NodeView {
+  static readonly size: number = 2;
+
+  static allocate(state: MachineState): Float64View {
+    const addr = allocate(state, DataType.Float64, 2)
+    return new Float64View(state.heap, addr)
+  }
+
+  constructor(heap: DataView, addr: Address) {
+    super(heap, addr)
+    this.checkType(DataType.Float64)
+  }
+
+  getValue(): number {
+    return this.getChild(0)
+  }
+
+  setValue(value: number): void {
+    this.setChild(0, value)
+  }
+}
+
+class Int64View extends NodeView {
+  static readonly size: number = 2;
+
+  static allocate(state: MachineState): Int64View {
+    const addr = allocate(state, DataType.Int64, 2)
+    return new Int64View(state.heap, addr)
+  }
+
+  constructor(heap: DataView, addr: Address) {
+    super(heap, addr)
+    this.checkType(DataType.Int64)
+  }
+
+  getValue(): number {
+    return this.getChild(0)
+  }
+
+  setValue(value: number): void {
+    this.setChild(0, value)
+  }
+}
+
+class FrameView extends NodeView {
+  static allocate(state: MachineState, numVars: number): FrameView {
+    const addr = allocate(state, DataType.Frame, numVars + 1)
+    return new FrameView(state.heap, addr)
+  }
+
+  constructor(heap: DataView, addr: Address) {
+    super(heap, addr)
+    this.checkType(DataType.Frame)
+  }
+
+  get(i: number): Address {
+    return this.getChild(i)
+  }
+
+  set(i: number, addr: Address): void {
+    return this.setChild(i, addr)
+  }
+
+  numVars(): number {
+    return this.size() - 1
+  }
+}
+
+class EnvView extends NodeView {
+  static allocate(state: MachineState, numFrames: number): EnvView {
+    const addr = allocate(state, DataType.Frame, numFrames + 1)
+    return new EnvView(state.heap, addr)
+  }
+
+  constructor(heap: DataView, addr: Address) {
+    super(heap, addr)
+    this.checkType(DataType.Frame)
+  }
+
+  /* Allocates a new environment node which includes the provided frames. */
+  extend(state: MachineState, ...newFrames: Address[]): EnvView {
+    const totalFrames = this.numFrames() + newFrames.length
+    const ret = EnvView.allocate(state, totalFrames)
+    for (let i = 0; i < newFrames.length; ++i) {
+      ret.setFrame(i, newFrames[i])
+    }
+    for (let i = 0; i < this.numFrames(); ++i) {
+      ret.setFrame(newFrames.length + i, this.getFrame(i))
+    }
+    return ret
+  }
+
+  getFrame(i: number): Address {
+    return this.getChild(i)
+  }
+
+  setFrame(i: number, addr: Address): void {
+    return this.setChild(i, addr)
+  }
+
+  numFrames(): number {
+    return this.size() - 1
+  }
+}
+
+class CallFrameView extends NodeView {
+  static readonly size: number = 3
+
+  static allocate(state: MachineState): CallFrameView {
+    const addr = allocate(state, DataType.CallFrame, CallFrameView.size)
+    return new CallFrameView(state.heap, addr)
+  }
+
+  constructor(heap: DataView, addr: Address) {
+    super(heap, addr)
+    this.checkType(DataType.CallFrame)
+  }
+
+  getPc(): Address {
+    return this.getChild(0)
+  }
+
+  setPc(pc: Address): void {
+    this.setChild(0, pc)
+  }
+
+  getEnv(): EnvView {
+    return new EnvView(this.heap, this.getChild(1))
+  }
+
+  setEnv(env: EnvView) {
+    this.setChild(1, env.addr)
+  }
+}
+
+class FnView extends NodeView {
+  static readonly size: number = 3
+
+  static allocate(state: MachineState): FnView {
+    const addr = allocate(state, DataType.Fn, FnView.size)
+    return new FnView(state.heap, addr)
+  }
+
+  constructor(heap: DataView, addr: Address) {
+    super(heap, addr)
+    this.checkType(DataType.Fn)
+  }
+
+  getPc(): Address {
+    return this.getChild(0)
+  }
+
+  setPc(pc: Address): void {
+    this.setChild(0, pc)
+  }
+
+  getEnv(): EnvView {
+    return new EnvView(this.heap, this.getChild(1))
+  }
+
+  setEnv(env: EnvView) {
+    this.setChild(1, env.addr)
   }
 }
 
 interface MachineState {
-  readonly bytecode: DataView,
-  pc: number,
-  rts: Stack<Address>,
-  os: Stack<Address>,
-  env: Address
-  heap: DataView,
+  readonly bytecode: DataView
+  pc: number
+  rts: Stack<Address>
+  os: Stack<Address>
+  env: EnvView
+  heap: DataView
   free: number
+  globals: Record<Global, Address>
 }
 
-type EvalFn = (state: MachineState) => void
-
-const enum OpCode {
-  Return = 0x00,
-  Add,
-  Sub,
+const enum Opcode {
+  BinaryOp = 0x00, // BinaryOp op
+  UnaryOp,
+  Return, // returns with value at top
+  Call, // Call argc
+  Goto,
 }
 
-/* These are primitive Go data types. */
+/* Size of each instruction by opcode, in bytes */
+const instrSize: Record<Opcode, number> = {
+  [Opcode.BinaryOp]: 2,
+  [Opcode.UnaryOp]: 2,
+  [Opcode.Return]: 1,
+  [Opcode.Call]: 1 + 1,
+  [Opcode.Goto]: 1 + 8,
+}
+
+class InstrView {
+  protected readonly bytecode: DataView
+  protected readonly addr: Address
+
+  constructor(bytecode: DataView, addr: Address) {
+    this.bytecode = bytecode
+    this.addr = addr
+  }
+}
+
+class GotoView extends InstrView {
+  getWhere(): Address {
+    return this.bytecode.getFloat64(this.addr + 1)
+  }
+
+  setWhere(where: Address) {
+    this.bytecode.setFloat64(this.addr + 1, where)
+  }
+}
+
+const instrView: Record<Opcode, typeof InstrView | undefined> = {
+  [Opcode.BinaryOp]: undefined,
+  [Opcode.UnaryOp]: undefined,
+  [Opcode.Return]: undefined,
+  [Opcode.Call]: undefined,
+  [Opcode.Goto]: GotoView,
+}
+
+/* These are data types representable in memory. */
 const enum DataType {
   Float64 = 0x00,
   Int64,
   Channel,
+  String,
+  Fn,
+  Frame,
+  Env,
+  CallFrame,
+  BlockFrame,
 }
 
-const interpretData: Record<DataType, (byteOffset: number) => number> = {
-  [DataType.Float64]: DataView.prototype.getFloat64,
-  [DataType.Int64]: DataView.prototype.getFloat64, // ints are implemented as floats...
-
-  [DataType.Channel]: DataView.prototype.getFloat64, // channels are floats too
+const allocate = (state: MachineState, dataType: DataType, size: number): number => {
+  const addr = state.free
+  state.free += size
+  state.heap.setUint8(addr, dataType)
+  state.heap.setUint8(addr + 1, size)
+  return addr
 }
 
-const writeData: Record<DataType, (byteOffset: number, v: number) => void> = {
-  [DataType.Float64]: DataView.prototype.setFloat64,
-  [DataType.Int64]: DataView.prototype.setFloat64, // ints are implemented as floats...
-
-  [DataType.Channel]: DataView.prototype.setFloat64, // channels are floats too
+const enum Global {
+  True,
+  False,
+  Nil,
 }
 
-const allocate: Record<DataType, (state: MachineState) => number> = {
-  [DataType.Float64]: function(state: MachineState): number {
-    const addr = state.free
-    const size = 2
-    state.free += size
-    state.heap.setUint8(addr, DataType.Float64)
-    state.heap.setUint8(addr + 1, size)
-    return addr
-  },
-  [DataType.Int64]: function(state: MachineState): number {
-    throw new Error('Function not implemented.')
-  },
-  [DataType.Channel]: function(state: MachineState): number {
-    throw new Error('Function not implemented.')
-  }
-}
-
-const verifyNodes = (nodes: NodeViewer[], ...checks: [(...nodes: NodeViewer[]) => boolean, string][]) => {
-  checks.forEach(([check, msg]) => {
-    if (!check(...nodes)) {
-      throw new Error(msg)
-    }
-  })
-}
-
-const hasSameDataType = (...nodes: NodeViewer[]): boolean => {
-  if (nodes.length === 0) return true
-  const type = nodes[0].getDataType()
-  return nodes.every(node => node.getDataType() === type)
-}
-
-const allNumeric = (...nodes: NodeViewer[]): boolean => {
-  return nodes.every(node => node.isNumeric())
-}
-
-
-const execNumericBinaryOp = (state: MachineState, f: Operator<number>): void => {
-  const lhsAddr = state.os.pop()
+const execBinaryOp = (state: MachineState, op: BinaryOp): void => {
   const rhsAddr = state.os.pop()
-  const lhs = new NodeViewer(state.heap, lhsAddr)
-  const rhs = new NodeViewer(state.heap, rhsAddr)
+  const lhsAddr = state.os.pop()
 
-  verifyNodes([lhs, rhs],
-    [hasSameDataType, "Cannot add different data types"],
-    [allNumeric, "Cannot add non-numeric types"],
-  )
+  const lhsType = NodeView.getDataType(state.heap, lhsAddr)
+  const rhsType = NodeView.getDataType(state.heap, rhsAddr)
 
-  const typ = lhs.getDataType() // lhs and rhs have same type
+  // @todo: should we have this check?
+  if (lhsType !== rhsType) {
+    throw new Error("Can't perform binary operation on different data types!")
+  }
 
-  // here, we extract the value by taking the 0th child, which presumes we know something
-  // about the data layout. this function should NOT know about it!
-  const lhsValue = lhs.getChild(0, interpretData[typ])
-  const rhsValue = rhs.getChild(0, interpretData[typ])
-  const resValue = f(lhsValue, rhsValue)
+  const f = binaryBuiltins.get([lhsType, op])
+  if (!f) throw new Error("No binary operation defined!") // @todo: format string
 
-  const resAddr = allocate[typ](state)
-  const res = new NodeViewer(state.heap, resAddr)
-  res.setChild(0, resValue, writeData[typ])
+  const res = f(state, lhsAddr, rhsAddr)
 
-  state.os.push(resAddr)
-  state.pc += 1
+  state.os.push(res)
 }
 
-const microcode: Record<OpCode, EvalFn> = {
-  [OpCode.Return]: function(state: MachineState): void {
+type BinaryOpFn = (state: MachineState, lhs: Address, rhs: Address) => Address
+
+const binaryBuiltins = new Map<[DataType, BinaryOp], BinaryOpFn>([
+  [[DataType.Float64, BinaryOp.Add], (state, lhsAddr, rhsAddr) => {
+    const lhs = new Float64View(state.heap, lhsAddr)
+    const rhs = new Float64View(state.heap, rhsAddr)
+
+    const lhsValue = lhs.getValue()
+    const rhsValue = rhs.getValue()
+    const resValue = lhsValue + rhsValue
+
+    const res = Float64View.allocate(state)
+    res.setValue(resValue)
+
+    return res.addr
+  }],
+])
+
+const execUnaryOp = (state: MachineState, op: UnaryOp): void => {
+  const operandAddr = state.os.pop()
+  const typ = NodeView.getDataType(state.heap, operandAddr)
+
+  const f = unaryBuiltins.get([typ, op])
+  if (!f) throw new Error("No unary operation defined!") // @todo: format string
+
+  const res = f(state, operandAddr)
+
+  state.os.push(res)
+}
+
+type UnaryOpFn = (state: MachineState, addr: Address) => Address
+
+const unaryBuiltins = new Map<[DataType, UnaryOp], UnaryOpFn>([
+  [[DataType.Float64, UnaryOp.Sub], (state, addr) => {
+    const num = new Float64View(state.heap, addr)
+    const val = num.getValue()
+
+    const resAddr = allocate[DataType.Float64](state)
+    const res = new Float64View(state.heap, resAddr)
+    res.setValue(-val)
+
+    return resAddr
+  }]
+])
+
+const enum UnaryOp {
+  Add = 0x00,
+  Sub,
+}
+
+const enum BinaryOp {
+  Add = 0x00,
+  Sub,
+  Mul,
+  Div,
+  Eq,
+  Neq,
+  L,
+  Leq,
+  G,
+  Geq,
+}
+
+type EvalFn = (state: MachineState) => void
+
+const microcode: Record<Opcode, EvalFn> = {
+  [Opcode.BinaryOp]: function(state: MachineState): void {
+    state.pc += 1
+    const op = state.bytecode.getUint8(state.pc) as BinaryOp
+    execBinaryOp(state, op)
+  },
+  [Opcode.UnaryOp]: function(state: MachineState): void {
+    // We're assuming that [pc] has already been incremented once when
+    // the opcode was read. So we increment it again to read the operand.
+    state.pc += 1
+    const op = state.bytecode.getUint8(state.pc) as UnaryOp
+    execUnaryOp(state, op)
+  },
+  [Opcode.Call]: function(state: MachineState): void {
+    state.pc += 1
+    const argc = state.bytecode.getUint8(state.pc)
+
+    // 1. Pop [argc] addresses off the OS
+    const args: Address[] = []
+    for (let i = 0; i < argc; ++i) {
+      args.push(state.os.pop())
+    }
+    args.reverse()
+
+    // 2. Save a call frame on RTS
+    const callFrame = CallFrameView.allocate(state)
+    callFrame.setPc(state.pc)
+    callFrame.setEnv(state.env)
+
+    state.rts.push(callFrame.addr)
+
+    // 3. Obtain fn's env, extend it
+    const fnAddr = state.os.pop()
+    const fn = new FnView(state.heap, fnAddr)
+
+    const frame = FrameView.allocate(state, argc)
+    for (let i = 0; i < argc; ++i) {
+      frame.set(i, args[i])
+    }
+    const newEnv = fn.getEnv().extend(state, frame.addr)
+
+    // 4. Done
+    state.env = newEnv
+    state.pc = fn.getPc()
+  },
+  [Opcode.Return]: function(state: MachineState): void {
+    const addr = state.rts.pop()
+    const typ = NodeView.getDataType(state.heap, addr)
+    switch (typ) {
+      case DataType.CallFrame:
+        const frame = new CallFrameView(state.heap, addr)
+        state.env = frame.getEnv()
+        state.pc = frame.getPc()
+        break
+      case DataType.BlockFrame:
+        return microcode[Opcode.Return](state)
+      default:
+        throw new Error("Unexpected data type in runtime stack!") // @todo: format the error
+    }
     throw new Error('Function not implemented.')
   },
-  [OpCode.Add]: function(state: MachineState): void {
-    execNumericBinaryOp(state, (lhs, rhs) => lhs + rhs)
-  },
-  [OpCode.Sub]: function(state: MachineState): void {
-    execNumericBinaryOp(state, (lhs, rhs) => lhs - rhs)
+  [Opcode.Goto]: function(state: MachineState): void {
+    throw new Error('Function not implemented.')
   }
 }
 
-class GoCompiler extends GoVisitor<void> {
+class BytecodeWriter {
+  code: DataView
+  wc: Address
+
+  constructor(codeLen: number = 1028) {
+    this.code = new DataView(new ArrayBuffer(codeLen))
+    this.wc = 0
+  }
+}
+
+class Assembler extends GoVisitor<void> {
   bytecode: ArrayBuffer
   wc: number
 
@@ -185,8 +482,12 @@ class GoCompiler extends GoVisitor<void> {
     this.wc = 0
   }
 
+  visitProg = (ctx: ProgContext) => {
+    ctx.stmt_list().forEach(stmt => this.visit(stmt))
+  }
+
   visitStmt = (ctx: StmtContext) => {
-    this.visitChildren(ctx)
+    this.visitChildren(ctx) // dispatches to each alternative
   }
 
   visitExpr = (ctx: ExprContext) => {
@@ -201,6 +502,26 @@ class GoCompiler extends GoVisitor<void> {
     } else {
       this.visit(ctx.primaryExpr())
     }
+  }
+
+  visitPrimaryExpr = (ctx: PrimaryExprContext) => {
+    if (ctx.ident()) {
+      this.visit(ctx.ident())
+    } else if (ctx.lit()) {
+      this.visit(ctx.lit())
+    } else if (ctx._fn) {
+      const args = ctx.args()
+      // @todo: emit code to eval args, fn, and then call 
+    } else if (ctx._base) {
+      // @todo: figure out this shit
+    }
+  }
+
+  visitIdent = (ctx: IdentContext) => {
+    // @todo: perform lookup in compile time environment
+    // the result should be a tuple of (E, F, i) - env, frame, offset in frame
+    //
+    // these 3 args should be given to the bytecode
   }
 
   visitVarDecl = (ctx: VarDeclContext) => {
@@ -225,8 +546,9 @@ class GoCompiler extends GoVisitor<void> {
   visitFuncDecl = (ctx: FuncDeclContext) => {
     const funcName = ctx.ident().getText()
     const params = ctx.signature().params().param_list().map(param => {
-      return { name: param.ident().getText() }
+      return param.ident().getText()
     })
+    const fnStartAddr = this.wc
     this.visit(ctx.funcBody()) // compile the body
   }
 
@@ -275,5 +597,5 @@ parser.buildParseTrees = true
 const tree = parser.prog()
 console.log(tree.toStringTree(parser.ruleNames, parser))
 
-const compiler = new GoCompiler()
+const compiler = new Assembler()
 compiler.visit(tree)

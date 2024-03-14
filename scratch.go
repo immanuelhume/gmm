@@ -18,6 +18,12 @@ func baz(key string) {
 		break
 	}
 
+	for i := range c {
+	}
+
+	for i := 0; i < 10; i = i + 1 {
+	}
+
 	var c chan string
 	var p Point
 
