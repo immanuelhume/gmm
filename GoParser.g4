@@ -20,7 +20,9 @@ simpleStmt : assignment | shortVarDecl | exprStmt ;
 
 // [defer] statements would be good to add
 
-ifStmt : 'if' cond=expr cons=block ('else' (ifStmt | alt=block)) ;
+ifStmt : 'if' cond=expr cons=block ('else' alt) ;
+
+alt : ifStmt | block ;
 
 sendStmt : channel=expr '<-' rhs=expr ;
 
@@ -94,7 +96,7 @@ fieldDecl : ident type ;
 ident : WORD ;
 identList : ident (',' ident)* ;
 
-lit : number | litStr | litNil | litFunc;
+lit : number | litStr | litNil | litFunc ;
 
 litNil : NIL ;
 litStr : LIT_STR ;
