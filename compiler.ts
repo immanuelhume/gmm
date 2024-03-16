@@ -62,6 +62,8 @@ class CompileTimeEnvironment {
  * Use by calling the [visit] method on any context.
  */
 class DeclScanner extends GoVisitor<string[]> {
+  stop: boolean = false
+
   visitFuncDecl = (ctx: FuncDeclContext) => {
     return [ctx.ident().getText()]
   }
@@ -74,9 +76,23 @@ class DeclScanner extends GoVisitor<string[]> {
     return [ctx.ident().getText()]
   }
 
+  visitProg = (ctx: ProgContext) => {
+    if (this.stop) return []
+    this.stop = true
+    return this.visitChildren(ctx)
+  }
+
+  visitBlock = (ctx: BlockContext) => {
+    if (this.stop) return []
+    this.stop = true
+    return this.visitChildren(ctx)
+  }
+
   visitChildren(node: ParserRuleContext): string[] {
     if (!node.children) return []
-    return node.children.flatMap(child => this.visit(child)).filter(name => name !== undefined)
+    return node.children
+      .flatMap(child => this.visit(child))
+      .filter(name => name !== undefined)
   }
 }
 
@@ -110,8 +126,8 @@ export class Assembler extends GoVisitor<void> {
       throw new Error("A [main] function was not declared")
     }
 
-	// We'll need to jump to [main] to start running the program. So we just
-	// append a call instruction to the end of the program.
+    // We'll need to jump to [main] to start running the program. So we just
+    // append a call instruction to the end of the program.
 
     ILoadC.emit(this.bytecode).setVal(this.main) // load [main]'s address
     ICall.emit(this.bytecode).setArgc(0) // call [main]
