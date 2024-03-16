@@ -1,13 +1,16 @@
-import { AssignmentContext, BlockContext, ExprContext, FuncDeclContext, IdentContext, IfStmtContext, PrimaryExprContext, ReturnStmtContext, TypeDeclContext, VarDeclContext } from './antlr/GoParser'
+import { ParserRuleContext } from 'antlr4'
+import { AssignmentContext, BlockContext, ExprContext, FuncDeclContext, IdentContext, IfStmtContext, PrimaryExprContext, ReturnStmtContext, TypeDeclContext, VarDeclContext, StmtContext, ProgContext, ShortVarDeclContext, NumberContext, BinaryOpContext, NumericOpContext } from './antlr/GoParser'
 import GoVisitor from './antlr/GoParserVisitor'
 
-import { Assign, Call, Emitter, EnterBlock, ExitBlock, Goto, IdentLoc, Jof, LoadFn, Opcode, Return } from "./instructions"
+import { IAssign, Emitter, IEnterBlock, IExitBlock, IGoto, IIdentLoc, IJof, ILoadFn, Opcode, ICall, IIdent, IReturn, IPop, ILoadC, IDone, IBinaryOp, BinaryOp } from "./instructions"
+import { fmtAddress } from './util'
 
 class BytecodeWriter implements Emitter {
   private _code: DataView
   private _wc: number
 
   constructor(codeLen: number = 1028) {
+    // @todo: how do we determine the size? should we make it resizable?
     this._code = new DataView(new ArrayBuffer(codeLen))
     this._wc = 0
   }
@@ -52,9 +55,36 @@ class CompileTimeEnvironment {
   }
 }
 
+/**
+ * Tool for collecting all identifiers declared within a context, e.g. block or
+ * program's top level.
+ *
+ * Use by calling the [visit] method on any context.
+ */
+class DeclScanner extends GoVisitor<string[]> {
+  visitFuncDecl = (ctx: FuncDeclContext) => {
+    return [ctx.ident().getText()]
+  }
+
+  visitVarDecl = (ctx: VarDeclContext) => {
+    return [ctx.ident().getText()]
+  }
+
+  visitShortVarDecl = (ctx: ShortVarDeclContext) => {
+    return [ctx.ident().getText()]
+  }
+
+  visitChildren(node: ParserRuleContext): string[] {
+    if (!node.children) return []
+    return node.children.flatMap(child => this.visit(child)).filter(name => name !== undefined)
+  }
+}
+
 export class Assembler extends GoVisitor<void> {
   bytecode: BytecodeWriter
   env: CompileTimeEnvironment
+
+  main: number | undefined // keep track of where the main function starts
 
   constructor() {
     super()
@@ -62,14 +92,47 @@ export class Assembler extends GoVisitor<void> {
     this.env = new CompileTimeEnvironment()
   }
 
+  static scanDecls = (ctx: ParserRuleContext): string[] => {
+    const scanner = new DeclScanner()
+    return scanner.visit(ctx)
+  }
+
+  visitProg = (ctx: ProgContext) => {
+    const names = Assembler.scanDecls(ctx)
+    this.env.pushFrame(names)
+
+    ctx.decl_list().forEach(decl => {
+      this.visit(decl)
+      IPop.emit(this.bytecode)
+    })
+
+    if (!this.main) {
+      throw new Error("A [main] function was not declared")
+    }
+
+	// We'll need to jump to [main] to start running the program. So we just
+	// append a call instruction to the end of the program.
+
+    ILoadC.emit(this.bytecode).setVal(this.main) // load [main]'s address
+    ICall.emit(this.bytecode).setArgc(0) // call [main]
+    IDone.emit(this.bytecode) // last instruction
+  }
+
+  visitSmt = (ctx: StmtContext) => {
+    this.visitChildren(ctx)
+    IPop.emit(this.bytecode)
+  }
+
   visitFuncDecl = (ctx: FuncDeclContext) => {
-    const ldf = LoadFn.emit(this.bytecode)
-    const goto = Goto.emit(this.bytecode)
+    const ldf = ILoadFn.emit(this.bytecode)
+    const goto = IGoto.emit(this.bytecode)
     const params = ctx.signature().params().param_list().map(param => {
       return param.ident().getText()
     })
 
-    ldf.setPc(this.bytecode.wc()).setArgc(params.length)
+    const fnPc = this.bytecode.wc()
+
+    ldf.setPc(fnPc).setArgc(params.length)
 
     this.env.pushFrame(params)
     this.visit(ctx.funcBody()) // compile the body
@@ -83,10 +146,18 @@ export class Assembler extends GoVisitor<void> {
     // This is a limitation of not working with an AST.
     const fnName = ctx.ident().getText()
     const [frame, offset] = this.env.lookup(fnName)
-    IdentLoc.emit(this.bytecode)
+    IIdentLoc.emit(this.bytecode)
       .setFrame(frame)
       .setOffset(offset)
-    Assign.emit(this.bytecode)
+    IAssign.emit(this.bytecode)
+
+    // Check if this function is, in fact, main
+    if (fnName === "main") {
+      if (this.main) {
+        throw new Error("Multiple [main] functions declared")
+      }
+      this.main = fnPc
+    }
   }
 
   visitVarDecl = (ctx: VarDeclContext) => {
@@ -94,10 +165,10 @@ export class Assembler extends GoVisitor<void> {
       this.visit(ctx.expr()) // compile RHS
       const ident = ctx.ident().getText()
       const [frame, offset] = this.env.lookup(ident)
-      IdentLoc.emit(this.bytecode)
+      IIdentLoc.emit(this.bytecode)
         .setFrame(frame)
         .setOffset(offset)
-      Assign.emit(this.bytecode)
+      IAssign.emit(this.bytecode)
     } else {
       // @todo: need to find a way to handle default initialization
       //
@@ -112,30 +183,46 @@ export class Assembler extends GoVisitor<void> {
   }
 
   visitReturnStmt = (ctx: ReturnStmtContext) => {
-    this.visit(ctx.expr())
-    Return.emit(this.bytecode)
+    // @todo handle empty return statements!
+    this.visit(ctx.expr()) // compile the thing to return
+    IReturn.emit(this.bytecode)
   }
 
   visitIfStmt = (ctx: IfStmtContext) => {
     this.visit(ctx._cond) // compile the condition
-    const jof = Jof.emit(this.bytecode)
+    const jof = IJof.emit(this.bytecode)
     this.visit(ctx._cons) // compile consequent
-    const goto = Goto.emit(this.bytecode)
+    const goto = IGoto.emit(this.bytecode)
     jof.setWhere(this.bytecode.wc())
     this.visit(ctx.alt())
     goto.setWhere(this.bytecode.wc())
   }
 
   visitBlock = (ctx: BlockContext) => {
-    EnterBlock.emit(this.bytecode)
+    const names = Assembler.scanDecls(ctx)
+    this.env.pushFrame(names)
+
+    IEnterBlock.emit(this.bytecode)
     this.visitChildren(ctx) // compile each statement
-    ExitBlock.emit(this.bytecode)
+    IExitBlock.emit(this.bytecode)
+
+    this.env.popFrame()
   }
 
   visitAssignment = (ctx: AssignmentContext) => {
     this.visit(ctx._rhs)
     this.visit(ctx._lhs)
-    Assign.emit(this.bytecode)
+    IAssign.emit(this.bytecode)
+  }
+
+  visitShortVarDecl = (ctx: ShortVarDeclContext) => {
+    this.visit(ctx.expr()) // compile RHS
+
+    const ident = ctx.ident().getText()
+    const [frame, offset] = this.env.lookup(ident)
+    IIdentLoc.emit(this.bytecode).setFrame(frame).setOffset(offset)
+
+    IAssign.emit(this.bytecode)
   }
 
   visitExpr = (ctx: ExprContext) => {
@@ -165,16 +252,35 @@ export class Assembler extends GoVisitor<void> {
       this.visit(args) // emit code to evaluate each arg
       this.visit(fn) // emit code to evaluate the callable thing
 
-      const call = Call.emit(this.bytecode)
+      const call = ICall.emit(this.bytecode)
       call.setArgc(argc)
     } else if (ctx._base) {
       // @todo: figure out this shit
     }
   }
 
+  visitNumericOp = (ctx: NumericOpContext) => {
+    const op = IBinaryOp.emit(this.bytecode)
+
+    if (ctx.PLUS()) {
+      op.setOp(BinaryOp.Add)
+    } else if (ctx.MINUS()) {
+      op.setOp(BinaryOp.Sub)
+    } else if (ctx.STAR()) {
+      op.setOp(BinaryOp.Mul)
+    } else if (ctx.DIV()) {
+      op.setOp(BinaryOp.Div)
+    }
+  }
+
   visitIdent = (ctx: IdentContext) => {
     const ident = ctx.getText()
     const [frame, offset] = this.env.lookup(ident)
-    IdentLoc.emit(this.bytecode).setFrame(frame).setOffset(offset)
+    IIdent.emit(this.bytecode).setFrame(frame).setOffset(offset)
+  }
+
+  visitNumber = (ctx: NumberContext) => {
+    const val = parseInt(ctx.getText())
+    ILoadC.emit(this.bytecode).setVal(val)
   }
 }

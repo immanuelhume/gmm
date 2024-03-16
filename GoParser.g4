@@ -2,7 +2,8 @@ parser grammar GoParser ;
 
 options { tokenVocab = GoLexer ; }
 
-prog : (stmt eos)* ;
+// The toplevel is not a sequence of statements, but declarations only!
+prog : (decl eos)* ;
 
 stmt : decl
 	| returnStmt
@@ -31,7 +32,9 @@ continueStmt : CONTINUE ;
 
 goStmt : 'go' primaryExpr ; // [primaryExpr] has to be a function call
 
-assignment : lhs=expr '=' rhs=expr ;
+assignment : lhs=lvalue '=' rhs=expr ;
+
+lvalue : ident ; // we'll expand this as the project progresses
 
 forStmt : 'for' (condition | forClause | rangeClause) block ;
 
@@ -43,7 +46,7 @@ rangeClause : ( exprList '=' | identList ':=' ) 'range' expr ;
 
 exprStmt : expr ;
 
-returnStmt : 'return' expr ;
+returnStmt : 'return' expr? ;
 
 expr : primaryExpr | unaryOp expr | lhs=expr binaryOp rhs=expr ;
 exprList : expr (',' expr)* ;
