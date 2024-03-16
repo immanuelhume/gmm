@@ -38,16 +38,16 @@ export abstract class InstrView {
   protected readonly bytecode: DataView;
   protected readonly addr: number;
 
-  abstract toString(): string
-  abstract readonly size: number
+  abstract toString(): string;
+  abstract readonly size: number;
 
   /**
    * Produces an instance of some subclass of [InstrView], based on the opcode
    * passed in. The return type is [InstrView] though so its uses are limited.
    */
   static of(bytecode: DataView, addr: number): InstrView {
-    const opcode = bytecode.getUint8(addr) as Opcode
-    return new opcodeClass[opcode](bytecode, addr)
+    const opcode = bytecode.getUint8(addr) as Opcode;
+    return new opcodeClass[opcode](bytecode, addr);
   }
 
   constructor(bytecode: DataView, addr: number) {
@@ -79,17 +79,17 @@ export const enum BinaryOp {
 }
 
 export class IBinaryOp extends InstrView {
-  static size = 2
+  static size = 2;
   readonly size = 2;
 
   static emit(w: Emitter): IBinaryOp {
-    const pc = w.reserve(Opcode.BinaryOp, IBinaryOp.size)
-    return new IBinaryOp(w.code(), pc)
+    const pc = w.reserve(Opcode.BinaryOp, IBinaryOp.size);
+    return new IBinaryOp(w.code(), pc);
   }
 
   toString(): string {
-    const sym = binaryOpSyms[this.op()]
-    return `BinaryOp ${sym}`
+    const sym = binaryOpSyms[this.op()];
+    return `BinaryOp ${sym}`;
   }
 
   constructor(bytecode: DataView, addr: number) {
@@ -98,17 +98,17 @@ export class IBinaryOp extends InstrView {
   }
 
   op(): BinaryOp {
-    return this.bytecode.getUint8(this.addr + 1)
+    return this.bytecode.getUint8(this.addr + 1);
   }
-  setOp(op: BinaryOp) : IBinaryOp {
-    this.bytecode.setUint8(this.addr + 1, op)
-    return this
+  setOp(op: BinaryOp): IBinaryOp {
+    this.bytecode.setUint8(this.addr + 1, op);
+    return this;
   }
 }
 
 export class IUnaryOp extends InstrView {
-  static size = 2
-  readonly size = 2
+  static size = 2;
+  readonly size = 2;
 
   static emit(w: Emitter): IUnaryOp {
     const pc = w.reserve(Opcode.UnaryOp, IUnaryOp.size);
@@ -116,8 +116,8 @@ export class IUnaryOp extends InstrView {
   }
 
   toString(): string {
-    const sym = unaryOpSyms[this.op()]
-    return `UnaryOp ${sym}`
+    const sym = unaryOpSyms[this.op()];
+    return `UnaryOp ${sym}`;
   }
 
   constructor(bytecode: DataView, addr: number) {
@@ -126,7 +126,7 @@ export class IUnaryOp extends InstrView {
   }
 
   op(): UnaryOp {
-    return this.bytecode.getUint8(this.addr + 1)
+    return this.bytecode.getUint8(this.addr + 1);
   }
 }
 
@@ -140,7 +140,7 @@ export class ILoadFn extends InstrView {
   }
 
   toString(): string {
-    return `LoadFn argc:${this.argc()} pc:${fmtAddress(this.pc())}`
+    return `LoadFn argc:${this.argc()} pc:${fmtAddress(this.pc())}`;
   }
 
   constructor(bytecode: DataView, addr: number) {
@@ -184,7 +184,7 @@ export class IIdentLoc extends InstrView {
   }
 
   toString(): string {
-    return `IdentLoc frame:${this.frame()} offset:${this.offset()}`
+    return `IdentLoc frame:${this.frame()} offset:${this.offset()}`;
   }
 
   constructor(bytecode: DataView, addr: number) {
@@ -231,7 +231,7 @@ export class IIdent extends InstrView {
   }
 
   toString(): string {
-    return `Ident frame:${this.frame()} offset:${this.offset()}`
+    return `Ident frame:${this.frame()} offset:${this.offset()}`;
   }
 
   constructor(bytecode: DataView, addr: number) {
@@ -258,7 +258,7 @@ export class IIdent extends InstrView {
 
 export class IGoto extends InstrView {
   static size = 9;
-  readonly size = 9
+  readonly size = 9;
 
   static emit(w: Emitter): IGoto {
     const pc = w.reserve(Opcode.Goto, IGoto.size);
@@ -266,7 +266,7 @@ export class IGoto extends InstrView {
   }
 
   toString(): string {
-    return `Goto ${fmtAddress(this.where())}`
+    return `Goto ${fmtAddress(this.where())}`;
   }
 
   constructor(bytecode: DataView, addr: number) {
@@ -293,7 +293,7 @@ export class IGoto extends InstrView {
  */
 export class ICall extends InstrView {
   static size = 2;
-  readonly size = 2
+  readonly size = 2;
 
   static emit(w: Emitter): ICall {
     const pc = w.reserve(Opcode.Call, ICall.size);
@@ -301,7 +301,7 @@ export class ICall extends InstrView {
   }
 
   toString(): string {
-    return `Call argc:${this.argc()}`
+    return `Call argc:${this.argc()}`;
   }
 
   constructor(bytecode: DataView, addr: number) {
@@ -310,7 +310,7 @@ export class ICall extends InstrView {
   }
 
   argc(): number {
-    return this.bytecode.getUint8(this.addr + 1)
+    return this.bytecode.getUint8(this.addr + 1);
   }
   setArgc(argc: number) {
     return this.bytecode.setUint8(this.addr + 1, argc);
@@ -327,7 +327,7 @@ export class ICall extends InstrView {
  */
 export class IJof extends InstrView {
   static size = 9;
-  readonly size = 9
+  readonly size = 9;
 
   static emit(w: Emitter): IJof {
     const pc = w.reserve(Opcode.Jof, IJof.size);
@@ -335,7 +335,7 @@ export class IJof extends InstrView {
   }
 
   toString(): string {
-    return `Jof ${fmtAddress(this.where())}`
+    return `Jof ${fmtAddress(this.where())}`;
   }
 
   constructor(bytecode: DataView, addr: number) {
@@ -362,7 +362,7 @@ export class IJof extends InstrView {
  */
 export class IAssign extends InstrView {
   static size = 1;
-  readonly size = 1
+  readonly size = 1;
 
   static emit(w: Emitter): IAssign {
     const pc = w.reserve(Opcode.Assign, IAssign.size);
@@ -370,7 +370,7 @@ export class IAssign extends InstrView {
   }
 
   toString(): string {
-    return `Assign`
+    return `Assign`;
   }
 }
 
@@ -383,7 +383,7 @@ export class IAssign extends InstrView {
  */
 export class IReturn extends InstrView {
   static size = 1;
-  readonly size = 1
+  readonly size = 1;
 
   static emit(w: Emitter): IReturn {
     const pc = w.reserve(Opcode.Return, IReturn.size);
@@ -391,7 +391,7 @@ export class IReturn extends InstrView {
   }
 
   toString(): string {
-    return `Return`
+    return `Return`;
   }
 }
 
@@ -412,7 +412,7 @@ export class IEnterBlock extends InstrView {
   }
 
   toString(): string {
-    return `EnterBlock`
+    return `EnterBlock`;
   }
 }
 
@@ -433,7 +433,7 @@ export class IExitBlock extends InstrView {
   }
 
   toString(): string {
-    return `ExitBlock`
+    return `ExitBlock`;
   }
 }
 
@@ -454,7 +454,7 @@ export class IPop extends InstrView {
   }
 
   toString(): string {
-    return `Pop`
+    return `Pop`;
   }
 }
 
@@ -468,21 +468,21 @@ export class ILoadC extends InstrView {
   }
 
   toString(): string {
-    return `LoadC ${this.val()}`
+    return `LoadC ${this.val()}`;
   }
 
   val(): number {
-    return this.bytecode.getFloat64(this.addr + 1)
+    return this.bytecode.getFloat64(this.addr + 1);
   }
-  setVal(val: number) : ILoadC {
-    this.bytecode.setFloat64(this.addr + 1, val)
-    return this
+  setVal(val: number): ILoadC {
+    this.bytecode.setFloat64(this.addr + 1, val);
+    return this;
   }
 }
 
 export class IDone extends InstrView {
-  static size = 1
-  readonly size = 1
+  static size = 1;
+  readonly size = 1;
 
   static emit(w: Emitter): IDone {
     const pc = w.reserve(Opcode.Done, IDone.size);
@@ -490,14 +490,14 @@ export class IDone extends InstrView {
   }
 
   toString(): string {
-    return `Done`
+    return `Done`;
   }
 }
 
 /**
  * Map from each opcode (a number) to its class.
  */
-const opcodeClass: Record<Opcode, { new(bytecode: DataView, addr: number): InstrView }> = {
+const opcodeClass: Record<Opcode, { new (bytecode: DataView, addr: number): InstrView }> = {
   [Opcode.Return]: IReturn,
   [Opcode.Call]: ICall,
   [Opcode.Goto]: IGoto,
@@ -513,15 +513,15 @@ const opcodeClass: Record<Opcode, { new(bytecode: DataView, addr: number): Instr
   [Opcode.UnaryOp]: IUnaryOp,
   [Opcode.LoadC]: ILoadC,
   [Opcode.Done]: IDone,
-}
+};
 
 /**
  * String representations of each unary operation. Used for debugging.
  */
 const unaryOpSyms: Record<UnaryOp, string> = {
   [UnaryOp.Add]: "+",
-  [UnaryOp.Sub]: "-"
-}
+  [UnaryOp.Sub]: "-",
+};
 
 /**
  * String representations of each binary operation. Used for debugging.
@@ -536,6 +536,5 @@ const binaryOpSyms: Record<BinaryOp, string> = {
   [BinaryOp.L]: "<",
   [BinaryOp.Leq]: "<=",
   [BinaryOp.G]: ">",
-  [BinaryOp.Geq]: ">="
-}
-
+  [BinaryOp.Geq]: ">=",
+};

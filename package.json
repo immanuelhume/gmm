@@ -19,5 +19,8 @@
   },
   "lint-staged": {
     "*.{ts,js,md}": "prettier --write"
+  },
+  "prettier": {
+    "printWidth": 120
   }
 }
