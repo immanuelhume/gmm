@@ -1,20 +1,19 @@
 import { Address } from "./util"
 import { CallFrameView, DataType, Float64View, FnView, FrameView, MachineState, NodeView } from "./heapviews"
-import { IAssign, ILoadFn, Opcode, UnaryOp, BinaryOp, IUnaryOp, ICall } from "./instructions"
+import { IAssign, ILoadFn, Opcode, UnaryOp, BinaryOp, IUnaryOp, ICall, IBinaryOp } from "./instructions"
 
 type EvalFn = (state: MachineState) => void
 
 const microcode: Record<Opcode, EvalFn> = {
   [Opcode.BinaryOp]: function(state: MachineState): void {
-    state.pc += 1
-    const op = state.bytecode.getUint8(state.pc) as BinaryOp
-    execBinaryOp(state, op)
+    const instr = new IBinaryOp(state.bytecode, state.pc)
+    execBinaryOp(state, instr.op())
+    state.pc += instr.size
   },
   [Opcode.UnaryOp]: function(state: MachineState): void {
     const instr = new IUnaryOp(state.bytecode, state.pc)
-    const op = instr.op()
-    state.pc += IUnaryOp.size
-    execUnaryOp(state, op)
+    execUnaryOp(state, instr.op())
+    state.pc += instr.size
   },
   [Opcode.Call]: function(state: MachineState): void {
     const instr = new ICall(state.bytecode, state.pc)
@@ -114,6 +113,12 @@ const microcode: Record<Opcode, EvalFn> = {
   [Opcode.Pop]: function(state: MachineState): void {
     throw new Error('Function not implemented.')
   },
+  [Opcode.LoadC]: function(state: MachineState): void {
+    throw new Error("Function not implemented.")
+  },
+  [Opcode.Done]: function(state: MachineState): void {
+    throw new Error("Function not implemented.")
+  }
 }
 
 const execBinaryOp = (state: MachineState, op: BinaryOp): void => {

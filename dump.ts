@@ -1,5 +1,6 @@
 /**
- * A tool to view compiled bytecode - we'll compile and dump the bytecode out.
+ * A tool to view compiled bytecode - we'll compile a go source file and dump
+ * the bytecode out.
  * 
  * Usage: ts-node dump.ts myfile.go
  */
@@ -12,7 +13,7 @@ import { Assembler } from './compiler'
 import { InstrView, Opcode } from './instructions'
 import { fmtAddress } from './util'
 
-const viewFile = (filename: string) => {
+const dumpfile = (filename: string) => {
   const input = readFileSync(filename).toString()
   const chars = new CharStream(input)
   const lexer = new GoLexer(chars)
@@ -34,4 +35,5 @@ const viewFile = (filename: string) => {
 }
 
 const filename = process.argv[2]
-viewFile(filename)
+dumpfile(filename)
+

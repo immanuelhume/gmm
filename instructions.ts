@@ -28,6 +28,12 @@ export interface Emitter {
   reserve(opcode: Opcode, size: number): number;
 }
 
+/**
+ * Some common functionality for viewing instructions. This helps us keep the
+ * "layout" of each instruction encapsulated in one place (rather than randomly
+ * accessing different byte offsets directly). Useful for both compiling and
+ * executing.
+ */
 export abstract class InstrView {
   protected readonly bytecode: DataView;
   protected readonly addr: number;
@@ -35,6 +41,10 @@ export abstract class InstrView {
   abstract toString(): string
   abstract readonly size: number
 
+  /**
+   * Produces an instance of some subclass of [InstrView], based on the opcode
+   * passed in. The return type is [InstrView] though so its uses are limited.
+   */
   static of(bytecode: DataView, addr: number): InstrView {
     const opcode = bytecode.getUint8(addr) as Opcode
     return new opcodeClass[opcode](bytecode, addr)
@@ -55,11 +65,6 @@ export const enum UnaryOp {
   Sub,
 }
 
-const unaryOpSyms: Record<UnaryOp, string> = {
-  [UnaryOp.Add]: "+",
-  [UnaryOp.Sub]: "-"
-}
-
 export const enum BinaryOp {
   Add = 0x00,
   Sub,
@@ -71,19 +76,6 @@ export const enum BinaryOp {
   Leq,
   G,
   Geq,
-}
-
-const binaryOpSyms: Record<BinaryOp, string> = {
-  [BinaryOp.Add]: "+",
-  [BinaryOp.Sub]: "-",
-  [BinaryOp.Mul]: "*",
-  [BinaryOp.Div]: "/",
-  [BinaryOp.Eq]: "==",
-  [BinaryOp.Neq]: "!=",
-  [BinaryOp.L]: "<",
-  [BinaryOp.Leq]: "<=",
-  [BinaryOp.G]: ">",
-  [BinaryOp.Geq]: ">="
 }
 
 export class IBinaryOp extends InstrView {
@@ -180,7 +172,7 @@ export class ILoadFn extends InstrView {
  * ┌────────┬───────┬────────┐
  * │ opcode │ frame │ offset │
  * └────────┴───────┴────────┘
- *     1        1        1
+ *  1        1       1
  */
 export class IIdentLoc extends InstrView {
   static size = 3;
@@ -227,7 +219,7 @@ export class IIdentLoc extends InstrView {
  * ┌────────┬───────┬────────┐
  * │ opcode │ frame │ offset │
  * └────────┴───────┴────────┘
- *     1        1        1
+ *  1        1       1
  */
 export class IIdent extends InstrView {
   static size = 3;
@@ -297,7 +289,7 @@ export class IGoto extends InstrView {
  * ┌────────┬──────┐
  * │ opcode │ argc │
  * └────────┴──────┘
- *     1      1
+ *  1        1
  */
 export class ICall extends InstrView {
   static size = 2;
@@ -331,7 +323,7 @@ export class ICall extends InstrView {
  * ┌────────┬────┐
  * │ opcode │ pc │
  * └────────┴────┘
- *     1      8
+ *  1        8
  */
 export class IJof extends InstrView {
   static size = 9;
@@ -502,6 +494,9 @@ export class IDone extends InstrView {
   }
 }
 
+/**
+ * Map from each opcode (a number) to its class.
+ */
 const opcodeClass: Record<Opcode, { new(bytecode: DataView, addr: number): InstrView }> = {
   [Opcode.Return]: IReturn,
   [Opcode.Call]: ICall,
@@ -518,5 +513,29 @@ const opcodeClass: Record<Opcode, { new(bytecode: DataView, addr: number): Instr
   [Opcode.UnaryOp]: IUnaryOp,
   [Opcode.LoadC]: ILoadC,
   [Opcode.Done]: IDone,
+}
+
+/**
+ * String representations of each unary operation. Used for debugging.
+ */
+const unaryOpSyms: Record<UnaryOp, string> = {
+  [UnaryOp.Add]: "+",
+  [UnaryOp.Sub]: "-"
+}
+
+/**
+ * String representations of each binary operation. Used for debugging.
+ */
+const binaryOpSyms: Record<BinaryOp, string> = {
+  [BinaryOp.Add]: "+",
+  [BinaryOp.Sub]: "-",
+  [BinaryOp.Mul]: "*",
+  [BinaryOp.Div]: "/",
+  [BinaryOp.Eq]: "==",
+  [BinaryOp.Neq]: "!=",
+  [BinaryOp.L]: "<",
+  [BinaryOp.Leq]: "<=",
+  [BinaryOp.G]: ">",
+  [BinaryOp.Geq]: ">="
 }
 
