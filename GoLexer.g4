@@ -50,7 +50,7 @@ LEQ : '<=' ;
 GREATER : '>' ;
 GEQ : '>=' ;
 
-START: '*' ;
+STAR: '*' ;
 
 WORD : LETTER (LETTER | UNICODE_DIGIT)* -> mode(NLSEMI) ;
 
