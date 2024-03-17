@@ -8,12 +8,12 @@ const microcode: Record<Opcode, EvalFn> = {
   [Opcode.BinaryOp]: function (state: MachineState): void {
     const instr = new IBinaryOp(state.bytecode, state.pc);
     execBinaryOp(state, instr.op());
-    state.pc += instr.size;
+    state.pc += IBinaryOp.size;
   },
   [Opcode.UnaryOp]: function (state: MachineState): void {
     const instr = new IUnaryOp(state.bytecode, state.pc);
     execUnaryOp(state, instr.op());
-    state.pc += instr.size;
+    state.pc += IUnaryOp.size;
   },
   [Opcode.Call]: function (state: MachineState): void {
     const instr = new ICall(state.bytecode, state.pc);

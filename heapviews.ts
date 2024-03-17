@@ -1,16 +1,17 @@
-/*
-Memory model:
-
-- Everything is represented as a "node" on the heap
-- Each node consists of >= 1 words
-- Each word is 64 bits
-
-  ┌──────────────────┬─────────────┬───┐
-  │data type (8 bits)│size (8 bits)│...│
-  └──────────────────┴─────────────┴───┘
-- The first word of each node is a metadata block
-  - The size refers to no. of words in this node (must be >= 1)
-*/
+/**
+ * Memory model:
+ *
+ * - Everything is represented as a "node" on the heap
+ * - Each node consists of >= 1 words
+ * - Each word is 64 bits
+ *
+ * - The first word of each node is a metadata block
+ *   ┌──────────────────┬─────────────┬───┐
+ *   │data type (8 bits)│size (8 bits)│...│
+ *   └──────────────────┴─────────────┴───┘
+ *   - The size refers to no. of words in this node including the metadata
+ *     block
+ */
 
 import assert from "assert";
 import { Address, Stack } from "./util";
@@ -29,7 +30,10 @@ export interface MachineState {
   globals: Record<Global, Address>;
 }
 
-/* These are data types representable in memory. */
+/**
+ * These are data types used at runtime, i.e. the different kinds of nodes we
+ * find in memory. They don't necessarily correspond to JS or Go data types.
+ * */
 export const enum DataType {
   Float64 = 0x00,
   Int64,
@@ -42,15 +46,31 @@ export const enum DataType {
   BlockFrame,
 }
 
+/**
+ * Global values, which should eventually appear as singletons in memory.
+ */
 const enum Global {
   True,
   False,
   Nil,
 }
 
+/* Each word is a Float64. So 8 bytes. */
+const wordSize = 8;
+
+/**
+ * Allocates some memory, ensuring that the first byte is set to the provided
+ * data type.
+ *
+ * @param state    Runtime machine state.
+ * @param dataType The type of this node.
+ * @param size     Number of words to allocate.
+ *
+ * @return Address of the newly allocated node.
+ */
 const allocate = (state: MachineState, dataType: DataType, size: number): number => {
   const addr = state.free;
-  state.free += size;
+  state.free += wordSize * size;
   state.heap.setUint8(addr, dataType);
   state.heap.setUint8(addr + 1, size);
   return addr;
@@ -73,6 +93,7 @@ export class NodeView {
   dataType(): DataType {
     return NodeView.getDataType(this.heap, this.addr);
   }
+
   size(): number {
     return this.heap.getUint8(this.addr + 1);
   }
@@ -94,9 +115,12 @@ export class NodeView {
   }
 }
 
+/**
+ * ┌──────┬──────┐
+ * │header│number│
+ * └──────┴──────┘
+ */
 export class Float64View extends NodeView {
-  static readonly size: number = 2;
-
   static allocate(state: MachineState): Float64View {
     const addr = allocate(state, DataType.Float64, 2);
     return new Float64View(state.heap, addr);
@@ -116,9 +140,12 @@ export class Float64View extends NodeView {
   }
 }
 
+/**
+ * ┌──────┬──────┐
+ * │header│number│
+ * └──────┴──────┘
+ */
 export class Int64View extends NodeView {
-  static readonly size: number = 2;
-
   static allocate(state: MachineState): Int64View {
     const addr = allocate(state, DataType.Int64, 2);
     return new Int64View(state.heap, addr);
@@ -138,6 +165,13 @@ export class Int64View extends NodeView {
   }
 }
 
+/**
+ * Frame which stores values for identifiers. Variable sized!
+ *
+ * ┌──────┬────┬───┬────┐
+ * │header│var1│...│varn│
+ * └──────┴────┴───┴────┘
+ */
 export class FrameView extends NodeView {
   static allocate(state: MachineState, numVars: number): FrameView {
     const addr = allocate(state, DataType.Frame, numVars + 1);
@@ -162,6 +196,13 @@ export class FrameView extends NodeView {
   }
 }
 
+/**
+ * A list of frames. Start searching from the left.
+ *
+ * ┌──────┬──────┬───┬──────┐
+ * │header│frame1│...│framen│
+ * └──────┴──────┴───┴──────┘
+ */
 class EnvView extends NodeView {
   static allocate(state: MachineState, numFrames: number): EnvView {
     const addr = allocate(state, DataType.Frame, numFrames + 1);
@@ -199,11 +240,17 @@ class EnvView extends NodeView {
   }
 }
 
+/**
+ * A call frame. This is used to record where a function should jump back to
+ * when it's done.
+ *
+ * ┌──────┬──┬───┐
+ * │header│pc│env│
+ * └──────┴──┴───┘
+ */
 export class CallFrameView extends NodeView {
-  static readonly size: number = 3;
-
   static allocate(state: MachineState): CallFrameView {
-    const addr = allocate(state, DataType.CallFrame, CallFrameView.size);
+    const addr = allocate(state, DataType.CallFrame, 3);
     return new CallFrameView(state.heap, addr);
   }
 
@@ -229,11 +276,16 @@ export class CallFrameView extends NodeView {
   }
 }
 
+/**
+ * Represents a function (a closure).
+ *
+ * ┌──────┬──┬───┐
+ * │header│pc│env│
+ * └──────┴──┴───┘
+ */
 export class FnView extends NodeView {
-  static readonly size: number = 3;
-
   static allocate(state: MachineState): FnView {
-    const addr = allocate(state, DataType.Fn, FnView.size);
+    const addr = allocate(state, DataType.Fn, 3);
     return new FnView(state.heap, addr);
   }
 
