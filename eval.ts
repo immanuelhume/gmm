@@ -24,11 +24,12 @@ const microcode: Record<Opcode, EvalFn> = {
     //   x := 1
     //   f(x)
     //
-    // We are passing a *copy* of x into f, and f has no way to mutate x. With
+    // We need to pass a *copy* of x into f, and f has no way to mutate x. With
     // the Source-like memory model, we would be passing a "reference" to the
     // same variable, and f could potentially assign new values to x.
     //
-    // For now we'll stick to the Source way...
+    // We need to make (deep) copies of each argument! For now we'll stick to
+    // the Source way...
     const instr = new ICall(state.bytecode, state.pc);
     const argc = instr.argc();
 
@@ -108,10 +109,10 @@ const microcode: Record<Opcode, EvalFn> = {
 
     state.pc += IAssign.size;
   },
-  [Opcode.IdentLoc]: function (state: MachineState): void {
+  [Opcode.LoadNameLoc]: function (state: MachineState): void {
     throw new Error("Function not implemented.");
   },
-  [Opcode.Ident]: function (state: MachineState): void {
+  [Opcode.LoadName]: function (state: MachineState): void {
     throw new Error("Function not implemented.");
   },
   [Opcode.Jof]: function (state: MachineState): void {

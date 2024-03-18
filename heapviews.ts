@@ -4,13 +4,17 @@
  * - Everything is represented as a "node" on the heap
  * - Each node consists of >= 1 words
  * - Each word is 64 bits
+ * - Words after the metadata block are called "children"
  *
  * - The first word of each node is a metadata block
- *   ┌──────────────────┬─────────────┬───┐
- *   │data type (8 bits)│size (8 bits)│...│
- *   └──────────────────┴─────────────┴───┘
- *   - The size refers to no. of words in this node including the metadata
- *     block
+ *   ┌──────────────────┬───────────────────┬───────────────────────┬───┐
+ *   │data type (8 bits)│no. values (8 bits)│no. references (8 bits)│...│
+ *   └──────────────────┴───────────────────┴───────────────────────┴───┘
+ *   - Values: values in and of themselves (e.g. the actual value for an int)
+ *   - Refs  : number representing location of another node
+ *   	 - It's important to distinguish values from references! Within the words
+ *       following the header block we'll store all the values first, then
+ *       the chidren.
  */
 
 import assert from "assert";
@@ -44,6 +48,7 @@ export const enum DataType {
   Env,
   CallFrame,
   BlockFrame,
+  Pointer,
 }
 
 /**
@@ -60,20 +65,51 @@ const wordSize = 8;
 
 /**
  * Allocates some memory, ensuring that the first byte is set to the provided
- * data type.
+ * data type. We don't export this! So all allocation should happen within this
+ * module.
  *
  * @param state    Runtime machine state.
  * @param dataType The type of this node.
- * @param size     Number of words to allocate.
+ * @param nvals    Number of values (numbers in and of themselves)
+ * @param nrefs    Number of references (addresses of other nodes)
  *
  * @return Address of the newly allocated node.
  */
-const allocate = (state: MachineState, dataType: DataType, size: number): number => {
+const allocate = (state: MachineState, dataType: DataType, nvals: number, nrefs: number): number => {
   const addr = state.free;
-  state.free += wordSize * size;
+  const totalSize = 1 + nvals + nrefs;
+  state.free += wordSize * totalSize;
   state.heap.setUint8(addr, dataType);
-  state.heap.setUint8(addr + 1, size);
+  state.heap.setUint8(addr + 1, nvals);
+  state.heap.setUint8(addr + 2, nrefs);
   return addr;
+};
+
+/**
+ * Copies, deeply, the node at a certain address. Does not care what type of
+ * node it is.
+ */
+export const clone = (state: MachineState, addr: Address): Address => {
+  const node = new NodeView(state.heap, addr);
+  const dataType = node.dataType();
+  const nvals = node.nvals();
+  const nchil = node.nrefs();
+
+  const addr2 = allocate(state, dataType, nvals, nchil);
+  const node2 = new NodeView(state.heap, addr2);
+
+  for (let i = 0; i < nvals; ++i) {
+    const val = node.getChild(i);
+    node2.setChild(i, val);
+  }
+
+  // We'll need to recursively copy the children
+  for (let i = 0; i < nchil; ++i) {
+    const child = clone(state, node.getChild(i + nvals));
+    node2.setChild(i + nvals, child);
+  }
+
+  return addr2;
 };
 
 /* [NodeView] encapsulates how we access parts of nodes. */
@@ -81,7 +117,7 @@ export class NodeView {
   protected readonly heap: DataView;
   readonly addr: Address;
 
-  protected constructor(heap: DataView, addr: Address) {
+  constructor(heap: DataView, addr: Address) {
     this.heap = heap;
     this.addr = addr;
   }
@@ -94,20 +130,22 @@ export class NodeView {
     return NodeView.getDataType(this.heap, this.addr);
   }
 
-  size(): number {
+  nvals(): number {
     return this.heap.getUint8(this.addr + 1);
   }
 
-  protected childByteOffset(i: number): Address {
-    return this.addr + (i + 1) * 8;
+  nrefs(): number {
+    return this.heap.getUint8(this.addr + 2);
   }
 
-  protected getChild(i: number): number {
+  protected childByteOffset(i: number): Address {
+    return this.addr + (i + 1) * wordSize;
+  }
+  getChild(i: number): number {
     return this.heap.getFloat64(this.childByteOffset(i));
   }
-
-  protected setChild(i: number, value: number): void {
-    this.heap.setFloat64(this.childByteOffset(i), value);
+  setChild(i: number, val: number): void {
+    return this.heap.setFloat64(this.childByteOffset(i), val);
   }
 
   checkType(type: DataType) {
@@ -122,7 +160,7 @@ export class NodeView {
  */
 export class Float64View extends NodeView {
   static allocate(state: MachineState): Float64View {
-    const addr = allocate(state, DataType.Float64, 2);
+    const addr = allocate(state, DataType.Float64, 1, 0);
     return new Float64View(state.heap, addr);
   }
 
@@ -134,7 +172,6 @@ export class Float64View extends NodeView {
   getValue(): number {
     return this.getChild(0);
   }
-
   setValue(value: number): void {
     this.setChild(0, value);
   }
@@ -147,7 +184,7 @@ export class Float64View extends NodeView {
  */
 export class Int64View extends NodeView {
   static allocate(state: MachineState): Int64View {
-    const addr = allocate(state, DataType.Int64, 2);
+    const addr = allocate(state, DataType.Int64, 1, 0);
     return new Int64View(state.heap, addr);
   }
 
@@ -159,7 +196,6 @@ export class Int64View extends NodeView {
   getValue(): number {
     return this.getChild(0);
   }
-
   setValue(value: number): void {
     this.setChild(0, value);
   }
@@ -174,7 +210,7 @@ export class Int64View extends NodeView {
  */
 export class FrameView extends NodeView {
   static allocate(state: MachineState, numVars: number): FrameView {
-    const addr = allocate(state, DataType.Frame, numVars + 1);
+    const addr = allocate(state, DataType.Frame, 0, numVars);
     return new FrameView(state.heap, addr);
   }
 
@@ -186,13 +222,12 @@ export class FrameView extends NodeView {
   get(i: number): Address {
     return this.getChild(i);
   }
-
   set(i: number, addr: Address): void {
     return this.setChild(i, addr);
   }
 
   numVars(): number {
-    return this.size() - 1;
+    return this.nrefs();
   }
 }
 
@@ -205,7 +240,7 @@ export class FrameView extends NodeView {
  */
 class EnvView extends NodeView {
   static allocate(state: MachineState, numFrames: number): EnvView {
-    const addr = allocate(state, DataType.Frame, numFrames + 1);
+    const addr = allocate(state, DataType.Frame, 0, numFrames);
     return new EnvView(state.heap, addr);
   }
 
@@ -230,13 +265,12 @@ class EnvView extends NodeView {
   getFrame(i: number): Address {
     return this.getChild(i);
   }
-
   setFrame(i: number, addr: Address): void {
     return this.setChild(i, addr);
   }
 
   numFrames(): number {
-    return this.size() - 1;
+    return this.nrefs();
   }
 }
 
@@ -250,7 +284,9 @@ class EnvView extends NodeView {
  */
 export class CallFrameView extends NodeView {
   static allocate(state: MachineState): CallFrameView {
-    const addr = allocate(state, DataType.CallFrame, 3);
+    // The PC is a literal value (it's an offset of the bytecode) but the env
+    // is a child (it's a pointer to an environment node).
+    const addr = allocate(state, DataType.CallFrame, 1, 1);
     return new CallFrameView(state.heap, addr);
   }
 
@@ -262,7 +298,6 @@ export class CallFrameView extends NodeView {
   getPc(): Address {
     return this.getChild(0);
   }
-
   setPc(pc: Address): void {
     this.setChild(0, pc);
   }
@@ -270,7 +305,6 @@ export class CallFrameView extends NodeView {
   getEnv(): EnvView {
     return new EnvView(this.heap, this.getChild(1));
   }
-
   setEnv(env: EnvView) {
     this.setChild(1, env.addr);
   }
@@ -285,7 +319,7 @@ export class CallFrameView extends NodeView {
  */
 export class FnView extends NodeView {
   static allocate(state: MachineState): FnView {
-    const addr = allocate(state, DataType.Fn, 3);
+    const addr = allocate(state, DataType.Fn, 1, 1);
     return new FnView(state.heap, addr);
   }
 
@@ -297,7 +331,6 @@ export class FnView extends NodeView {
   getPc(): Address {
     return this.getChild(0);
   }
-
   setPc(pc: Address): void {
     this.setChild(0, pc);
   }
@@ -305,7 +338,6 @@ export class FnView extends NodeView {
   getEnv(): EnvView {
     return new EnvView(this.heap, this.getChild(1));
   }
-
   setEnv(env: EnvView) {
     this.setChild(1, env.addr);
   }

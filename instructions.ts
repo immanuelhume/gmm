@@ -13,8 +13,8 @@ export const enum Opcode {
   EnterBlock,
   ExitBlock,
   Pop,
-  IdentLoc,
-  Ident,
+  LoadNameLoc,
+  LoadName,
   LoadC,
   Done,
 }
@@ -174,28 +174,28 @@ export class ILoadFn extends InstrView {
  * └────────┴───────┴────────┘
  *  1        1       1
  */
-export class IIdentLoc extends InstrView {
+export class ILoadNameLoc extends InstrView {
   static size = 3;
   readonly size = 3;
 
-  static emit(w: Emitter): IIdentLoc {
-    const pc = w.reserve(Opcode.IdentLoc, IIdentLoc.size);
-    return new IIdentLoc(w.code(), pc);
+  static emit(w: Emitter): ILoadNameLoc {
+    const pc = w.reserve(Opcode.LoadNameLoc, ILoadNameLoc.size);
+    return new ILoadNameLoc(w.code(), pc);
   }
 
   toString(): string {
-    return `IdentLoc frame:${this.frame()} offset:${this.offset()}`;
+    return `LoadNameLoc frame:${this.frame()} offset:${this.offset()}`;
   }
 
   constructor(bytecode: DataView, addr: number) {
     super(bytecode, addr);
-    assert(this.opcode() === Opcode.IdentLoc);
+    assert(this.opcode() === Opcode.LoadNameLoc);
   }
 
   frame(): number {
     return this.bytecode.getUint8(this.addr + 1);
   }
-  setFrame(frame: number): IIdentLoc {
+  setFrame(frame: number): ILoadNameLoc {
     this.bytecode.setUint8(this.addr + 1, frame);
     return this;
   }
@@ -203,7 +203,7 @@ export class IIdentLoc extends InstrView {
   offset(): number {
     return this.bytecode.getUint8(this.addr + 2);
   }
-  setOffset(offset: number): IIdentLoc {
+  setOffset(offset: number): ILoadNameLoc {
     this.bytecode.setUint8(this.addr + 2, offset);
     return this;
   }
@@ -221,28 +221,28 @@ export class IIdentLoc extends InstrView {
  * └────────┴───────┴────────┘
  *  1        1       1
  */
-export class IIdent extends InstrView {
+export class ILoadName extends InstrView {
   static size = 3;
   readonly size = 3;
 
-  static emit(w: Emitter): IIdent {
-    const pc = w.reserve(Opcode.Ident, IIdent.size);
-    return new IIdent(w.code(), pc);
+  static emit(w: Emitter): ILoadName {
+    const pc = w.reserve(Opcode.LoadName, ILoadName.size);
+    return new ILoadName(w.code(), pc);
   }
 
   toString(): string {
-    return `Ident frame:${this.frame()} offset:${this.offset()}`;
+    return `LoadName frame:${this.frame()} offset:${this.offset()}`;
   }
 
   constructor(bytecode: DataView, addr: number) {
     super(bytecode, addr);
-    assert(this.opcode() === Opcode.Ident);
+    assert(this.opcode() === Opcode.LoadName);
   }
 
   frame(): number {
     return this.bytecode.getUint8(this.addr + 1);
   }
-  setFrame(frame: number): IIdentLoc {
+  setFrame(frame: number): ILoadNameLoc {
     this.bytecode.setUint8(this.addr + 1, frame);
     return this;
   }
@@ -250,7 +250,7 @@ export class IIdent extends InstrView {
   offset(): number {
     return this.bytecode.getUint8(this.addr + 2);
   }
-  setOffset(offset: number): IIdentLoc {
+  setOffset(offset: number): ILoadNameLoc {
     this.bytecode.setUint8(this.addr + 2, offset);
     return this;
   }
@@ -507,8 +507,8 @@ const opcodeClass: Record<Opcode, { new (bytecode: DataView, addr: number): Inst
   [Opcode.EnterBlock]: IEnterBlock,
   [Opcode.ExitBlock]: IExitBlock,
   [Opcode.Pop]: IPop,
-  [Opcode.IdentLoc]: IIdentLoc,
-  [Opcode.Ident]: IIdent,
+  [Opcode.LoadNameLoc]: ILoadNameLoc,
+  [Opcode.LoadName]: ILoadName,
   [Opcode.BinaryOp]: IBinaryOp,
   [Opcode.UnaryOp]: IUnaryOp,
   [Opcode.LoadC]: ILoadC,

@@ -14,7 +14,6 @@ import {
   ProgContext,
   ShortVarDeclContext,
   NumberContext,
-  BinaryOpContext,
   NumericOpContext,
 } from "./antlr/GoParser";
 import GoVisitor from "./antlr/GoParserVisitor";
@@ -25,12 +24,12 @@ import {
   IEnterBlock,
   IExitBlock,
   IGoto,
-  IIdentLoc,
+  ILoadNameLoc,
   IJof,
   ILoadFn,
   Opcode,
   ICall,
-  IIdent,
+  ILoadName,
   IReturn,
   IPop,
   ILoadC,
@@ -38,7 +37,6 @@ import {
   IBinaryOp,
   BinaryOp,
 } from "./instructions";
-import { fmtAddress } from "./util";
 
 class BytecodeWriter implements Emitter {
   private _code: DataView;
@@ -203,7 +201,7 @@ export class Assembler extends GoVisitor<void> {
     // This is a limitation of not working with an AST.
     const fnName = ctx.ident().getText();
     const [frame, offset] = this.env.lookup(fnName);
-    IIdentLoc.emit(this.bytecode).setFrame(frame).setOffset(offset);
+    ILoadNameLoc.emit(this.bytecode).setFrame(frame).setOffset(offset);
     IAssign.emit(this.bytecode);
 
     // Check if this function is, in fact, main
@@ -220,7 +218,7 @@ export class Assembler extends GoVisitor<void> {
       this.visit(ctx.expr()); // compile RHS
       const ident = ctx.ident().getText();
       const [frame, offset] = this.env.lookup(ident);
-      IIdentLoc.emit(this.bytecode).setFrame(frame).setOffset(offset);
+      ILoadNameLoc.emit(this.bytecode).setFrame(frame).setOffset(offset);
       IAssign.emit(this.bytecode);
     } else {
       // @todo: need to find a way to handle default initialization
@@ -273,7 +271,7 @@ export class Assembler extends GoVisitor<void> {
 
     const ident = ctx.ident().getText();
     const [frame, offset] = this.env.lookup(ident);
-    IIdentLoc.emit(this.bytecode).setFrame(frame).setOffset(offset);
+    ILoadNameLoc.emit(this.bytecode).setFrame(frame).setOffset(offset);
 
     IAssign.emit(this.bytecode);
   };
@@ -329,7 +327,7 @@ export class Assembler extends GoVisitor<void> {
   visitIdent = (ctx: IdentContext) => {
     const ident = ctx.getText();
     const [frame, offset] = this.env.lookup(ident);
-    IIdent.emit(this.bytecode).setFrame(frame).setOffset(offset);
+    ILoadName.emit(this.bytecode).setFrame(frame).setOffset(offset);
   };
 
   visitNumber = (ctx: NumberContext) => {
