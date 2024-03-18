@@ -16,6 +16,19 @@ const microcode: Record<Opcode, EvalFn> = {
     state.pc += IUnaryOp.size;
   },
   [Opcode.Call]: function (state: MachineState): void {
+    // The confusing thing is that passing arguments in Go works very
+    // differently from Source.
+    //
+    // For example, in this code
+    //
+    //   x := 1
+    //   f(x)
+    //
+    // We are passing a *copy* of x into f, and f has no way to mutate x. With
+    // the Source-like memory model, we would be passing a "reference" to the
+    // same variable, and f could potentially assign new values to x.
+    //
+    // For now we'll stick to the Source way...
     const instr = new ICall(state.bytecode, state.pc);
     const argc = instr.argc();
 
