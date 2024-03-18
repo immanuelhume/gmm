@@ -15,8 +15,8 @@ import {
   ShortVarDeclContext,
   NumberContext,
   NumericOpContext,
-} from "./antlr/GoParser";
-import GoVisitor from "./antlr/GoParserVisitor";
+} from "../antlr/GoParser";
+import GoVisitor from "../antlr/GoParserVisitor";
 
 import {
   IAssign,

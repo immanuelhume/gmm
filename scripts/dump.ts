@@ -9,9 +9,9 @@ import { CharStream, CommonTokenStream } from "antlr4";
 import GoLexer from "../antlr/GoLexer";
 import GoParser from "../antlr/GoParser";
 import { readFileSync } from "fs";
-import { Assembler } from "../compiler";
-import { InstrView, Opcode } from "../instructions";
-import { fmtAddress } from "../util";
+import { Assembler } from "../src/compiler";
+import { InstrView, Opcode } from "../src/instructions";
+import { fmtAddress } from "../src/util";
 
 const dumpfile = (filename: string) => {
   const input = readFileSync(filename).toString();
