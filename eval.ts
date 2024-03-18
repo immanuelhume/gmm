@@ -1,5 +1,5 @@
 import { Address } from "./util";
-import { CallFrameView, DataType, Float64View, FnView, FrameView, MachineState, NodeView } from "./heapviews";
+import { CallFrameView, DataType, Float64View, FnView, FrameView, MachineState, NodeView, clone } from "./heapviews";
 import { IAssign, ILoadFn, Opcode, UnaryOp, BinaryOp, IUnaryOp, ICall, IBinaryOp } from "./instructions";
 
 type EvalFn = (state: MachineState) => void;
@@ -16,20 +16,6 @@ const microcode: Record<Opcode, EvalFn> = {
     state.pc += IUnaryOp.size;
   },
   [Opcode.Call]: function (state: MachineState): void {
-    // The confusing thing is that passing arguments in Go works very
-    // differently from Source.
-    //
-    // For example, in this code
-    //
-    //   x := 1
-    //   f(x)
-    //
-    // We need to pass a *copy* of x into f, and f has no way to mutate x. With
-    // the Source-like memory model, we would be passing a "reference" to the
-    // same variable, and f could potentially assign new values to x.
-    //
-    // We need to make (deep) copies of each argument! For now we'll stick to
-    // the Source way...
     const instr = new ICall(state.bytecode, state.pc);
     const argc = instr.argc();
 
@@ -38,7 +24,9 @@ const microcode: Record<Opcode, EvalFn> = {
     // 1. Pop [argc] addresses off the OS
     const args: Address[] = [];
     for (let i = 0; i < argc; ++i) {
-      args.push(state.os.pop());
+      // Beware that here, we are cloning the arguments! This is in line with
+      // how Golang passes arguments i.e. everything is passed by value.
+      args.push(clone(state, state.os.pop()));
     }
     args.reverse();
 
