@@ -2,9 +2,8 @@
   "name": "g",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "prepare": "husky install"
   },
   "keywords": [],
   "author": "",
@@ -13,6 +12,15 @@
     "antlr4": "^4.13.1-patch-1"
   },
   "devDependencies": {
-    "@types/node": "^20.11.25"
+    "@types/node": "^20.11.25",
+    "husky": "^9.0.11",
+    "lint-staged": "^15.2.2",
+    "prettier": "^3.2.5"
+  },
+  "lint-staged": {
+    "*.{ts,js,md}": "prettier --write"
+  },
+  "prettier": {
+    "printWidth": 120
   }
 }
