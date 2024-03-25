@@ -197,7 +197,16 @@ export class Assembler extends GoVisitor<void> {
     this.visit(ctx.funcBody()); // compile the body
     this.env.popFrame();
 
-    // @todo: do we need to insert a return instruction? also handle non-returning funcs?
+    // @todo: also handle non-returning funcs - this involves pushing "undefined"
+    // onto the OS, but we haven't defined undefined yet!
+    //
+    // Note that we *always* emit this, even if the function body has explicit
+    // return statement(s). These instructions will not affect those functions
+    // (since we'll never reach these lines). Instead these are meant for functions
+    // without return statements.
+    //
+    // @todo: allow multiple return values (then we won't have the issues above)
+    IReturn.emit(this.bytecode);
 
     goto.setWhere(this.bytecode.wc());
 
