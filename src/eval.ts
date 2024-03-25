@@ -1,10 +1,41 @@
 import { Address } from "./util";
-import { CallFrameView, DataType, Float64View, FnView, FrameView, MachineState, NodeView, clone } from "./heapviews";
-import { IAssign, ILoadFn, Opcode, UnaryOp, BinaryOp, IUnaryOp, ICall, IBinaryOp } from "./instructions";
+import {
+  CallFrameView,
+  DataType,
+  Float64View,
+  FnView,
+  BuiltinView,
+  FrameView,
+  NodeView,
+  clone,
+  BuiltinId,
+  MachineState,
+  wordSize,
+  BlockFrameView,
+} from "./heapviews";
+import {
+  IAssign,
+  ILoadFn,
+  Opcode,
+  UnaryOp,
+  BinaryOp,
+  IUnaryOp,
+  ICall,
+  IBinaryOp,
+  IGoto,
+  InstrView,
+  ILoadNameLoc,
+  IPop,
+  ILoadC,
+  IPush,
+  IEnterBlock,
+  IExitBlock,
+  ILoadName,
+} from "./instructions";
 
 type EvalFn = (state: MachineState) => void;
 
-const microcode: Record<Opcode, EvalFn> = {
+export const microcode: Record<Opcode, EvalFn> = {
   [Opcode.BinaryOp]: function (state: MachineState): void {
     const instr = new IBinaryOp(state.bytecode, state.pc);
     execBinaryOp(state, instr.op());
@@ -21,7 +52,6 @@ const microcode: Record<Opcode, EvalFn> = {
 
     state.pc += ICall.size;
 
-    // 1. Pop [argc] addresses off the OS
     const args: Address[] = [];
     for (let i = 0; i < argc; ++i) {
       // Beware that here, we are cloning the arguments! This is in line with
@@ -30,26 +60,37 @@ const microcode: Record<Opcode, EvalFn> = {
     }
     args.reverse();
 
-    // 2. Save a call frame on RTS
-    const callFrame = CallFrameView.allocate(state);
-    callFrame.setPc(state.pc);
-    callFrame.setEnv(state.env);
-
-    state.rts.push(callFrame.addr);
-
-    // 3. Obtain fn's env, and extend it
     const fnAddr = state.os.pop();
-    const fn = new FnView(state.heap, fnAddr);
+    const fnKind = NodeView.getDataType(state.heap, fnAddr);
+    switch (fnKind) {
+      case DataType.Fn:
+        const callFrame = CallFrameView.allocate(state);
+        callFrame.setPc(state.pc); // pc was already incremented to next instruction above
+        callFrame.setEnv(state.env);
 
-    const frame = FrameView.allocate(state, argc);
-    for (let i = 0; i < argc; ++i) {
-      frame.set(i, args[i]);
+        state.rts.push(callFrame.addr);
+
+        const frame = FrameView.allocate(state, argc);
+        for (let i = 0; i < argc; ++i) {
+          frame.set(i, args[i]);
+        }
+
+        const fn = new FnView(state.heap, fnAddr);
+        const newEnv = fn.getEnv().extend(state, frame.addr);
+
+        state.env = newEnv;
+        state.pc = fn.getPc();
+
+        break;
+      case DataType.Builtin:
+        // We don't bother with creating a new frame, or extending any environment.
+        const builtin = new BuiltinView(state.heap, fnAddr);
+        const bifn = builtinFns[builtin.getId()];
+        bifn(state, args);
+        break;
+      default:
+        throw new Error(`Uncallable object ${fnKind}`);
     }
-    const newEnv = fn.getEnv().extend(state, frame.addr);
-
-    // 4. Done. We jump to the function's starting address.
-    state.env = newEnv;
-    state.pc = fn.getPc();
   },
   [Opcode.Return]: function (state: MachineState): void {
     // We don't need to bump the PC here. Since we jump back to wherever we
@@ -67,19 +108,16 @@ const microcode: Record<Opcode, EvalFn> = {
       default:
         throw new Error("Unexpected data type in runtime stack!"); // @todo: format the error
     }
-    throw new Error("Function not implemented.");
   },
   [Opcode.Goto]: function (state: MachineState): void {
-    throw new Error("Function not implemented.");
+    const goto = new IGoto(state.bytecode, state.pc);
+    state.pc = goto.where();
   },
   [Opcode.LoadFn]: function (state: MachineState): void {
     const instr = new ILoadFn(state.bytecode, state.pc);
     const fn = FnView.allocate(state);
 
-    const argframe = FrameView.allocate(state, instr.argc());
-    const fnEnv = state.env.extend(state, argframe.addr);
-
-    fn.setEnv(fnEnv);
+    fn.setEnv(state.env);
     fn.setPc(instr.pc());
 
     state.os.push(fn.addr);
@@ -98,28 +136,63 @@ const microcode: Record<Opcode, EvalFn> = {
     state.pc += IAssign.size;
   },
   [Opcode.LoadNameLoc]: function (state: MachineState): void {
-    throw new Error("Function not implemented.");
+    const instr = new ILoadNameLoc(state.bytecode, state.pc);
+    const frameAddr = state.env.getFrame(instr.frame());
+    const frame = new FrameView(state.heap, frameAddr);
+    const nameLoc = frame.getVarLoc(instr.offset());
+
+    state.os.push(nameLoc);
+    state.pc += ILoadNameLoc.size;
   },
   [Opcode.LoadName]: function (state: MachineState): void {
-    throw new Error("Function not implemented.");
+    const instr = new ILoadName(state.bytecode, state.pc);
+    const frameAddr = state.env.getFrame(instr.frame());
+    const frame = new FrameView(state.heap, frameAddr);
+    const addr = frame.get(instr.offset());
+
+    state.os.push(addr);
+    state.pc += ILoadName.size;
   },
   [Opcode.Jof]: function (state: MachineState): void {
-    throw new Error("Function not implemented.");
+    throw new Error("Jof not implemented.");
   },
   [Opcode.EnterBlock]: function (state: MachineState): void {
-    throw new Error("Function not implemented.");
+    const instr = new IEnterBlock(state.bytecode, state.pc);
+    const frame = FrameView.allocate(state, instr.numVars());
+    const newEnv = state.env.extend(state, frame.addr);
+
+    const blkFrame = BlockFrameView.allocate(state).setEnv(state.env);
+    state.rts.push(blkFrame.addr);
+
+    state.env = newEnv;
+    state.pc += IEnterBlock.size;
   },
   [Opcode.ExitBlock]: function (state: MachineState): void {
-    throw new Error("Function not implemented.");
+    // Surely the top of the RTS is a block frame? It can't be a call frame right...
+    const blkFrameAddr = state.rts.pop();
+    const blkFrame = new BlockFrameView(state.heap, blkFrameAddr);
+    state.env = blkFrame.getEnv();
+    state.pc += IExitBlock.size;
   },
   [Opcode.Pop]: function (state: MachineState): void {
-    throw new Error("Function not implemented.");
+    state.os.pop();
+    state.pc += IPop.size;
   },
   [Opcode.LoadC]: function (state: MachineState): void {
-    throw new Error("Function not implemented.");
+    // @todo: make general, as and when ILoadC is updated - for now we just load numbers...
+    const instr = new ILoadC(state.bytecode, state.pc);
+    const val = Float64View.allocate(state).setValue(instr.val());
+
+    state.os.push(val.addr);
+    state.pc += ILoadC.size;
+  },
+  [Opcode.Push]: function (state: MachineState): void {
+    const instr = new IPush(state.bytecode, state.pc);
+    state.os.push(instr.val());
+    state.pc += IPush.size;
   },
   [Opcode.Done]: function (state: MachineState): void {
-    throw new Error("Function not implemented.");
+    throw new Error("Done not implemented.");
   },
 };
 
@@ -135,7 +208,7 @@ const execBinaryOp = (state: MachineState, op: BinaryOp): void => {
     throw new Error("Can't perform binary operation on different data types!");
   }
 
-  const f = binaryBuiltins.get([lhsType, op]);
+  const f = binaryBuiltins.get(lhsType)?.get(op);
   if (!f) throw new Error("No binary operation defined!"); // @todo: format string
 
   const res = f(state, lhsAddr, rhsAddr);
@@ -145,22 +218,27 @@ const execBinaryOp = (state: MachineState, op: BinaryOp): void => {
 
 type BinaryOpFn = (state: MachineState, lhs: Address, rhs: Address) => Address;
 
-export const binaryBuiltins = new Map<[DataType, BinaryOp], BinaryOpFn>([
+export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
   [
-    [DataType.Float64, BinaryOp.Add],
-    (state, lhsAddr, rhsAddr) => {
-      const lhs = new Float64View(state.heap, lhsAddr);
-      const rhs = new Float64View(state.heap, rhsAddr);
+    DataType.Float64,
+    new Map([
+      [
+        BinaryOp.Add,
+        (state, lhsAddr, rhsAddr) => {
+          const lhs = new Float64View(state.heap, lhsAddr);
+          const rhs = new Float64View(state.heap, rhsAddr);
 
-      const lhsValue = lhs.getValue();
-      const rhsValue = rhs.getValue();
-      const resValue = lhsValue + rhsValue;
+          const lhsValue = lhs.getValue();
+          const rhsValue = rhs.getValue();
+          const resValue = lhsValue + rhsValue;
 
-      const res = Float64View.allocate(state);
-      res.setValue(resValue);
+          const res = Float64View.allocate(state);
+          res.setValue(resValue);
 
-      return res.addr;
-    },
+          return res.addr;
+        },
+      ],
+    ]),
   ],
 ]);
 
@@ -192,3 +270,12 @@ const unaryBuiltins = new Map<[DataType, UnaryOp], UnaryOpFn>([
     },
   ],
 ]);
+
+type BuiltinEvalFn = (state: MachineState, args: Address[]) => void;
+
+const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
+  [BuiltinId.Debug]: function (state: MachineState, args: Address[]): void {
+    const reprs = args.map((arg) => NodeView.of(state.heap, arg).toString()).join(", ");
+    console.log(reprs);
+  },
+};

@@ -59,7 +59,7 @@ primaryExpr : ident
 
 selector : '.' ident ;
 
-args : '(' arg (',' arg)* ','? | ')';
+args : '(' arg (',' arg)* ','? ')';
 arg : expr | type ; // functions like [make] take in types as params...
 
 block : '{' (stmt eos)* '}' ;

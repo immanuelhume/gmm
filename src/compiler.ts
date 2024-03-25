@@ -1,4 +1,6 @@
-import { ParserRuleContext } from "antlr4";
+import { ParserRuleContext, CharStream, CommonTokenStream } from "antlr4";
+import GoLexer from "../antlr/GoLexer";
+import GoParser from "../antlr/GoParser";
 import {
   AssignmentContext,
   BlockContext,
@@ -20,6 +22,8 @@ import {
   LvalueContext,
   BreakStmtContext,
   ContinueStmtContext,
+  GoStmtContext,
+  SendStmtContext,
 } from "../antlr/GoParser";
 import GoVisitor from "../antlr/GoParserVisitor";
 
@@ -41,8 +45,10 @@ import {
   IDone,
   IBinaryOp,
   BinaryOp,
+  IPush,
 } from "./instructions";
 import { ArrayStack, Stack } from "./util";
+import { builtins } from "./heapviews";
 
 class BytecodeWriter implements Emitter {
   private _code: DataView;
@@ -120,7 +126,11 @@ class DeclScanner extends GoVisitor<string[]> {
   };
 
   visitForStmt = (_: ForStmtContext) => {
-    // An annoying case to handle separately.
+    // An annoying case to handle separately. Since [for] statements can actually declare
+    // variables, but we don't want to include that when scanning a program or block.
+    //
+    // The for loop's iteration variables will be handled explicitly when compiling the for loop
+    // code.
     return [];
   };
 
@@ -157,6 +167,8 @@ export class Assembler extends GoVisitor<void> {
     this.env = new CompileTimeEnvironment();
     this.contiss = new ArrayStack();
     this.breakss = new ArrayStack();
+
+    this.env.pushFrame(builtins);
   }
 
   static scanDecls = (ctx: ParserRuleContext): string[] => {
@@ -167,6 +179,9 @@ export class Assembler extends GoVisitor<void> {
   visitProg = (ctx: ProgContext) => {
     const names = Assembler.scanDecls(ctx);
     this.env.pushFrame(names);
+
+    // Wrap the entire program in a block. Don't care about exiting the block.
+    IEnterBlock.emit(this.bytecode).setNumVars(names.length);
 
     ctx.decl_list().forEach((decl) => {
       this.visit(decl);
@@ -180,7 +195,8 @@ export class Assembler extends GoVisitor<void> {
     // We'll need to jump to [main] to start running the program. So we just
     // append a call instruction to the end of the program.
 
-    ILoadC.emit(this.bytecode).setVal(this.main); // load [main]'s address
+    const [frame, offset] = this.env.lookup("main");
+    ILoadName.emit(this.bytecode).setFrame(frame).setOffset(offset);
     ICall.emit(this.bytecode).setArgc(0); // call [main]
     IDone.emit(this.bytecode); // last instruction
   };
@@ -310,7 +326,7 @@ export class Assembler extends GoVisitor<void> {
       if (init.shortVarDecl()) {
         // We may be declaring a variable. In which case we'll create a new
         // block surrounding this for statement, with that new variable inside.
-        IEnterBlock.emit(this.bytecode);
+        IEnterBlock.emit(this.bytecode).setNumVars(1);
         const ident = init.shortVarDecl().lvalue().getText();
         this.env.pushFrame([ident]);
       }
@@ -367,11 +383,19 @@ export class Assembler extends GoVisitor<void> {
     const names = Assembler.scanDecls(ctx);
     this.env.pushFrame(names);
 
-    IEnterBlock.emit(this.bytecode);
+    IEnterBlock.emit(this.bytecode).setNumVars(names.length);
     this.visitChildren(ctx); // compile each statement
     IExitBlock.emit(this.bytecode);
 
     this.env.popFrame();
+  };
+
+  visitGoStmt = (ctx: GoStmtContext) => {
+    // @todo
+  };
+
+  visitSendStmt = (ctx: SendStmtContext) => {
+    // @todo
   };
 
   visitLvalue = (ctx: LvalueContext) => {
@@ -414,15 +438,15 @@ export class Assembler extends GoVisitor<void> {
     } else if (ctx._fn) {
       const args = ctx.args();
       const fn = ctx._fn;
-      const argc = args.arg_list.length;
+      const argc = args.arg_list().length;
 
-      this.visit(args); // emit code to evaluate each arg
       this.visit(fn); // emit code to evaluate the callable thing
+      this.visit(args); // emit code to evaluate each arg
 
       const call = ICall.emit(this.bytecode);
       call.setArgc(argc);
     } else if (ctx._base) {
-      // @todo: figure out this shit
+      // @todo: figure out this shit - it means we are accessing a field/method?
     }
   };
 
@@ -472,3 +496,19 @@ export class Assembler extends GoVisitor<void> {
     ILoadC.emit(this.bytecode).setVal(val);
   };
 }
+
+/**
+ * Compiles given source code into bytecode.
+ */
+export const compileSrc = (src: string): DataView => {
+  const chars = new CharStream(src);
+  const lexer = new GoLexer(chars);
+  const tokens = new CommonTokenStream(lexer);
+  const parser = new GoParser(tokens);
+  const tree = parser.prog();
+
+  const ass = new Assembler();
+  ass.visit(tree);
+
+  return ass.bytecode.code();
+};

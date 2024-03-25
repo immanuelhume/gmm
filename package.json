@@ -4,7 +4,8 @@
   "description": "",
   "scripts": {
     "prepare": "husky install",
-    "dump": "tsx scripts/dump.ts"
+    "dump": "tsx scripts/dump.ts",
+    "run": "tsx scripts/run.ts"
   },
   "keywords": [],
   "author": "",

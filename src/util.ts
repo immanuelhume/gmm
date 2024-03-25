@@ -13,7 +13,7 @@ export class ArrayStack<T> implements Stack<T> {
   push = (t: T) => this.xs.push(t);
   pop = () => {
     const ret = this.xs.pop();
-    if (!ret) throw new Error("Tried to pop from empty stack");
+    if (ret === undefined) throw new Error("Tried to pop from empty stack");
     return ret;
   };
   peek = () => this.xs[this.xs.length - 1];

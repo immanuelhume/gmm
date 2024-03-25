@@ -5,27 +5,15 @@
  * Usage: ts-node dump.ts myfile.go
  */
 
-import { CharStream, CommonTokenStream } from "antlr4";
-import GoLexer from "../antlr/GoLexer";
-import GoParser from "../antlr/GoParser";
 import { readFileSync } from "fs";
-import { Assembler } from "../src/compiler";
+import { compileSrc } from "../src/compiler";
 import { InstrView, Opcode } from "../src/instructions";
 import { fmtAddress } from "../src/util";
 
 const dumpfile = (filename: string) => {
-  const input = readFileSync(filename).toString();
-  const chars = new CharStream(input);
-  const lexer = new GoLexer(chars);
-  const tokens = new CommonTokenStream(lexer);
-  const parser = new GoParser(tokens);
-  const tree = parser.prog();
-
-  const ass = new Assembler();
-  ass.visit(tree);
-
+  const src = readFileSync(filename).toString();
+  const bytecode = compileSrc(src);
   let pc = 0;
-  const bytecode = ass.bytecode.code();
   while (true) {
     const instr = InstrView.of(bytecode, pc);
     console.log(`${fmtAddress(pc)} : ${instr.toString()}`);

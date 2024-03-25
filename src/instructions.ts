@@ -16,6 +16,7 @@ export const enum Opcode {
   LoadNameLoc,
   LoadName,
   LoadC,
+  Push,
   Done,
 }
 
@@ -25,6 +26,9 @@ export const enum Opcode {
  */
 export interface Emitter {
   code(): DataView;
+  /**
+   * Reserves [size] bytes, and sets the opcode.
+   */
   reserve(opcode: Opcode, size: number): number;
 }
 
@@ -48,6 +52,10 @@ export abstract class InstrView {
   static of(bytecode: DataView, addr: number): InstrView {
     const opcode = bytecode.getUint8(addr) as Opcode;
     return new opcodeClass[opcode](bytecode, addr);
+  }
+
+  static _opcode(bytecode: DataView, addr: number): Opcode {
+    return bytecode.getUint8(addr);
   }
 
   constructor(bytecode: DataView, addr: number) {
@@ -398,17 +406,25 @@ export class IReturn extends InstrView {
 /**
  * Enters a block.
  *
- * ┌──────┐
- * │opcode│
- * └──────┘
+ * ┌──────┬────────────┐
+ * │opcode│# local vars│
+ * └──────┴────────────┘
  */
 export class IEnterBlock extends InstrView {
-  static size = 1;
-  readonly size = 1;
+  static size = 2;
+  readonly size = 2;
 
   static emit(w: Emitter): IEnterBlock {
     const pc = w.reserve(Opcode.EnterBlock, IEnterBlock.size);
     return new IEnterBlock(w.code(), pc);
+  }
+
+  numVars(): number {
+    return this.bytecode.getUint8(this.addr + 1);
+  }
+  setNumVars(n: number): IEnterBlock {
+    this.bytecode.setUint8(this.addr + 1, n);
+    return this;
   }
 
   toString(): string {
@@ -459,12 +475,19 @@ export class IPop extends InstrView {
 }
 
 export class ILoadC extends InstrView {
+  // @todo: we'll need to support all kinds of constants, e.g. numbers (of various types),
+  // true, false, strings
   static size = 9;
   readonly size = 9;
 
   static emit(w: Emitter): ILoadC {
     const pc = w.reserve(Opcode.LoadC, ILoadC.size);
     return new ILoadC(w.code(), pc);
+  }
+
+  constructor(bytecode: DataView, addr: number) {
+    super(bytecode, addr);
+    assert(this.opcode() === Opcode.LoadC);
   }
 
   toString(): string {
@@ -475,6 +498,33 @@ export class ILoadC extends InstrView {
     return this.bytecode.getFloat64(this.addr + 1);
   }
   setVal(val: number): ILoadC {
+    this.bytecode.setFloat64(this.addr + 1, val);
+    return this;
+  }
+}
+
+export class IPush extends InstrView {
+  static size = 9;
+  readonly size = 9;
+
+  static emit(w: Emitter): IPush {
+    const pc = w.reserve(Opcode.Push, IPush.size);
+    return new IPush(w.code(), pc);
+  }
+
+  constructor(bytecode: DataView, addr: number) {
+    super(bytecode, addr);
+    assert(this.opcode() === Opcode.Push);
+  }
+
+  toString(): string {
+    return `Push ${this.val()}`;
+  }
+
+  val(): number {
+    return this.bytecode.getFloat64(this.addr + 1);
+  }
+  setVal(val: number): IPush {
     this.bytecode.setFloat64(this.addr + 1, val);
     return this;
   }
@@ -512,6 +562,7 @@ const opcodeClass: Record<Opcode, { new (bytecode: DataView, addr: number): Inst
   [Opcode.BinaryOp]: IBinaryOp,
   [Opcode.UnaryOp]: IUnaryOp,
   [Opcode.LoadC]: ILoadC,
+  [Opcode.Push]: IPush,
   [Opcode.Done]: IDone,
 };
 
