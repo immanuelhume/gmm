@@ -8,11 +8,11 @@ prog : (decl eos)* ;
 stmt : decl
 	| returnStmt
 	| forStmt
+	| ifStmt
 	| goStmt
 	| breakStmt
 	| continueStmt
 	| sendStmt
-	| ifStmt
 	| block
 	| simpleStmt
 	;
