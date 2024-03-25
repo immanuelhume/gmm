@@ -16,7 +16,7 @@ const dumpfile = (filename: string) => {
   let pc = 0;
   while (true) {
     const instr = InstrView.of(bytecode, pc);
-    console.log(`${fmtAddress(pc)} : ${instr.toString()}`);
+    console.log(`\x1b[33m${fmtAddress(pc)}\x1b[0m  ${instr.toString()}`);
     pc += instr.size;
     if (instr.opcode() == Opcode.Done) break;
   }
