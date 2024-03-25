@@ -183,6 +183,7 @@ export class Assembler extends GoVisitor<void> {
     // Wrap the entire program in a block. Don't care about exiting the block.
     IEnterBlock.emit(this.bytecode).setNumVars(names.length);
 
+    // @todo: we need to let individual stmts handle this
     ctx.decl_list().forEach((decl) => {
       this.visit(decl);
       IPop.emit(this.bytecode);
@@ -236,6 +237,7 @@ export class Assembler extends GoVisitor<void> {
     // without return statements.
     //
     // @todo: allow multiple return values (then we won't have the issues above)
+    IPush.emit(this.bytecode); // for now, just push some garbage
     IReturn.emit(this.bytecode);
 
     goto.setWhere(this.bytecode.wc());
@@ -384,7 +386,11 @@ export class Assembler extends GoVisitor<void> {
     this.env.pushFrame(names);
 
     IEnterBlock.emit(this.bytecode).setNumVars(names.length);
-    this.visitChildren(ctx); // compile each statement
+    // @todo: we need to let individual stmts handle this
+    ctx.stmt_list().forEach((decl) => {
+      this.visit(decl);
+      IPop.emit(this.bytecode);
+    });
     IExitBlock.emit(this.bytecode);
 
     this.env.popFrame();

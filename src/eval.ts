@@ -218,6 +218,7 @@ const execBinaryOp = (state: MachineState, op: BinaryOp): void => {
 
 type BinaryOpFn = (state: MachineState, lhs: Address, rhs: Address) => Address;
 
+// @todo add more binary builtins
 export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
   [
     DataType.Float64,
@@ -256,6 +257,7 @@ const execUnaryOp = (state: MachineState, op: UnaryOp): void => {
 
 type UnaryOpFn = (state: MachineState, addr: Address) => Address;
 
+// @todo add more unary builtins
 const unaryBuiltins = new Map<[DataType, UnaryOp], UnaryOpFn>([
   [
     [DataType.Float64, UnaryOp.Sub],
@@ -277,5 +279,6 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
   [BuiltinId.Debug]: function (state: MachineState, args: Address[]): void {
     const reprs = args.map((arg) => NodeView.of(state.heap, arg).toString()).join(", ");
     console.log(reprs);
+    state.os.push(0); // push some garbage, since functions must leave one value on the OS for now @todo FIXME
   },
 };

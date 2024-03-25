@@ -7,7 +7,7 @@
 import { readFileSync } from "fs";
 import { compileSrc } from "../src/compiler";
 import { InstrView, Opcode } from "../src/instructions";
-import { ArrayStack } from "../src/util";
+import { ArrayStack, fmtAddress } from "../src/util";
 import { BuiltinView, EnvView, FrameView, MachineState, builtinName2Id, builtins } from "../src/heapviews";
 import { microcode } from "../src/eval";
 
@@ -34,8 +34,16 @@ const run = (filename: string) => {
     env: globalEnv,
   };
 
+  const toHexList = (xs: number[]) => xs.map((x) => `${x.toString(16)}`).join(", ");
+
   while (true) {
-    const opcode = InstrView._opcode(bytecode, state.pc);
+    const instr = InstrView.of(bytecode, state.pc);
+    const opcode = instr.opcode();
+    console.log(
+      `\x1b[33m${fmtAddress(state.pc)}\x1b[0m ${instr.toString()}`.padEnd(64, " "),
+      toHexList(state.os.toList()).padEnd(64, " "),
+      toHexList(state.rts.toList()).padEnd(64, " "),
+    );
     if (opcode === Opcode.Done) break;
     microcode[opcode](state);
   }
