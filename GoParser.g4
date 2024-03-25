@@ -21,7 +21,7 @@ simpleStmt : assignment | shortVarDecl | exprStmt ;
 
 // [defer] statements would be good to add
 
-ifStmt : 'if' cond=expr cons=block ('else' alt) ;
+ifStmt : 'if' cond=expr cons=block ('else' alt)? ;
 
 alt : ifStmt | block ;
 

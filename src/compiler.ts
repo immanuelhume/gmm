@@ -314,7 +314,9 @@ export class Assembler extends GoVisitor<void> {
     this.visit(ctx._cons); // compile consequent
     const goto = IGoto.emit(this.bytecode);
     jof.setWhere(this.bytecode.wc());
-    this.visit(ctx.alt());
+    if (ctx.alt()) {
+      this.visit(ctx.alt());
+    }
     goto.setWhere(this.bytecode.wc());
   };
 
