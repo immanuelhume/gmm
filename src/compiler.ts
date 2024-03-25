@@ -18,6 +18,8 @@ import {
   ForStmtContext,
   RelOpContext,
   LvalueContext,
+  BreakStmtContext,
+  ContinueStmtContext,
 } from "../antlr/GoParser";
 import GoVisitor from "../antlr/GoParserVisitor";
 
@@ -40,6 +42,7 @@ import {
   IBinaryOp,
   BinaryOp,
 } from "./instructions";
+import { ArrayStack, Stack } from "./util";
 
 class BytecodeWriter implements Emitter {
   private _code: DataView;
@@ -145,10 +148,15 @@ export class Assembler extends GoVisitor<void> {
 
   main: number | undefined; // keep track of where the main function starts
 
+  contiss: Stack<IGoto[]>;
+  breakss: Stack<IGoto[]>;
+
   constructor() {
     super();
     this.bytecode = new BytecodeWriter();
     this.env = new CompileTimeEnvironment();
+    this.contiss = new ArrayStack();
+    this.breakss = new ArrayStack();
   }
 
   static scanDecls = (ctx: ParserRuleContext): string[] => {
@@ -261,6 +269,25 @@ export class Assembler extends GoVisitor<void> {
   };
 
   visitForStmt = (ctx: ForStmtContext) => {
+    this.contiss.push([]);
+    this.breakss.push([]);
+
+    const processContinuesAndBreaks = (startAddr: number) => {
+      // Process continues and breaks.
+      const contis = this.contiss.pop();
+      const breaks = this.breakss.pop();
+      if (contis.length > 0) {
+        contis.forEach((conti) => conti.setWhere(startAddr));
+      }
+      if (breaks.length > 0) {
+        breaks.forEach((brk) => brk.setWhere(this.bytecode.wc()));
+
+        // We need to insert an [ExitBlock] here, because a break statement
+        // would not exit the block as per normal.
+        IExitBlock.emit(this.bytecode);
+      }
+    };
+
     // There are three kinds of [for] loops.
     if (ctx.condition()) {
       // basically a while loop
@@ -269,6 +296,9 @@ export class Assembler extends GoVisitor<void> {
       const jof = IJof.emit(this.bytecode);
       this.visit(ctx.block());
       IGoto.emit(this.bytecode).setWhere(startAddr);
+
+      processContinuesAndBreaks(startAddr);
+
       const endAddr = this.bytecode.wc();
       jof.setWhere(endAddr);
     } else if (ctx.forClause()) {
@@ -292,6 +322,9 @@ export class Assembler extends GoVisitor<void> {
       this.visit(ctx.block());
       this.visit(post);
       IGoto.emit(this.bytecode).setWhere(startAddr);
+
+      processContinuesAndBreaks(startAddr);
+
       const endAddr = this.bytecode.wc();
       jof.setWhere(endAddr);
 
@@ -306,6 +339,16 @@ export class Assembler extends GoVisitor<void> {
       // impossible
       throw new Error("Entered unreachable code");
     }
+  };
+
+  visitBreakStmt = (_: BreakStmtContext) => {
+    const goto = IGoto.emit(this.bytecode);
+    this.breakss.peek().push(goto);
+  };
+
+  visitContinueStmt = (_: ContinueStmtContext) => {
+    const goto = IGoto.emit(this.bytecode);
+    this.contiss.peek().push(goto);
   };
 
   visitIfStmt = (ctx: IfStmtContext) => {

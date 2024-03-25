@@ -377,28 +377,28 @@ export default class GoParser extends Parser {
           this.enterOuterAlt(localctx, 4);
           {
             this.state = 119;
-            this.ifStmt();
+            this.breakStmt();
           }
           break;
         case 5:
           this.enterOuterAlt(localctx, 5);
           {
             this.state = 120;
-            this.goStmt();
+            this.continueStmt();
           }
           break;
         case 6:
           this.enterOuterAlt(localctx, 6);
           {
             this.state = 121;
-            this.breakStmt();
+            this.ifStmt();
           }
           break;
         case 7:
           this.enterOuterAlt(localctx, 7);
           {
             this.state = 122;
-            this.continueStmt();
+            this.goStmt();
           }
           break;
         case 8:
@@ -2408,8 +2408,8 @@ export default class GoParser extends Parser {
     0, 0, 94, 371, 1, 0, 0, 0, 96, 384, 1, 0, 0, 0, 98, 386, 1, 0, 0, 0, 100, 388, 1, 0, 0, 0, 102, 390, 1, 0, 0, 0,
     104, 392, 1, 0, 0, 0, 106, 394, 1, 0, 0, 0, 108, 109, 3, 60, 30, 0, 109, 110, 3, 106, 53, 0, 110, 112, 1, 0, 0, 0,
     111, 108, 1, 0, 0, 0, 112, 115, 1, 0, 0, 0, 113, 111, 1, 0, 0, 0, 113, 114, 1, 0, 0, 0, 114, 1, 1, 0, 0, 0, 115,
-    113, 1, 0, 0, 0, 116, 127, 3, 60, 30, 0, 117, 127, 3, 32, 16, 0, 118, 127, 3, 22, 11, 0, 119, 127, 3, 6, 3, 0, 120,
-    127, 3, 16, 8, 0, 121, 127, 3, 12, 6, 0, 122, 127, 3, 14, 7, 0, 123, 127, 3, 10, 5, 0, 124, 127, 3, 46, 23, 0, 125,
+    113, 1, 0, 0, 0, 116, 127, 3, 60, 30, 0, 117, 127, 3, 32, 16, 0, 118, 127, 3, 22, 11, 0, 119, 127, 3, 12, 6, 0, 120,
+    127, 3, 14, 7, 0, 121, 127, 3, 6, 3, 0, 122, 127, 3, 16, 8, 0, 123, 127, 3, 10, 5, 0, 124, 127, 3, 46, 23, 0, 125,
     127, 3, 4, 2, 0, 126, 116, 1, 0, 0, 0, 126, 117, 1, 0, 0, 0, 126, 118, 1, 0, 0, 0, 126, 119, 1, 0, 0, 0, 126, 120,
     1, 0, 0, 0, 126, 121, 1, 0, 0, 0, 126, 122, 1, 0, 0, 0, 126, 123, 1, 0, 0, 0, 126, 124, 1, 0, 0, 0, 126, 125, 1, 0,
     0, 0, 127, 3, 1, 0, 0, 0, 128, 132, 3, 18, 9, 0, 129, 132, 3, 58, 29, 0, 130, 132, 3, 30, 15, 0, 131, 128, 1, 0, 0,
@@ -2543,17 +2543,17 @@ export class StmtContext extends ParserRuleContext {
   public forStmt(): ForStmtContext {
     return this.getTypedRuleContext(ForStmtContext, 0) as ForStmtContext;
   }
-  public ifStmt(): IfStmtContext {
-    return this.getTypedRuleContext(IfStmtContext, 0) as IfStmtContext;
-  }
-  public goStmt(): GoStmtContext {
-    return this.getTypedRuleContext(GoStmtContext, 0) as GoStmtContext;
-  }
   public breakStmt(): BreakStmtContext {
     return this.getTypedRuleContext(BreakStmtContext, 0) as BreakStmtContext;
   }
   public continueStmt(): ContinueStmtContext {
     return this.getTypedRuleContext(ContinueStmtContext, 0) as ContinueStmtContext;
+  }
+  public ifStmt(): IfStmtContext {
+    return this.getTypedRuleContext(IfStmtContext, 0) as IfStmtContext;
+  }
+  public goStmt(): GoStmtContext {
+    return this.getTypedRuleContext(GoStmtContext, 0) as GoStmtContext;
   }
   public sendStmt(): SendStmtContext {
     return this.getTypedRuleContext(SendStmtContext, 0) as SendStmtContext;
