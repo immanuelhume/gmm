@@ -16,6 +16,7 @@ import {
   NumberContext,
   NumericOpContext,
   ForStmtContext,
+  RelOpContext,
 } from "../antlr/GoParser";
 import GoVisitor from "../antlr/GoParserVisitor";
 
@@ -196,6 +197,8 @@ export class Assembler extends GoVisitor<void> {
     this.visit(ctx.funcBody()); // compile the body
     this.env.popFrame();
 
+    // @todo: do we need to insert a return instruction? also handle non-returning funcs?
+
     goto.setWhere(this.bytecode.wc());
 
     // We need to explicitly handle the assignment instruction here, since our function
@@ -345,6 +348,27 @@ export class Assembler extends GoVisitor<void> {
       op.setOp(BinaryOp.Mul);
     } else if (ctx.DIV()) {
       op.setOp(BinaryOp.Div);
+    } else {
+      throw new Error(`Unexpected numeric operator`); // @todo a better error msg
+    }
+  };
+
+  visitRelOp = (ctx: RelOpContext) => {
+    const op = IBinaryOp.emit(this.bytecode);
+    if (ctx.EQ()) {
+      op.setOp(BinaryOp.Eq);
+    } else if (ctx.NEQ()) {
+      op.setOp(BinaryOp.Neq);
+    } else if (ctx.LESS()) {
+      op.setOp(BinaryOp.L);
+    } else if (ctx.LEQ()) {
+      op.setOp(BinaryOp.Leq);
+    } else if (ctx.GREATER()) {
+      op.setOp(BinaryOp.G);
+    } else if (ctx.GEQ()) {
+      op.setOp(BinaryOp.Geq);
+    } else {
+      throw new Error(`Unexpected relation operator`); // @todo a better error msg
     }
   };
 
