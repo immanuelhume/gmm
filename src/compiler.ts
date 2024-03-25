@@ -17,6 +17,7 @@ import {
   NumericOpContext,
   ForStmtContext,
   RelOpContext,
+  LvalueContext,
 } from "../antlr/GoParser";
 import GoVisitor from "../antlr/GoParserVisitor";
 
@@ -112,7 +113,7 @@ class DeclScanner extends GoVisitor<string[]> {
   };
 
   visitShortVarDecl = (ctx: ShortVarDeclContext) => {
-    return [ctx.ident().getText()];
+    return [ctx.lvalue().getText()];
   };
 
   visitForStmt = (_: ForStmtContext) => {
@@ -280,7 +281,7 @@ export class Assembler extends GoVisitor<void> {
         // We may be declaring a variable. In which case we'll create a new
         // block surrounding this for statement, with that new variable inside.
         IEnterBlock.emit(this.bytecode);
-        const ident = init.shortVarDecl().ident().getText();
+        const ident = init.shortVarDecl().lvalue().getText();
         this.env.pushFrame([ident]);
       }
 
@@ -328,19 +329,21 @@ export class Assembler extends GoVisitor<void> {
     this.env.popFrame();
   };
 
+  visitLvalue = (ctx: LvalueContext) => {
+    const ident = ctx.ident().getText();
+    const [frame, offset] = this.env.lookup(ident);
+    ILoadNameLoc.emit(this.bytecode).setFrame(frame).setOffset(offset);
+  };
+
   visitAssignment = (ctx: AssignmentContext) => {
     this.visit(ctx._rhs);
-    this.visit(ctx._lhs); // @todo: FIXME this should be emitting LoadNameLoc, not LoadName
+    this.visit(ctx._lhs);
     IAssign.emit(this.bytecode);
   };
 
   visitShortVarDecl = (ctx: ShortVarDeclContext) => {
-    this.visit(ctx.expr()); // compile RHS
-
-    const ident = ctx.ident().getText();
-    const [frame, offset] = this.env.lookup(ident);
-    ILoadNameLoc.emit(this.bytecode).setFrame(frame).setOffset(offset);
-
+    this.visit(ctx.expr());
+    this.visit(ctx.lvalue());
     IAssign.emit(this.bytecode);
   };
 

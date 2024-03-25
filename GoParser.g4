@@ -71,7 +71,7 @@ logicalOp : '||' | '&&' ;
 relOp : '==' | '!=' | '<' | '<=' | '>' | '>=' ;
 numericOp : '+' | '-' | '*' | '/' ;
 
-shortVarDecl : ident ':=' expr ;
+shortVarDecl : lvalue ':=' expr ;
 
 decl : funcDecl | varDecl | typeDecl ;
 typeDecl : 'type' ident type ;

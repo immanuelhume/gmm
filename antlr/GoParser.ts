@@ -1514,7 +1514,7 @@ export default class GoParser extends Parser {
       this.enterOuterAlt(localctx, 1);
       {
         this.state = 282;
-        this.ident();
+        this.lvalue();
         this.state = 283;
         this.match(GoParser.WALRUS);
         this.state = 284;
@@ -2440,7 +2440,7 @@ export default class GoParser extends Parser {
     265, 267, 1, 0, 0, 0, 266, 264, 1, 0, 0, 0, 267, 268, 5, 22, 0, 0, 268, 47, 1, 0, 0, 0, 269, 270, 7, 0, 0, 0, 270,
     49, 1, 0, 0, 0, 271, 275, 3, 52, 26, 0, 272, 275, 3, 54, 27, 0, 273, 275, 3, 56, 28, 0, 274, 271, 1, 0, 0, 0, 274,
     272, 1, 0, 0, 0, 274, 273, 1, 0, 0, 0, 275, 51, 1, 0, 0, 0, 276, 277, 7, 1, 0, 0, 277, 53, 1, 0, 0, 0, 278, 279, 7,
-    2, 0, 0, 279, 55, 1, 0, 0, 0, 280, 281, 7, 3, 0, 0, 281, 57, 1, 0, 0, 0, 282, 283, 3, 92, 46, 0, 283, 284, 5, 28, 0,
+    2, 0, 0, 279, 55, 1, 0, 0, 0, 280, 281, 7, 3, 0, 0, 281, 57, 1, 0, 0, 0, 282, 283, 3, 20, 10, 0, 283, 284, 5, 28, 0,
     0, 284, 285, 3, 34, 17, 0, 285, 59, 1, 0, 0, 0, 286, 290, 3, 66, 33, 0, 287, 290, 3, 64, 32, 0, 288, 290, 3, 62, 31,
     0, 289, 286, 1, 0, 0, 0, 289, 287, 1, 0, 0, 0, 289, 288, 1, 0, 0, 0, 290, 61, 1, 0, 0, 0, 291, 292, 5, 9, 0, 0, 292,
     293, 3, 92, 46, 0, 293, 294, 3, 78, 39, 0, 294, 63, 1, 0, 0, 0, 295, 296, 5, 6, 0, 0, 296, 297, 3, 92, 46, 0, 297,
@@ -3621,8 +3621,8 @@ export class ShortVarDeclContext extends ParserRuleContext {
     super(parent, invokingState);
     this.parser = parser;
   }
-  public ident(): IdentContext {
-    return this.getTypedRuleContext(IdentContext, 0) as IdentContext;
+  public lvalue(): LvalueContext {
+    return this.getTypedRuleContext(LvalueContext, 0) as LvalueContext;
   }
   public WALRUS(): TerminalNode {
     return this.getToken(GoParser.WALRUS, 0);
