@@ -115,6 +115,11 @@ class DeclScanner extends GoVisitor<string[]> {
     return [ctx.ident().getText()];
   };
 
+  visitForStmt = (_: ForStmtContext) => {
+    // An annoying case to handle separately.
+    return [];
+  };
+
   visitProg = (ctx: ProgContext) => {
     if (this.stop) return [];
     this.stop = true;
@@ -257,7 +262,7 @@ export class Assembler extends GoVisitor<void> {
   visitForStmt = (ctx: ForStmtContext) => {
     // There are three kinds of [for] loops.
     if (ctx.condition()) {
-      // It's like a while loop.
+      // basically a while loop
       const startAddr = this.bytecode.wc();
       this.visit(ctx.condition());
       const jof = IJof.emit(this.bytecode);
@@ -267,8 +272,35 @@ export class Assembler extends GoVisitor<void> {
       jof.setWhere(endAddr);
     } else if (ctx.forClause()) {
       // C-style for loop
+      const init = ctx.forClause()._init;
+      const cond = ctx.forClause()._cond;
+      const post = ctx.forClause()._post;
+
+      if (init.shortVarDecl()) {
+        // We may be declaring a variable. In which case we'll create a new
+        // block surrounding this for statement, with that new variable inside.
+        IEnterBlock.emit(this.bytecode);
+        const ident = init.shortVarDecl().ident().getText();
+        this.env.pushFrame([ident]);
+      }
+
+      this.visit(init);
+      const startAddr = this.bytecode.wc();
+      this.visit(cond);
+      const jof = IJof.emit(this.bytecode);
+      this.visit(ctx.block());
+      this.visit(post);
+      IGoto.emit(this.bytecode).setWhere(startAddr);
+      const endAddr = this.bytecode.wc();
+      jof.setWhere(endAddr);
+
+      if (init.shortVarDecl()) {
+        IExitBlock.emit(this.bytecode);
+        this.env.popFrame();
+      }
     } else if (ctx.rangeClause()) {
-      // range statement ahhh
+      // Golang special
+      // @todo
     } else {
       // impossible
       throw new Error("Entered unreachable code");
@@ -298,7 +330,7 @@ export class Assembler extends GoVisitor<void> {
 
   visitAssignment = (ctx: AssignmentContext) => {
     this.visit(ctx._rhs);
-    this.visit(ctx._lhs);
+    this.visit(ctx._lhs); // @todo: FIXME this should be emitting LoadNameLoc, not LoadName
     IAssign.emit(this.bytecode);
   };
 
