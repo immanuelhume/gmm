@@ -99,10 +99,11 @@ fieldDecl : ident type ;
 ident : WORD ;
 identList : ident (',' ident)* ;
 
-lit : number | litStr | litNil | litFunc ;
+lit : number | litStr | litNil | litBool | litFunc ;
 
 litNil : NIL ;
 litStr : LIT_STR ;
+litBool : TRUE | FALSE ;
 
 number : INT | FLOAT ;
 

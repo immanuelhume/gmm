@@ -15,6 +15,7 @@ import {
   ShortVarDeclContext,
   NumberContext,
   NumericOpContext,
+  ForStmtContext,
 } from "../antlr/GoParser";
 import GoVisitor from "../antlr/GoParserVisitor";
 
@@ -171,6 +172,8 @@ export class Assembler extends GoVisitor<void> {
 
   visitSmt = (ctx: StmtContext) => {
     this.visitChildren(ctx);
+    // Each statement is expected to leave *something* on the operand stack.
+    // We don't *have* to do this but it makes things easier.
     IPop.emit(this.bytecode);
   };
 
@@ -237,6 +240,27 @@ export class Assembler extends GoVisitor<void> {
     // @todo handle empty return statements!
     this.visit(ctx.expr()); // compile the thing to return
     IReturn.emit(this.bytecode);
+  };
+
+  visitForStmt = (ctx: ForStmtContext) => {
+    // There are three kinds of [for] loops.
+    if (ctx.condition()) {
+      // It's like a while loop.
+      const startAddr = this.bytecode.wc();
+      this.visit(ctx.condition());
+      const jof = IJof.emit(this.bytecode);
+      this.visit(ctx.block());
+      IGoto.emit(this.bytecode).setWhere(startAddr);
+      const endAddr = this.bytecode.wc();
+      jof.setWhere(endAddr);
+    } else if (ctx.forClause()) {
+      // C-style for loop
+    } else if (ctx.rangeClause()) {
+      // range statement ahhh
+    } else {
+      // impossible
+      throw new Error("Entered unreachable code");
+    }
   };
 
   visitIfStmt = (ctx: IfStmtContext) => {

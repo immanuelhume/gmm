@@ -6,6 +6,9 @@ FLOAT : ('.' INT | INT '.' | INT '.' INT) -> mode(NLSEMI);
 
 LIT_STR : '"' ~["]* '"' -> mode(NLSEMI);
 
+TRUE : 'true' -> mode(NLSEMI);
+FALSE : 'false' -> mode(NLSEMI);
+
 VAR : 'var' ;
 RETURN : 'return' -> mode(NLSEMI) ;
 FUNC : 'func' ;
