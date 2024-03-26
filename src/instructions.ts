@@ -17,6 +17,7 @@ export const enum Opcode {
   LoadNameLoc,
   LoadName,
   LoadC,
+  LoadStr,
   Push,
   Done,
 }
@@ -505,6 +506,40 @@ export class ILoadC extends InstrView {
   }
 }
 
+/**
+ * Loads a string constant.
+ *
+ * ┌──────┬─────────┐
+ * │opcode│string ID│
+ * └──────┴─────────┘
+ */
+export class ILoadStr extends InstrView {
+  static size = 9;
+  readonly size = 9;
+
+  static emit(w: Emitter, ctx?: ParserRuleContext): ILoadStr {
+    const pc = w.reserve(Opcode.LoadStr, ILoadStr.size, ctx);
+    return new ILoadStr(w.code(), pc);
+  }
+
+  constructor(bytecode: DataView, addr: number) {
+    super(bytecode, addr);
+    assert(this.opcode() === Opcode.LoadStr);
+  }
+
+  toString(): string {
+    return `LoadStr ${this.id()}`;
+  }
+
+  id(): number {
+    return this.bytecode.getFloat64(this.addr + 1);
+  }
+  setId(id: number): ILoadStr {
+    this.bytecode.setFloat64(this.addr + 1, id);
+    return this;
+  }
+}
+
 export class IPush extends InstrView {
   static size = 9;
   readonly size = 9;
@@ -564,6 +599,7 @@ const opcodeClass: Record<Opcode, { new (bytecode: DataView, addr: number): Inst
   [Opcode.BinaryOp]: IBinaryOp,
   [Opcode.UnaryOp]: IUnaryOp,
   [Opcode.LoadC]: ILoadC,
+  [Opcode.LoadStr]: ILoadStr,
   [Opcode.Push]: IPush,
   [Opcode.Done]: IDone,
 };

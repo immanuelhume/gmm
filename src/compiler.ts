@@ -1,6 +1,6 @@
 import { ParserRuleContext, CharStream, CommonTokenStream } from "antlr4";
 import GoLexer from "../antlr/GoLexer";
-import GoParser from "../antlr/GoParser";
+import GoParser, { LitStrContext } from "../antlr/GoParser";
 import {
   AssignmentContext,
   BlockContext,
@@ -46,8 +46,9 @@ import {
   IBinaryOp,
   BinaryOp,
   IPush,
+  ILoadStr,
 } from "./instructions";
-import { ArrayStack, Stack } from "./util";
+import { ArrayStack, Bijection, Stack, StrPool } from "./util";
 import { builtins } from "./heapviews";
 
 class BytecodeWriter implements Emitter {
@@ -175,12 +176,15 @@ export class Assembler extends GoVisitor<void> {
   contiss: Stack<IGoto[]>;
   breakss: Stack<IGoto[]>;
 
+  strPool: StrPool;
+
   constructor() {
     super();
     this.bc = new BytecodeWriter();
     this.env = new CompileTimeEnvironment();
     this.contiss = new ArrayStack();
     this.breakss = new ArrayStack();
+    this.strPool = new StrPool();
 
     this.env.pushFrame(builtins);
   }
@@ -510,16 +514,28 @@ export class Assembler extends GoVisitor<void> {
     ILoadName.emit(this.bc).setFrame(frame).setOffset(offset);
   };
 
+  visitLitStr = (ctx: LitStrContext) => {
+    const val = ctx.getText();
+    const id = this.strPool.add(val);
+    ILoadStr.emit(this.bc).setId(id);
+  };
+
   visitNumber = (ctx: NumberContext) => {
     const val = parseInt(ctx.getText());
     ILoadC.emit(this.bc).setVal(val);
   };
 }
 
+interface CompileResult {
+  bytecode: DataView;
+  srcMap: Map<number, number>;
+  strPool: StrPool;
+}
+
 /**
  * Compiles given source code into bytecode.
  */
-export const compileSrc = (src: string): [DataView, Map<number, number>] => {
+export const compileSrc = (src: string): CompileResult => {
   const chars = new CharStream(src);
   const lexer = new GoLexer(chars);
   const tokens = new CommonTokenStream(lexer);
@@ -529,5 +545,9 @@ export const compileSrc = (src: string): [DataView, Map<number, number>] => {
   const ass = new Assembler();
   ass.visit(tree);
 
-  return [ass.bc.code(), ass.bc.srcMap()];
+  const bytecode = ass.bc.code();
+  const srcMap = ass.bc.srcMap();
+  const strPool = ass.strPool;
+
+  return { bytecode, srcMap, strPool };
 };

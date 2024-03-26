@@ -8,12 +8,12 @@ import { readFileSync } from "fs";
 import { compileSrc } from "../src/compiler";
 import { InstrView, Opcode } from "../src/instructions";
 import { ArrayStack, fmtAddress } from "../src/util";
-import { BuiltinView, EnvView, FrameView, MachineState, builtinName2Id, builtins } from "../src/heapviews";
+import { BuiltinView, EnvView, FrameView, MachineState, StringView, builtinName2Id, builtins } from "../src/heapviews";
 import { microcode } from "../src/eval";
 
 const run = (filename: string) => {
   const src = readFileSync(filename).toString();
-  const [bytecode, srcMap] = compileSrc(src);
+  const { bytecode, srcMap, strPool } = compileSrc(src);
   const heap = new DataView(new ArrayBuffer(1028));
   const mem = { heap, free: 0 };
 
@@ -24,15 +24,24 @@ const run = (filename: string) => {
   builtinAddrs.forEach((addr, i) => globalFrame.set(i, addr));
   globalEnv.setFrame(0, globalFrame.addr);
 
+  // We'll also allocate all the strings.
+  for (const strId of strPool.ids()) {
+    const addr = StringView.allocate(mem).setId(strId).addr;
+    strPool.setAddress(strId, addr);
+  }
+
   // Now our globals are initialized, and we are ready to create the machine.
   let state: MachineState = {
     ...mem,
-    bytecode,
-    srcMap,
+
     pc: 0,
     rts: new ArrayStack(),
     os: new ArrayStack(),
     env: globalEnv,
+
+    bytecode,
+    srcMap,
+    strPool,
   };
 
   const toHexList = (xs: number[]) => xs.map((x) => `${x.toString(16)}`).join(", ");

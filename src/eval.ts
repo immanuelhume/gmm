@@ -31,6 +31,7 @@ import {
   IEnterBlock,
   IExitBlock,
   ILoadName,
+  ILoadStr,
 } from "./instructions";
 
 type EvalFn = (state: MachineState) => void;
@@ -186,6 +187,16 @@ export const microcode: Record<Opcode, EvalFn> = {
     state.os.push(val.addr);
     state.pc += ILoadC.size;
   },
+  [Opcode.LoadStr]: function (state: MachineState): void {
+    const instr = new ILoadStr(state.bytecode, state.pc);
+    const id = instr.id();
+    const nodeAddr = state.strPool.getAddress(id);
+    if (nodeAddr === undefined) {
+      throw new Error(`String with id ${id} missing from string pool`); // @todo a btr err msg
+    }
+    state.os.push(nodeAddr);
+    state.pc += ILoadStr.size;
+  },
   [Opcode.Push]: function (state: MachineState): void {
     const instr = new IPush(state.bytecode, state.pc);
     state.os.push(instr.val());
@@ -282,7 +293,7 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
     state.os.push(0); // push some garbage, since functions must leave one value on the OS for now @todo FIXME
   },
   [BuiltinId.Panic]: function (state: MachineState, args: number[]): void {
-    const reprs = args.map((arg) => NodeView.of(state.heap, arg).toString()).join(", ");
+    const reprs = args.map((arg) => NodeView.of(state.heap, arg, { strPool: state.strPool }).toString()).join(", ");
     console.log("\x1b[31m", "panic:", reprs, "\x1b[0m");
     const lineno = state.srcMap.get(state.pc);
     if (lineno !== undefined) {

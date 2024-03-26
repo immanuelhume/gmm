@@ -18,7 +18,7 @@
  */
 
 import assert from "assert";
-import { Address, Stack } from "./util";
+import { Address, Stack, StrPool } from "./util";
 
 interface Memory {
   heap: DataView;
@@ -38,6 +38,7 @@ interface Registers {
 export interface MachineState extends Memory, Registers {
   bytecode: DataView;
   srcMap: Map<number, number>;
+  strPool: StrPool;
   // globals: Record<Global, Address>;
 }
 
@@ -136,6 +137,10 @@ export const clone = (mem: Memory, addr: Address): Address => {
   return addr2;
 };
 
+interface HeapContext {
+  strPool: StrPool;
+}
+
 /* [NodeView] encapsulates how we access parts of nodes. */
 export abstract class NodeView {
   protected readonly heap: DataView;
@@ -152,9 +157,9 @@ export abstract class NodeView {
     return heap.getUint8(addr);
   }
 
-  static of(heap: DataView, addr: Address): NodeView {
+  static of(heap: DataView, addr: Address, ctx?: HeapContext): NodeView {
     const nodeType = NodeView.getDataType(heap, addr);
-    return new nodeClass[nodeType](heap, addr);
+    return new nodeClass[nodeType](heap, addr, ctx);
   }
 
   dataType(): DataType {
@@ -489,12 +494,42 @@ export class BuiltinView extends NodeView {
   }
 }
 
-class StringView extends NodeView {
-  // @todo
+/**
+ * A string.
+ */
+export class StringView extends NodeView {
+  strPool: StrPool | undefined;
+
+  static allocate(state: Memory): StringView {
+    const addr = allocate(state, DataType.String, 1, 0);
+    return new StringView(state.heap, addr);
+  }
+  constructor(heap: DataView, addr: Address, ctx?: HeapContext) {
+    super(heap, addr);
+    this.checkType(DataType.String);
+    this.strPool = ctx?.strPool;
+  }
   toString(): string {
-    return "";
+    if (this.strPool) {
+      const id = this.getId();
+      const s = this.strPool.getStr(id);
+      if (s === undefined) {
+        throw new Error(`String of id ${id} is undefined`); // @todo make better
+      }
+      return s;
+    } else {
+      return `String { <opaque> }`;
+    }
+  }
+  getId(): number {
+    return this.getChild(0);
+  }
+  setId(id: number): StringView {
+    this.setChild(0, id);
+    return this;
   }
 }
+
 class PointerView extends NodeView {
   // @todo
   toString(): string {
@@ -508,7 +543,7 @@ class ChannelView extends NodeView {
   }
 }
 
-const nodeClass: Record<DataType, { new (heap: DataView, addr: Address): NodeView }> = {
+const nodeClass: Record<DataType, { new (heap: DataView, addr: Address, ctx?: HeapContext): NodeView }> = {
   [DataType.Float64]: Float64View,
   [DataType.Int64]: Int64View,
   [DataType.Channel]: ChannelView,
