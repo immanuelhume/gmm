@@ -43,7 +43,7 @@ export interface Emitter {
  */
 export abstract class InstrView {
   protected readonly bytecode: DataView;
-  protected readonly addr: number;
+  readonly addr: number;
 
   abstract toString(): string;
   abstract readonly size: number;
@@ -288,8 +288,9 @@ export class IGoto extends InstrView {
   where(): number {
     return this.bytecode.getFloat64(this.addr + 1);
   }
-  setWhere(where: number) {
+  setWhere(where: number): IGoto {
     this.bytecode.setFloat64(this.addr + 1, where);
+    return this;
   }
 }
 
@@ -473,6 +474,7 @@ export class IExitBlock extends InstrView {
  * └──────┘
  */
 export class IPop extends InstrView {
+  // @todo: extend to pop multiple?
   static size = 1;
   readonly size = 1;
 

@@ -139,14 +139,14 @@ export const microcode: Record<Opcode, EvalFn> = {
 
     if (count == 1) {
       const lhs = state.os.pop();
-      const rhs = state.os.peek();
+      const rhs = state.os.pop();
       state.heap.setFloat64(lhs, rhs);
     } else {
       const lhss = [];
       for (let i = 0; i < count; ++i) {
         lhss.push(state.os.pop());
       }
-      const _rhs = state.os.peek(); // it's a tuple
+      const _rhs = state.os.pop(); // it's a tuple
       const rhs = new TupleView(state.heap, _rhs);
       for (let i = 0; i < count; ++i) {
         state.heap.setFloat64(lhss[i], rhs.get(i));
@@ -175,7 +175,7 @@ export const microcode: Record<Opcode, EvalFn> = {
   },
   [Opcode.Jof]: function (state: MachineState): void {
     const instr = new IJof(state.bytecode, state.pc);
-    const cond = state.os.peek(); // @todo: pop or peek?
+    const cond = state.os.pop();
     const glob = new GlobalView(state.heap, cond);
     switch (glob.getKind()) {
       case Global.False:
@@ -315,7 +315,22 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
 
           const lhsValue = lhs.getValue();
           const rhsValue = rhs.getValue();
-          if (lhsValue < rhsValue) {
+          if (lhsValue != rhsValue) {
+            return state.globals[Global.True];
+          } else {
+            return state.globals[Global.False];
+          }
+        },
+      ],
+      [
+        BinaryOp.Eq,
+        (state, lhsAddr, rhsAddr) => {
+          const lhs = new Float64View(state.heap, lhsAddr);
+          const rhs = new Float64View(state.heap, rhsAddr);
+
+          const lhsValue = lhs.getValue();
+          const rhsValue = rhs.getValue();
+          if (lhsValue === rhsValue) {
             return state.globals[Global.True];
           } else {
             return state.globals[Global.False];

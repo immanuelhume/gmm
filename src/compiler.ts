@@ -1,4 +1,4 @@
-import { ParserRuleContext, CharStream, CommonTokenStream } from "antlr4";
+import { ParserRuleContext, CharStream, CommonTokenStream, RuleNode } from "antlr4";
 import GoLexer from "../antlr/GoLexer";
 import GoParser, { ExprListContext, LitStrContext } from "../antlr/GoParser";
 import {
@@ -171,7 +171,7 @@ class DeclScanner extends GoVisitor<string[]> {
   }
 }
 
-export class Assembler extends GoVisitor<void> {
+export class Assembler extends GoVisitor<number> {
   bc: BytecodeWriter;
   env: CompileTimeEnvironment;
 
@@ -198,6 +198,11 @@ export class Assembler extends GoVisitor<void> {
     return scanner.visit(ctx);
   };
 
+  visitChildren = (node: ParserRuleContext): number => {
+    if (!node.children) return 0;
+    return node.children.map((child) => this.visit(child)).reduce((acc, n) => acc + n, 0);
+  };
+
   visitProg = (ctx: ProgContext) => {
     const names = Assembler.scanDecls(ctx);
     this.env.pushFrame(names);
@@ -205,11 +210,7 @@ export class Assembler extends GoVisitor<void> {
     // Wrap the entire program in a block. Don't care about exiting the block.
     IEnterBlock.emit(this.bc, ctx).setNumVars(names.length);
 
-    // @todo: we need to let individual stmts handle this
-    ctx.decl_list().forEach((decl) => {
-      this.visit(decl);
-      IPop.emit(this.bc, decl);
-    });
+    this.visitChildren(ctx);
 
     if (!this.main) {
       throw new Error("A [main] function was not declared");
@@ -222,16 +223,19 @@ export class Assembler extends GoVisitor<void> {
     ILoadName.emit(this.bc).setFrame(frame).setOffset(offset);
     ICall.emit(this.bc).setArgc(0); // call [main]
     IDone.emit(this.bc); // last instruction
+
+    return 0;
   };
 
-  visitSmt = (ctx: StmtContext) => {
-    this.visitChildren(ctx);
-    // Each statement is expected to leave *something* on the operand stack.
-    // We don't *have* to do this but it makes things easier.
-    IPop.emit(this.bc, ctx);
+  visitStmt = (ctx: StmtContext): number => {
+    const leftOnStk = this.visitChildren(ctx);
+    for (let i = 0; i < leftOnStk; ++i) {
+      IPop.emit(this.bc, ctx);
+    }
+    return 0;
   };
 
-  visitFuncDecl = (ctx: FuncDeclContext) => {
+  visitFuncDecl = (ctx: FuncDeclContext): number => {
     const ldf = ILoadFn.emit(this.bc, ctx);
     const goto = IGoto.emit(this.bc);
     const params = ctx
@@ -259,7 +263,7 @@ export class Assembler extends GoVisitor<void> {
     // without return statements.
     //
     // @todo: allow multiple return values (then we won't have the issues above)
-    IPush.emit(this.bc); // for now, just push some garbage
+    IPush.emit(this.bc); // for now, just push some garbage, we should use Nil or something, probabaly
     IReturn.emit(this.bc);
 
     goto.setWhere(this.bc.wc());
@@ -280,9 +284,12 @@ export class Assembler extends GoVisitor<void> {
       }
       this.main = fnPc;
     }
+
+    // There will be one item on the operand stack - the closure's address
+    return 1;
   };
 
-  visitVarDecl = (ctx: VarDeclContext) => {
+  visitVarDecl = (ctx: VarDeclContext): number => {
     if (ctx.expr()) {
       this.visit(ctx.expr()); // compile RHS
       const ident = ctx.ident().getText();
@@ -290,35 +297,39 @@ export class Assembler extends GoVisitor<void> {
       ILoadNameLoc.emit(this.bc, ctx).setFrame(frame).setOffset(offset);
       IAssign.emit(this.bc, ctx).setCount(1);
     } else {
-      IPush.emit(this.bc); // @todo: FIXME we just pushin dummy stuff for now
+      // IPush.emit(this.bc); // @todo: FIXME we just pushin dummy stuff for now
       // @todo: need to find a way to handle default initialization
       //
       // perhaps we can have a global representing "uninitialized"? and then initialize it when
       // we first access the value?
       // console.log(`variable ${ctx.ident().getText()} was default initialized`);
     }
+    // Declarations, even if there is an initializing expression, should leave nothing on the stack.
+    return 0;
   };
 
-  visitTypeDecl = (ctx: TypeDeclContext) => {
+  visitTypeDecl = (ctx: TypeDeclContext): number => {
     // @todo: wtf to do for type declarations?
+    return 0;
   };
 
   visitReturnStmt = (ctx: ReturnStmtContext) => {
     // @todo handle empty return statements! - we probably can just check if the list is empty, then push Nil or something?
-    this.visit(ctx.exprList()); // compile the thing to return
+    const n = this.visit(ctx.exprList()); // compile the thing to return
     IReturn.emit(this.bc, ctx);
+    return n;
   };
 
-  visitForStmt = (ctx: ForStmtContext) => {
+  visitForStmt = (ctx: ForStmtContext): number => {
     this.contiss.push([]);
     this.breakss.push([]);
 
-    const processContinuesAndBreaks = (startAddr: number) => {
+    const processContinuesAndBreaks = (postAddr: number) => {
       // Process continues and breaks.
       const contis = this.contiss.pop();
       const breaks = this.breakss.pop();
       if (contis.length > 0) {
-        contis.forEach((conti) => conti.setWhere(startAddr));
+        contis.forEach((conti) => conti.setWhere(postAddr));
       }
       if (breaks.length > 0) {
         breaks.forEach((brk) => brk.setWhere(this.bc.wc()));
@@ -336,9 +347,9 @@ export class Assembler extends GoVisitor<void> {
       this.visit(ctx.condition());
       const jof = IJof.emit(this.bc, ctx.condition());
       this.visit(ctx.block());
-      IGoto.emit(this.bc, ctx).setWhere(startAddr);
+      const goto = IGoto.emit(this.bc, ctx).setWhere(startAddr);
 
-      processContinuesAndBreaks(startAddr);
+      processContinuesAndBreaks(goto.addr);
 
       const endAddr = this.bc.wc();
       jof.setWhere(endAddr);
@@ -348,7 +359,9 @@ export class Assembler extends GoVisitor<void> {
       const cond = ctx.forClause()._cond;
       const post = ctx.forClause()._post;
 
-      if (init.shortVarDecl()) {
+      const hasLoopVar = init !== undefined && init.shortVarDecl();
+
+      if (hasLoopVar) {
         // We may be declaring a variable. In which case we'll create a new
         // block surrounding this for statement, with that new variable inside.
         IEnterBlock.emit(this.bc).setNumVars(1);
@@ -360,20 +373,21 @@ export class Assembler extends GoVisitor<void> {
         this.env.pushFrame(idents);
       }
 
-      this.visit(init);
+      if (init) this.visit(init);
       const startAddr = this.bc.wc();
-      this.visit(cond);
+      if (cond) this.visit(cond);
       const jof = IJof.emit(this.bc);
       this.visit(ctx.block());
-      this.visit(post);
+      const postAddr = this.bc.wc(); // address of the Post operation
+      if (post) this.visit(post);
       IGoto.emit(this.bc).setWhere(startAddr);
 
-      processContinuesAndBreaks(startAddr);
+      processContinuesAndBreaks(postAddr);
 
       const endAddr = this.bc.wc();
       jof.setWhere(endAddr);
 
-      if (init.shortVarDecl()) {
+      if (hasLoopVar) {
         IExitBlock.emit(this.bc);
         this.env.popFrame();
       }
@@ -384,19 +398,25 @@ export class Assembler extends GoVisitor<void> {
       // impossible
       throw new Error("Entered unreachable code");
     }
+
+    // For loops leave nothing on da stack
+    return 0;
   };
 
-  visitBreakStmt = (_: BreakStmtContext) => {
+  visitBreakStmt = (_: BreakStmtContext): number => {
     const goto = IGoto.emit(this.bc);
     this.breakss.peek().push(goto);
+    return 0;
   };
 
-  visitContinueStmt = (_: ContinueStmtContext) => {
+  visitContinueStmt = (_: ContinueStmtContext): number => {
+    IExitBlock.emit(this.bc);
     const goto = IGoto.emit(this.bc);
     this.contiss.peek().push(goto);
+    return 0;
   };
 
-  visitIfStmt = (ctx: IfStmtContext) => {
+  visitIfStmt = (ctx: IfStmtContext): number => {
     this.visit(ctx._cond); // compile the condition
     const jof = IJof.emit(this.bc);
     this.visit(ctx._cons); // compile consequent
@@ -406,38 +426,39 @@ export class Assembler extends GoVisitor<void> {
       this.visit(ctx.alt());
     }
     goto.setWhere(this.bc.wc());
+    return 0;
   };
 
-  visitBlock = (ctx: BlockContext) => {
+  visitBlock = (ctx: BlockContext): number => {
     const names = Assembler.scanDecls(ctx);
     this.env.pushFrame(names);
 
     IEnterBlock.emit(this.bc).setNumVars(names.length);
-    // @todo: we need to let individual stmts handle this
-    ctx.stmt_list().forEach((decl) => {
-      this.visit(decl);
-      IPop.emit(this.bc);
-    });
+    this.visitChildren(ctx);
     IExitBlock.emit(this.bc);
 
     this.env.popFrame();
+    return 0;
   };
 
-  visitGoStmt = (ctx: GoStmtContext) => {
+  visitGoStmt = (ctx: GoStmtContext): number => {
+    return 0;
     // @todo
   };
 
-  visitSendStmt = (ctx: SendStmtContext) => {
+  visitSendStmt = (ctx: SendStmtContext): number => {
+    return 0;
     // @todo
   };
 
-  visitLvalue = (ctx: LvalueContext) => {
+  visitLvalue = (ctx: LvalueContext): number => {
     const ident = ctx.ident().getText();
     const [frame, offset] = this.env.lookup(ident);
     ILoadNameLoc.emit(this.bc).setFrame(frame).setOffset(offset);
+    return 1;
   };
 
-  visitAssignment = (ctx: AssignmentContext) => {
+  visitAssignment = (ctx: AssignmentContext): number => {
     const nnames = ctx._lhs.lvalue_list().length;
     const nexprs = ctx._rhs.expr_list().length;
     if (nnames !== nexprs) {
@@ -446,9 +467,10 @@ export class Assembler extends GoVisitor<void> {
     this.visit(ctx._rhs);
     this.visit(ctx._lhs);
     IAssign.emit(this.bc).setCount(nnames);
+    return 0;
   };
 
-  visitShortVarDecl = (ctx: ShortVarDeclContext) => {
+  visitShortVarDecl = (ctx: ShortVarDeclContext): number => {
     // Identical to [visitAssignment]
     //
     // @todo make them into a common function
@@ -460,9 +482,10 @@ export class Assembler extends GoVisitor<void> {
     this.visit(ctx._rhs);
     this.visit(ctx._lhs);
     IAssign.emit(this.bc).setCount(nnames);
+    return 0;
   };
 
-  visitExpr = (ctx: ExprContext) => {
+  visitExpr = (ctx: ExprContext): number => {
     // An expression can be one of three types.
     if (ctx.binaryOp()) {
       this.visit(ctx._lhs);
@@ -474,9 +497,10 @@ export class Assembler extends GoVisitor<void> {
     } else {
       this.visit(ctx.primaryExpr());
     }
+    return 1; // resolves to exactly one item on the stack
   };
 
-  visitPrimaryExpr = (ctx: PrimaryExprContext) => {
+  visitPrimaryExpr = (ctx: PrimaryExprContext): number => {
     if (ctx.ident()) {
       this.visit(ctx.ident());
     } else if (ctx.lit()) {
@@ -493,6 +517,7 @@ export class Assembler extends GoVisitor<void> {
     } else if (ctx._base) {
       // @todo: figure out this shit - it means we are accessing a field/method?
     }
+    return 1;
   };
 
   /**
@@ -501,15 +526,16 @@ export class Assembler extends GoVisitor<void> {
    *
    * If there is more than 1 expression, we pack it into a tuple.
    */
-  visitExprList = (ctx: ExprListContext) => {
+  visitExprList = (ctx: ExprListContext): number => {
     const len = ctx.expr_list().length;
     this.visitChildren(ctx);
     if (len > 1) {
       IPackTuple.emit(this.bc).setLen(len);
     }
+    return 1;
   };
 
-  visitNumericOp = (ctx: NumericOpContext) => {
+  visitNumericOp = (ctx: NumericOpContext): number => {
     const op = IBinaryOp.emit(this.bc);
 
     if (ctx.PLUS()) {
@@ -523,9 +549,11 @@ export class Assembler extends GoVisitor<void> {
     } else {
       throw new Error(`Unexpected numeric operator`); // @todo a better error msg
     }
+
+    return 0;
   };
 
-  visitRelOp = (ctx: RelOpContext) => {
+  visitRelOp = (ctx: RelOpContext): number => {
     const op = IBinaryOp.emit(this.bc);
     if (ctx.EQ()) {
       op.setOp(BinaryOp.Eq);
@@ -542,24 +570,28 @@ export class Assembler extends GoVisitor<void> {
     } else {
       throw new Error(`Unexpected relation operator`); // @todo a better error msg
     }
+    return 0;
   };
 
-  visitIdent = (ctx: IdentContext) => {
+  visitIdent = (ctx: IdentContext): number => {
     const ident = ctx.getText();
     const [frame, offset] = this.env.lookup(ident);
     ILoadName.emit(this.bc).setFrame(frame).setOffset(offset);
+    return 1;
   };
 
-  visitLitStr = (ctx: LitStrContext) => {
+  visitLitStr = (ctx: LitStrContext): number => {
     const raw = ctx.getText();
     const val = raw.slice(1, raw.length - 1); // remove the ""
     const id = this.strPool.add(val);
     ILoadStr.emit(this.bc).setId(id);
+    return 1;
   };
 
-  visitNumber = (ctx: NumberContext) => {
+  visitNumber = (ctx: NumberContext): number => {
     const val = parseInt(ctx.getText());
     ILoadC.emit(this.bc).setVal(val);
+    return 1;
   };
 }
 

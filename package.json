@@ -5,7 +5,8 @@
   "scripts": {
     "prepare": "husky install",
     "dump": "tsx scripts/dump.ts",
-    "run": "tsx scripts/run.ts"
+    "run": "tsx scripts/run.ts",
+    "runall": "tsx scripts/runAll.ts"
   },
   "keywords": [],
   "author": "",

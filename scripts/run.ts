@@ -18,14 +18,13 @@ import {
   StringView,
   builtinName2Id,
   builtinSymbols,
-  globalSymbols,
 } from "../src/heapviews";
 import { microcode } from "../src/eval";
 
 const run = (filename: string) => {
   const src = readFileSync(filename).toString();
   const { bytecode, srcMap, strPool } = compileSrc(src);
-  const heap = new DataView(new ArrayBuffer(1028));
+  const heap = new DataView(new ArrayBuffer(4096));
   const mem = { heap, free: 0 };
 
   // Before initializing the rest of the machine, let's allocate all builtins.
