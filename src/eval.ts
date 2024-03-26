@@ -276,6 +276,22 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
         },
       ],
       [
+        BinaryOp.Sub,
+        (state, lhsAddr, rhsAddr) => {
+          const lhs = new Float64View(state.heap, lhsAddr);
+          const rhs = new Float64View(state.heap, rhsAddr);
+
+          const lhsValue = lhs.getValue();
+          const rhsValue = rhs.getValue();
+          const resValue = lhsValue - rhsValue;
+
+          const res = Float64View.allocate(state);
+          res.setValue(resValue);
+
+          return res.addr;
+        },
+      ],
+      [
         BinaryOp.Neq,
         (state, lhsAddr, rhsAddr) => {
           const lhs = new Float64View(state.heap, lhsAddr);

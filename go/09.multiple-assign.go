@@ -1,13 +1,13 @@
 func main() {
 	var x int
 	var y int
-	x, y = 3, 7
-	if x+y != 10 {
-		panic("expected 10, got", x+y)
+	x, y = 7, 3
+	if x-y != 4 {
+		panic("expected 4, got", x+y)
 	}
 
-	a, b := 2, 5
-	if a+b != 7 {
-		panic("expected 7, got", a+b)
+	a, b := 5, 2
+	if a+b != 3 {
+		panic("expected 3, got", a+b)
 	}
 }
