@@ -53,11 +53,16 @@ import { builtins } from "./heapviews";
 class BytecodeWriter implements Emitter {
   private _code: DataView;
   private _wc: number;
+  /**
+   * Map from bytecode address to source line number, for debugging.
+   */
+  private _srcMap: Map<number, number>;
 
   constructor(codeLen: number = 1028) {
     // @todo: how do we determine the size? should we make it resizable?
     this._code = new DataView(new ArrayBuffer(codeLen));
     this._wc = 0;
+    this._srcMap = new Map();
   }
 
   code(): DataView {
@@ -66,12 +71,21 @@ class BytecodeWriter implements Emitter {
   wc(): number {
     return this._wc;
   }
+  srcMap(): Map<number, number> {
+    return this._srcMap;
+  }
 
-  /* Reserves space in the bytecode for an instruction corresponding to some opcode. */
-  reserve(opcode: Opcode, size: number): number {
+  /* Reserves space in the bytecode for an instruction corresponding to some opcode. Size is given in bytes. */
+  reserve(opcode: Opcode, size: number, ctx?: ParserRuleContext): number {
     const ret = this._wc;
+
     this._code.setUint8(this._wc, opcode);
     this._wc += size;
+
+    if (ctx) {
+      this._srcMap.set(ret, ctx.start.line);
+    }
+
     return ret;
   }
 }

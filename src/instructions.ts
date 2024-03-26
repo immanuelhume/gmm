@@ -219,10 +219,10 @@ export class ILoadNameLoc extends InstrView {
 
 /**
  * Looks up the value of an identifier, and pushes it onto OS. For instance,
- * if [fact] is bound a function, then the [LookupIdent] evaluates to the
+ * if [fact] is bound a function, then the [LoadName] evaluates to the
  * address for that function.
  *
- * The instruction's layout is identical to [IdentLoc].
+ * The instruction's layout is identical to [LoadNameLoc].
  *
  * ┌────────┬───────┬────────┐
  * │ opcode │ frame │ offset │
@@ -409,6 +409,7 @@ export class IReturn extends InstrView {
  * ┌──────┬────────────┐
  * │opcode│# local vars│
  * └──────┴────────────┘
+ * 1       1
  */
 export class IEnterBlock extends InstrView {
   static size = 2;
