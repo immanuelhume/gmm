@@ -32,9 +32,10 @@ continueStmt : CONTINUE ;
 
 goStmt : 'go' primaryExpr ; // [primaryExpr] has to be a function call
 
-assignment : lhs=lvalue '=' rhs=expr ;
+assignment : lhs=lvalueList '=' rhs=exprList ;
 
-lvalue : ident ; // we'll expand this as the project progresses
+lvalueList : lvalue (',' lvalue)* ;
+lvalue : ident ; // we'll define this properly in the future
 
 forStmt : 'for' (condition | forClause | rangeClause) block ;
 
@@ -71,7 +72,7 @@ logicalOp : '||' | '&&' ;
 relOp : '==' | '!=' | '<' | '<=' | '>' | '>=' ;
 numericOp : '+' | '-' | '*' | '/' ;
 
-shortVarDecl : lvalue ':=' expr ;
+shortVarDecl : lhs=lvalueList ':=' rhs=exprList ;
 
 decl : funcDecl | varDecl | typeDecl ;
 typeDecl : 'type' ident type ;

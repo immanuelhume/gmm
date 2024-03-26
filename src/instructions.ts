@@ -366,13 +366,13 @@ export class IJof extends InstrView {
  * Assigns a value to some location. Location should be at the top of the
  * stack, and the value right below that.
  *
- * ┌──────┐
- * │opcode│
- * └──────┘
+ * ┌──────┬──────┐
+ * │opcode│# vars│
+ * └──────┴──────┘
  */
 export class IAssign extends InstrView {
-  static size = 1;
-  readonly size = 1;
+  static size = 2;
+  readonly size = 2;
 
   static emit(w: Emitter, ctx?: ParserRuleContext): IAssign {
     const pc = w.reserve(Opcode.Assign, IAssign.size, ctx);
@@ -380,7 +380,15 @@ export class IAssign extends InstrView {
   }
 
   toString(): string {
-    return `Assign`;
+    return `Assign ${this.getCount()}`;
+  }
+
+  getCount(): number {
+    return this.bytecode.getUint8(this.addr + 1);
+  }
+  setCount(n: number): IAssign {
+    this.bytecode.setUint8(this.addr + 1, n);
+    return this;
   }
 }
 

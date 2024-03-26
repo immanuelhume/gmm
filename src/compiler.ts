@@ -48,7 +48,7 @@ import {
   IPush,
   ILoadStr,
 } from "./instructions";
-import { ArrayStack, Bijection, Stack, StrPool } from "./util";
+import { ArrayStack, Stack, StrPool } from "./util";
 import { builtinSymbols } from "./heapviews";
 
 class BytecodeWriter implements Emitter {
@@ -137,7 +137,10 @@ class DeclScanner extends GoVisitor<string[]> {
   };
 
   visitShortVarDecl = (ctx: ShortVarDeclContext) => {
-    return [ctx.lvalue().getText()];
+    return ctx
+      .lvalueList()
+      .lvalue_list()
+      .map((lvalue) => lvalue.getText());
   };
 
   visitForStmt = (_: ForStmtContext) => {
@@ -267,7 +270,7 @@ export class Assembler extends GoVisitor<void> {
     const fnName = ctx.ident().getText();
     const [frame, offset] = this.env.lookup(fnName);
     ILoadNameLoc.emit(this.bc, ctx).setFrame(frame).setOffset(offset);
-    IAssign.emit(this.bc, ctx);
+    IAssign.emit(this.bc, ctx).setCount(1);
 
     // Check if this function is, in fact, main
     if (fnName === "main") {
@@ -284,13 +287,14 @@ export class Assembler extends GoVisitor<void> {
       const ident = ctx.ident().getText();
       const [frame, offset] = this.env.lookup(ident);
       ILoadNameLoc.emit(this.bc, ctx).setFrame(frame).setOffset(offset);
-      IAssign.emit(this.bc, ctx);
+      IAssign.emit(this.bc, ctx).setCount(1);
     } else {
+      IPush.emit(this.bc); // @todo: FIXME we just pushin dummy stuff for now
       // @todo: need to find a way to handle default initialization
       //
       // perhaps we can have a global representing "uninitialized"? and then initialize it when
       // we first access the value?
-      console.log(`variable ${ctx.ident().getText()} was default initialized`);
+      // console.log(`variable ${ctx.ident().getText()} was default initialized`);
     }
   };
 
@@ -347,8 +351,12 @@ export class Assembler extends GoVisitor<void> {
         // We may be declaring a variable. In which case we'll create a new
         // block surrounding this for statement, with that new variable inside.
         IEnterBlock.emit(this.bc).setNumVars(1);
-        const ident = init.shortVarDecl().lvalue().getText();
-        this.env.pushFrame([ident]);
+        const idents = init
+          .shortVarDecl()
+          .lvalueList()
+          .lvalue_list()
+          .map((lvalue) => lvalue.getText());
+        this.env.pushFrame(idents);
       }
 
       this.visit(init);
@@ -429,15 +437,28 @@ export class Assembler extends GoVisitor<void> {
   };
 
   visitAssignment = (ctx: AssignmentContext) => {
+    const nnames = ctx._lhs.lvalue_list().length;
+    const nexprs = ctx._rhs.expr_list().length;
+    if (nnames !== nexprs) {
+      throw new Error(`${nnames} items on LHS, but ${nexprs} on RHS`);
+    }
     this.visit(ctx._rhs);
     this.visit(ctx._lhs);
-    IAssign.emit(this.bc);
+    IAssign.emit(this.bc).setCount(nnames);
   };
 
   visitShortVarDecl = (ctx: ShortVarDeclContext) => {
-    this.visit(ctx.expr());
-    this.visit(ctx.lvalue());
-    IAssign.emit(this.bc);
+    // Identical to [visitAssignment]
+    //
+    // @todo make them into a common function
+    const nnames = ctx._lhs.lvalue_list().length;
+    const nexprs = ctx._rhs.expr_list().length;
+    if (nnames !== nexprs) {
+      throw new Error(`${nnames} items on LHS, but ${nexprs} on RHS`);
+    }
+    this.visit(ctx._rhs);
+    this.visit(ctx._lhs);
+    IAssign.emit(this.bc).setCount(nnames);
   };
 
   visitExpr = (ctx: ExprContext) => {

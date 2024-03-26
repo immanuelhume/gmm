@@ -128,16 +128,26 @@ export const microcode: Record<Opcode, EvalFn> = {
     state.pc += ILoadFn.size;
   },
   [Opcode.Assign]: function (state: MachineState): void {
-    const lhsAddr = state.os.pop();
-    const rhs = state.os.peek(); // leave RHS on the OS
+    const count = new IAssign(state.bytecode, state.pc).getCount();
+    const lhss = [];
+    const rhss = [];
+    for (let i = 0; i < count; ++i) {
+      lhss.push(state.os.pop());
+    }
+    for (let i = 0; i < count; ++i) {
+      rhss.push(state.os.pop());
+    }
 
     // Note that assignment here differs from how CS4215 assignments handled
     // it. We don't always have a frame and offset to assign into (e.g. maybe
     // we are assigning to a field of a struct?) so we assign directly to
     // an address.
-    state.heap.setFloat64(lhsAddr, rhs);
+    for (let i = 0; i < count; ++i) {
+      state.heap.setFloat64(lhss[i], rhss[i]);
+    }
 
     state.pc += IAssign.size;
+    state.os.push(state.globals[Global.Nil]); // push a dummy value on
   },
   [Opcode.LoadNameLoc]: function (state: MachineState): void {
     const instr = new ILoadNameLoc(state.bytecode, state.pc);

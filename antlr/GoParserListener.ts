@@ -12,6 +12,7 @@ import { BreakStmtContext } from "./GoParser";
 import { ContinueStmtContext } from "./GoParser";
 import { GoStmtContext } from "./GoParser";
 import { AssignmentContext } from "./GoParser";
+import { LvalueListContext } from "./GoParser";
 import { LvalueContext } from "./GoParser";
 import { ForStmtContext } from "./GoParser";
 import { ConditionContext } from "./GoParser";
@@ -162,6 +163,16 @@ export default class GoParserListener extends ParseTreeListener {
    * @param ctx the parse tree
    */
   exitAssignment?: (ctx: AssignmentContext) => void;
+  /**
+   * Enter a parse tree produced by `GoParser.lvalueList`.
+   * @param ctx the parse tree
+   */
+  enterLvalueList?: (ctx: LvalueListContext) => void;
+  /**
+   * Exit a parse tree produced by `GoParser.lvalueList`.
+   * @param ctx the parse tree
+   */
+  exitLvalueList?: (ctx: LvalueListContext) => void;
   /**
    * Enter a parse tree produced by `GoParser.lvalue`.
    * @param ctx the parse tree

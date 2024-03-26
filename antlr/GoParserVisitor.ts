@@ -12,6 +12,7 @@ import { BreakStmtContext } from "./GoParser";
 import { ContinueStmtContext } from "./GoParser";
 import { GoStmtContext } from "./GoParser";
 import { AssignmentContext } from "./GoParser";
+import { LvalueListContext } from "./GoParser";
 import { LvalueContext } from "./GoParser";
 import { ForStmtContext } from "./GoParser";
 import { ConditionContext } from "./GoParser";
@@ -125,6 +126,12 @@ export default class GoParserVisitor<Result> extends ParseTreeVisitor<Result> {
    * @return the visitor result
    */
   visitAssignment?: (ctx: AssignmentContext) => Result;
+  /**
+   * Visit a parse tree produced by `GoParser.lvalueList`.
+   * @param ctx the parse tree
+   * @return the visitor result
+   */
+  visitLvalueList?: (ctx: LvalueListContext) => Result;
   /**
    * Visit a parse tree produced by `GoParser.lvalue`.
    * @param ctx the parse tree

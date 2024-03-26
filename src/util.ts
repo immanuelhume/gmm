@@ -57,6 +57,9 @@ export class Bijection<X, Y> {
   }
 }
 
+/**
+ * A string pool. Does not handle allocation. Just stores the ID for each string and its address.
+ */
 export class StrPool {
   private map = new Bijection<string, number>();
   private id = 0; // should increase monotonically
