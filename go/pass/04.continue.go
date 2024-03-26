@@ -10,15 +10,14 @@ func main() {
 	}
 	dbg("x is now", x)
 
-	x = 1
-	i := 0
+	y, i := 0, 0
 	for ; i != 5; i = i + 1 {
-		if x == 3 {
+		if y == 3 {
 			continue
 		}
-		x = x + 1
+		y = y + 1
 	}
-	if x != 3 {
-		panic("expected 3, got", x)
+	if y != 3 {
+		panic("expected 3, got", y)
 	}
 }
