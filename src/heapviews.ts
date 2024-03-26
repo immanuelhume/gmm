@@ -39,7 +39,7 @@ export interface MachineState extends Memory, Registers {
   bytecode: DataView;
   srcMap: Map<number, number>;
   strPool: StrPool;
-  // globals: Record<Global, Address>;
+  globals: Record<Global, Address>;
 }
 
 /**
@@ -53,6 +53,7 @@ export const enum DataType {
   String,
   Fn,
   Builtin,
+  Global,
   Frame,
   Env,
   CallFrame,
@@ -63,17 +64,23 @@ export const enum DataType {
 /**
  * Global values, which should eventually appear as singletons in memory.
  */
-const enum Global {
-  True,
+export enum Global {
+  True = 0x00,
   False,
   Nil,
 }
+
+export const globalSymbols: Record<Global, string> = {
+  [Global.True]: "true",
+  [Global.False]: "false",
+  [Global.Nil]: "nil",
+};
 
 export const enum BuiltinId {
   Debug = 0x00,
   Panic,
 }
-export const builtins = ["dbg", "panic"]; // need a list for deterministic order
+export const builtinSymbols = ["dbg", "panic"]; // need a list for deterministic order
 export const builtinName2Id: Record<string, BuiltinId> = {
   dbg: BuiltinId.Debug,
   panic: BuiltinId.Panic,
@@ -471,7 +478,7 @@ export class FnView extends NodeView {
  */
 export class BuiltinView extends NodeView {
   static allocate(state: Memory): BuiltinView {
-    const addr = allocate(state, DataType.Builtin, 1, 1);
+    const addr = allocate(state, DataType.Builtin, 1, 0);
     return new BuiltinView(state.heap, addr);
   }
 
@@ -490,6 +497,38 @@ export class BuiltinView extends NodeView {
   }
   setId(id: BuiltinId): BuiltinView {
     this.setChild(0, id);
+    return this;
+  }
+}
+
+/**
+ * Represents a global.
+ *
+ * ┌──────┬─────────┐
+ * │header│global ID│
+ * └──────┴─────────┘
+ */
+export class GlobalView extends NodeView {
+  static allocate(state: Memory): GlobalView {
+    const addr = allocate(state, DataType.Global, 1, 0);
+    return new GlobalView(state.heap, addr);
+  }
+
+  constructor(heap: DataView, addr: Address) {
+    super(heap, addr);
+    this.checkType(DataType.Global);
+  }
+
+  toString(): string {
+    const repr = globalSymbols[this.getKind()];
+    return `Global { ${repr} }`;
+  }
+
+  getKind(): Global {
+    return this.getChild(0);
+  }
+  setKind(kind: Global): GlobalView {
+    this.setChild(0, kind);
     return this;
   }
 }
@@ -550,6 +589,7 @@ const nodeClass: Record<DataType, { new (heap: DataView, addr: Address, ctx?: He
   [DataType.String]: StringView,
   [DataType.Fn]: FnView,
   [DataType.Builtin]: BuiltinView,
+  [DataType.Global]: GlobalView,
   [DataType.Frame]: FrameView,
   [DataType.Env]: EnvView,
   [DataType.CallFrame]: CallFrameView,

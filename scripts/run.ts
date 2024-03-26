@@ -7,8 +7,19 @@
 import { readFileSync } from "fs";
 import { compileSrc } from "../src/compiler";
 import { InstrView, Opcode } from "../src/instructions";
-import { ArrayStack, fmtAddress } from "../src/util";
-import { BuiltinView, EnvView, FrameView, MachineState, StringView, builtinName2Id, builtins } from "../src/heapviews";
+import { Address, ArrayStack, fmtAddress } from "../src/util";
+import {
+  BuiltinView,
+  EnvView,
+  FrameView,
+  Global,
+  GlobalView,
+  MachineState,
+  StringView,
+  builtinName2Id,
+  builtinSymbols,
+  globalSymbols,
+} from "../src/heapviews";
 import { microcode } from "../src/eval";
 
 const run = (filename: string) => {
@@ -18,16 +29,31 @@ const run = (filename: string) => {
   const mem = { heap, free: 0 };
 
   // Before initializing the rest of the machine, let's allocate all builtins.
-  const builtinAddrs = builtins.map((builtin) => BuiltinView.allocate(mem).setId(builtinName2Id[builtin]).addr);
+  const builtinAddrs = builtinSymbols.map((builtin) => BuiltinView.allocate(mem).setId(builtinName2Id[builtin]).addr);
   const globalEnv = EnvView.allocate(mem, 1);
-  const globalFrame = FrameView.allocate(mem, builtins.length);
+  const globalFrame = FrameView.allocate(mem, builtinSymbols.length);
   builtinAddrs.forEach((addr, i) => globalFrame.set(i, addr));
   globalEnv.setFrame(0, globalFrame.addr);
 
-  // We'll also allocate all the strings.
+  // We'll also allocate all the strings...
   for (const strId of strPool.ids()) {
     const addr = StringView.allocate(mem).setId(strId).addr;
     strPool.setAddress(strId, addr);
+  }
+
+  // And the globals.
+  const globals: Record<Global, Address> = {
+    [Global.True]: -1,
+    [Global.False]: -1,
+    [Global.Nil]: -1,
+  };
+  for (const glob in Global) {
+    const kind = Number(glob);
+    if (isNaN(kind)) {
+      continue;
+    }
+    const addr = GlobalView.allocate(mem).setKind(kind).addr;
+    globals[kind as Global] = addr;
   }
 
   // Now our globals are initialized, and we are ready to create the machine.
@@ -42,6 +68,7 @@ const run = (filename: string) => {
     bytecode,
     srcMap,
     strPool,
+    globals,
   };
 
   const toHexList = (xs: number[]) => xs.map((x) => `${x.toString(16)}`).join(", ");

@@ -12,6 +12,8 @@ import {
   MachineState,
   wordSize,
   BlockFrameView,
+  Global,
+  GlobalView,
 } from "./heapviews";
 import {
   IAssign,
@@ -32,6 +34,7 @@ import {
   IExitBlock,
   ILoadName,
   ILoadStr,
+  IJof,
 } from "./instructions";
 
 type EvalFn = (state: MachineState) => void;
@@ -155,7 +158,19 @@ export const microcode: Record<Opcode, EvalFn> = {
     state.pc += ILoadName.size;
   },
   [Opcode.Jof]: function (state: MachineState): void {
-    throw new Error("Jof not implemented.");
+    const instr = new IJof(state.bytecode, state.pc);
+    const cond = state.os.peek(); // @todo: pop or peek?
+    const glob = new GlobalView(state.heap, cond);
+    switch (glob.getKind()) {
+      case Global.False:
+        state.pc = instr.where(); // we jump
+        break;
+      case Global.True:
+        state.pc += IJof.size;
+        break;
+      default:
+        throw new Error("Unexpected non-boolean value"); // @todo btr msg
+    }
   },
   [Opcode.EnterBlock]: function (state: MachineState): void {
     const instr = new IEnterBlock(state.bytecode, state.pc);
@@ -250,6 +265,21 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           return res.addr;
         },
       ],
+      [
+        BinaryOp.Neq,
+        (state, lhsAddr, rhsAddr) => {
+          const lhs = new Float64View(state.heap, lhsAddr);
+          const rhs = new Float64View(state.heap, rhsAddr);
+
+          const lhsValue = lhs.getValue();
+          const rhsValue = rhs.getValue();
+          if (lhsValue < rhsValue) {
+            return state.globals[Global.True];
+          } else {
+            return state.globals[Global.False];
+          }
+        },
+      ],
     ]),
   ],
 ]);
@@ -288,18 +318,23 @@ type BuiltinEvalFn = (state: MachineState, args: Address[]) => void;
 
 const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
   [BuiltinId.Debug]: function (state: MachineState, args: Address[]): void {
-    const reprs = args.map((arg) => NodeView.of(state.heap, arg).toString()).join(", ");
-    console.log(reprs);
+    const reprs = args.map((arg) => NodeView.of(state.heap, arg, { strPool: state.strPool }).toString()).join(" ");
+    const lineno = state.srcMap.get(state.pc);
+    if (lineno !== undefined) {
+      console.log("line", lineno, ":", reprs);
+    } else {
+      console.log(reprs);
+    }
     state.os.push(0); // push some garbage, since functions must leave one value on the OS for now @todo FIXME
   },
   [BuiltinId.Panic]: function (state: MachineState, args: number[]): void {
-    const reprs = args.map((arg) => NodeView.of(state.heap, arg, { strPool: state.strPool }).toString()).join(", ");
+    const reprs = args.map((arg) => NodeView.of(state.heap, arg, { strPool: state.strPool }).toString()).join(" ");
     console.log("\x1b[31m", "panic:", reprs, "\x1b[0m");
     const lineno = state.srcMap.get(state.pc);
     if (lineno !== undefined) {
       console.log("\x1b[31m", "  ", "at line", lineno, "\x1b[0m");
     }
-    throw new PanicError();
+    throw new PanicError(); // we should never recover from this
   },
 };
 

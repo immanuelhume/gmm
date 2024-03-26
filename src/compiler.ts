@@ -49,7 +49,7 @@ import {
   ILoadStr,
 } from "./instructions";
 import { ArrayStack, Bijection, Stack, StrPool } from "./util";
-import { builtins } from "./heapviews";
+import { builtinSymbols } from "./heapviews";
 
 class BytecodeWriter implements Emitter {
   private _code: DataView;
@@ -186,7 +186,7 @@ export class Assembler extends GoVisitor<void> {
     this.breakss = new ArrayStack();
     this.strPool = new StrPool();
 
-    this.env.pushFrame(builtins);
+    this.env.pushFrame(builtinSymbols);
   }
 
   static scanDecls = (ctx: ParserRuleContext): string[] => {
@@ -515,7 +515,8 @@ export class Assembler extends GoVisitor<void> {
   };
 
   visitLitStr = (ctx: LitStrContext) => {
-    const val = ctx.getText();
+    const raw = ctx.getText();
+    const val = raw.slice(1, raw.length - 1); // remove the ""
     const id = this.strPool.add(val);
     ILoadStr.emit(this.bc).setId(id);
   };
