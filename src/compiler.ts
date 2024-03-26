@@ -424,7 +424,6 @@ export class Assembler extends GoVisitor<number> {
     const curDepth = this.env.depth();
     const [xs, startDepth] = this.contiss.peek();
     const toClear = curDepth - startDepth;
-    console.log("clearing", toClear);
     for (let i = 0; i < toClear; ++i) {
       IExitBlock.emit(this.bc);
     }
