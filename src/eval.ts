@@ -50,8 +50,6 @@ export const microcode: Record<Opcode, EvalFn> = {
     const instr = new ICall(state.bytecode, state.pc);
     const argc = instr.argc();
 
-    state.pc += ICall.size;
-
     const args: Address[] = [];
     for (let i = 0; i < argc; ++i) {
       // Beware that here, we are cloning the arguments! This is in line with
@@ -65,7 +63,7 @@ export const microcode: Record<Opcode, EvalFn> = {
     switch (fnKind) {
       case DataType.Fn:
         const callFrame = CallFrameView.allocate(state);
-        callFrame.setPc(state.pc); // pc was already incremented to next instruction above
+        callFrame.setPc(state.pc + ICall.size); // pc was already incremented to next instruction above
         callFrame.setEnv(state.env);
 
         state.rts.push(callFrame.addr);
@@ -87,6 +85,8 @@ export const microcode: Record<Opcode, EvalFn> = {
         const builtin = new BuiltinView(state.heap, fnAddr);
         const bifn = builtinFns[builtin.getId()];
         bifn(state, args);
+
+        state.pc += ICall.size;
         break;
       default:
         throw new Error(`Uncallable object ${fnKind}`);
@@ -281,4 +281,15 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
     console.log(reprs);
     state.os.push(0); // push some garbage, since functions must leave one value on the OS for now @todo FIXME
   },
+  [BuiltinId.Panic]: function (state: MachineState, args: number[]): void {
+    const reprs = args.map((arg) => NodeView.of(state.heap, arg).toString()).join(", ");
+    console.log("\x1b[31m", "panic:", reprs, "\x1b[0m");
+    const lineno = state.srcMap.get(state.pc);
+    if (lineno !== undefined) {
+      console.log("\x1b[31m", "  ", "at line", lineno, "\x1b[0m");
+    }
+    throw new PanicError();
+  },
 };
+
+class PanicError extends Error {}

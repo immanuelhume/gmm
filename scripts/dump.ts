@@ -12,7 +12,7 @@ import { fmtAddress } from "../src/util";
 
 const dumpfile = (filename: string) => {
   const src = readFileSync(filename).toString();
-  const bytecode = compileSrc(src);
+  const [bytecode, _] = compileSrc(src);
   let pc = 0;
   while (true) {
     const instr = InstrView.of(bytecode, pc);

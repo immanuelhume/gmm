@@ -13,7 +13,7 @@ import { microcode } from "../src/eval";
 
 const run = (filename: string) => {
   const src = readFileSync(filename).toString();
-  const bytecode = compileSrc(src);
+  const [bytecode, srcMap] = compileSrc(src);
   const heap = new DataView(new ArrayBuffer(1028));
   const mem = { heap, free: 0 };
 
@@ -28,6 +28,7 @@ const run = (filename: string) => {
   let state: MachineState = {
     ...mem,
     bytecode,
+    srcMap,
     pc: 0,
     rts: new ArrayStack(),
     os: new ArrayStack(),

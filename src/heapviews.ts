@@ -37,6 +37,7 @@ interface Registers {
  */
 export interface MachineState extends Memory, Registers {
   bytecode: DataView;
+  srcMap: Map<number, number>;
   // globals: Record<Global, Address>;
 }
 
@@ -69,13 +70,16 @@ const enum Global {
 
 export const enum BuiltinId {
   Debug = 0x00,
+  Panic,
 }
-export const builtins = ["dbg"]; // need a list for deterministic order
+export const builtins = ["dbg", "panic"]; // need a list for deterministic order
 export const builtinName2Id: Record<string, BuiltinId> = {
   dbg: BuiltinId.Debug,
+  panic: BuiltinId.Panic,
 };
 export const builtinId2Name: Record<BuiltinId, string> = {
   [BuiltinId.Debug]: "dbg",
+  [BuiltinId.Panic]: "panic",
 };
 
 /* Each word is a Float64. So 8 bytes. */

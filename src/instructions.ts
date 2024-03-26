@@ -1,5 +1,6 @@
 import assert from "assert";
 import { fmtAddress } from "./util";
+import { ParserRuleContext } from "antlr4";
 
 export const enum Opcode {
   BinaryOp = 0x00,
@@ -29,7 +30,7 @@ export interface Emitter {
   /**
    * Reserves [size] bytes, and sets the opcode.
    */
-  reserve(opcode: Opcode, size: number): number;
+  reserve(opcode: Opcode, size: number, ctx?: ParserRuleContext): number;
 }
 
 /**
@@ -90,8 +91,8 @@ export class IBinaryOp extends InstrView {
   static size = 2;
   readonly size = 2;
 
-  static emit(w: Emitter): IBinaryOp {
-    const pc = w.reserve(Opcode.BinaryOp, IBinaryOp.size);
+  static emit(w: Emitter, ctx?: ParserRuleContext): IBinaryOp {
+    const pc = w.reserve(Opcode.BinaryOp, IBinaryOp.size, ctx);
     return new IBinaryOp(w.code(), pc);
   }
 
@@ -118,8 +119,8 @@ export class IUnaryOp extends InstrView {
   static size = 2;
   readonly size = 2;
 
-  static emit(w: Emitter): IUnaryOp {
-    const pc = w.reserve(Opcode.UnaryOp, IUnaryOp.size);
+  static emit(w: Emitter, ctx?: ParserRuleContext): IUnaryOp {
+    const pc = w.reserve(Opcode.UnaryOp, IUnaryOp.size, ctx);
     return new IUnaryOp(w.code(), pc);
   }
 
@@ -142,8 +143,8 @@ export class ILoadFn extends InstrView {
   static size = 10;
   readonly size = 10;
 
-  static emit(w: Emitter): ILoadFn {
-    const pc = w.reserve(Opcode.LoadFn, ILoadFn.size);
+  static emit(w: Emitter, ctx?: ParserRuleContext): ILoadFn {
+    const pc = w.reserve(Opcode.LoadFn, ILoadFn.size, ctx);
     return new ILoadFn(w.code(), pc);
   }
 
@@ -186,8 +187,8 @@ export class ILoadNameLoc extends InstrView {
   static size = 3;
   readonly size = 3;
 
-  static emit(w: Emitter): ILoadNameLoc {
-    const pc = w.reserve(Opcode.LoadNameLoc, ILoadNameLoc.size);
+  static emit(w: Emitter, ctx?: ParserRuleContext): ILoadNameLoc {
+    const pc = w.reserve(Opcode.LoadNameLoc, ILoadNameLoc.size, ctx);
     return new ILoadNameLoc(w.code(), pc);
   }
 
@@ -233,8 +234,8 @@ export class ILoadName extends InstrView {
   static size = 3;
   readonly size = 3;
 
-  static emit(w: Emitter): ILoadName {
-    const pc = w.reserve(Opcode.LoadName, ILoadName.size);
+  static emit(w: Emitter, ctx?: ParserRuleContext): ILoadName {
+    const pc = w.reserve(Opcode.LoadName, ILoadName.size, ctx);
     return new ILoadName(w.code(), pc);
   }
 
@@ -268,8 +269,8 @@ export class IGoto extends InstrView {
   static size = 9;
   readonly size = 9;
 
-  static emit(w: Emitter): IGoto {
-    const pc = w.reserve(Opcode.Goto, IGoto.size);
+  static emit(w: Emitter, ctx?: ParserRuleContext): IGoto {
+    const pc = w.reserve(Opcode.Goto, IGoto.size, ctx);
     return new IGoto(w.code(), pc);
   }
 
@@ -303,8 +304,8 @@ export class ICall extends InstrView {
   static size = 2;
   readonly size = 2;
 
-  static emit(w: Emitter): ICall {
-    const pc = w.reserve(Opcode.Call, ICall.size);
+  static emit(w: Emitter, ctx?: ParserRuleContext): ICall {
+    const pc = w.reserve(Opcode.Call, ICall.size, ctx);
     return new ICall(w.code(), pc);
   }
 
@@ -337,8 +338,8 @@ export class IJof extends InstrView {
   static size = 9;
   readonly size = 9;
 
-  static emit(w: Emitter): IJof {
-    const pc = w.reserve(Opcode.Jof, IJof.size);
+  static emit(w: Emitter, ctx?: ParserRuleContext): IJof {
+    const pc = w.reserve(Opcode.Jof, IJof.size, ctx);
     return new IJof(w.code(), pc);
   }
 
@@ -372,8 +373,8 @@ export class IAssign extends InstrView {
   static size = 1;
   readonly size = 1;
 
-  static emit(w: Emitter): IAssign {
-    const pc = w.reserve(Opcode.Assign, IAssign.size);
+  static emit(w: Emitter, ctx?: ParserRuleContext): IAssign {
+    const pc = w.reserve(Opcode.Assign, IAssign.size, ctx);
     return new IAssign(w.code(), pc);
   }
 
@@ -393,8 +394,8 @@ export class IReturn extends InstrView {
   static size = 1;
   readonly size = 1;
 
-  static emit(w: Emitter): IReturn {
-    const pc = w.reserve(Opcode.Return, IReturn.size);
+  static emit(w: Emitter, ctx?: ParserRuleContext): IReturn {
+    const pc = w.reserve(Opcode.Return, IReturn.size, ctx);
     return new IReturn(w.code(), pc);
   }
 
@@ -415,8 +416,8 @@ export class IEnterBlock extends InstrView {
   static size = 2;
   readonly size = 2;
 
-  static emit(w: Emitter): IEnterBlock {
-    const pc = w.reserve(Opcode.EnterBlock, IEnterBlock.size);
+  static emit(w: Emitter, ctx?: ParserRuleContext): IEnterBlock {
+    const pc = w.reserve(Opcode.EnterBlock, IEnterBlock.size, ctx);
     return new IEnterBlock(w.code(), pc);
   }
 
@@ -444,8 +445,8 @@ export class IExitBlock extends InstrView {
   static size = 1;
   readonly size = 1;
 
-  static emit(w: Emitter): IExitBlock {
-    const pc = w.reserve(Opcode.ExitBlock, IExitBlock.size);
+  static emit(w: Emitter, ctx?: ParserRuleContext): IExitBlock {
+    const pc = w.reserve(Opcode.ExitBlock, IExitBlock.size, ctx);
     return new IExitBlock(w.code(), pc);
   }
 
@@ -465,8 +466,8 @@ export class IPop extends InstrView {
   static size = 1;
   readonly size = 1;
 
-  static emit(w: Emitter): IPop {
-    const pc = w.reserve(Opcode.Pop, IPop.size);
+  static emit(w: Emitter, ctx?: ParserRuleContext): IPop {
+    const pc = w.reserve(Opcode.Pop, IPop.size, ctx);
     return new IPop(w.code(), pc);
   }
 
@@ -481,8 +482,8 @@ export class ILoadC extends InstrView {
   static size = 9;
   readonly size = 9;
 
-  static emit(w: Emitter): ILoadC {
-    const pc = w.reserve(Opcode.LoadC, ILoadC.size);
+  static emit(w: Emitter, ctx?: ParserRuleContext): ILoadC {
+    const pc = w.reserve(Opcode.LoadC, ILoadC.size, ctx);
     return new ILoadC(w.code(), pc);
   }
 
@@ -508,8 +509,8 @@ export class IPush extends InstrView {
   static size = 9;
   readonly size = 9;
 
-  static emit(w: Emitter): IPush {
-    const pc = w.reserve(Opcode.Push, IPush.size);
+  static emit(w: Emitter, ctx?: ParserRuleContext): IPush {
+    const pc = w.reserve(Opcode.Push, IPush.size, ctx);
     return new IPush(w.code(), pc);
   }
 
@@ -535,8 +536,8 @@ export class IDone extends InstrView {
   static size = 1;
   readonly size = 1;
 
-  static emit(w: Emitter): IDone {
-    const pc = w.reserve(Opcode.Done, IDone.size);
+  static emit(w: Emitter, ctx?: ParserRuleContext): IDone {
+    const pc = w.reserve(Opcode.Done, IDone.size, ctx);
     return new IDone(w.code(), pc);
   }
 

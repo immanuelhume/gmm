@@ -167,7 +167,7 @@ class DeclScanner extends GoVisitor<string[]> {
 }
 
 export class Assembler extends GoVisitor<void> {
-  bytecode: BytecodeWriter;
+  bc: BytecodeWriter;
   env: CompileTimeEnvironment;
 
   main: number | undefined; // keep track of where the main function starts
@@ -177,7 +177,7 @@ export class Assembler extends GoVisitor<void> {
 
   constructor() {
     super();
-    this.bytecode = new BytecodeWriter();
+    this.bc = new BytecodeWriter();
     this.env = new CompileTimeEnvironment();
     this.contiss = new ArrayStack();
     this.breakss = new ArrayStack();
@@ -195,12 +195,12 @@ export class Assembler extends GoVisitor<void> {
     this.env.pushFrame(names);
 
     // Wrap the entire program in a block. Don't care about exiting the block.
-    IEnterBlock.emit(this.bytecode).setNumVars(names.length);
+    IEnterBlock.emit(this.bc, ctx).setNumVars(names.length);
 
     // @todo: we need to let individual stmts handle this
     ctx.decl_list().forEach((decl) => {
       this.visit(decl);
-      IPop.emit(this.bytecode);
+      IPop.emit(this.bc, decl);
     });
 
     if (!this.main) {
@@ -211,21 +211,21 @@ export class Assembler extends GoVisitor<void> {
     // append a call instruction to the end of the program.
 
     const [frame, offset] = this.env.lookup("main");
-    ILoadName.emit(this.bytecode).setFrame(frame).setOffset(offset);
-    ICall.emit(this.bytecode).setArgc(0); // call [main]
-    IDone.emit(this.bytecode); // last instruction
+    ILoadName.emit(this.bc).setFrame(frame).setOffset(offset);
+    ICall.emit(this.bc).setArgc(0); // call [main]
+    IDone.emit(this.bc); // last instruction
   };
 
   visitSmt = (ctx: StmtContext) => {
     this.visitChildren(ctx);
     // Each statement is expected to leave *something* on the operand stack.
     // We don't *have* to do this but it makes things easier.
-    IPop.emit(this.bytecode);
+    IPop.emit(this.bc, ctx);
   };
 
   visitFuncDecl = (ctx: FuncDeclContext) => {
-    const ldf = ILoadFn.emit(this.bytecode);
-    const goto = IGoto.emit(this.bytecode);
+    const ldf = ILoadFn.emit(this.bc, ctx);
+    const goto = IGoto.emit(this.bc);
     const params = ctx
       .signature()
       .params()
@@ -234,7 +234,7 @@ export class Assembler extends GoVisitor<void> {
         return param.ident().getText();
       });
 
-    const fnPc = this.bytecode.wc();
+    const fnPc = this.bc.wc();
 
     ldf.setPc(fnPc).setArgc(params.length);
 
@@ -251,10 +251,10 @@ export class Assembler extends GoVisitor<void> {
     // without return statements.
     //
     // @todo: allow multiple return values (then we won't have the issues above)
-    IPush.emit(this.bytecode); // for now, just push some garbage
-    IReturn.emit(this.bytecode);
+    IPush.emit(this.bc); // for now, just push some garbage
+    IReturn.emit(this.bc);
 
-    goto.setWhere(this.bytecode.wc());
+    goto.setWhere(this.bc.wc());
 
     // We need to explicitly handle the assignment instruction here, since our function
     // declarations with [func] are not re-written into simple assignment statements.
@@ -262,8 +262,8 @@ export class Assembler extends GoVisitor<void> {
     // This is a limitation of not working with an AST.
     const fnName = ctx.ident().getText();
     const [frame, offset] = this.env.lookup(fnName);
-    ILoadNameLoc.emit(this.bytecode).setFrame(frame).setOffset(offset);
-    IAssign.emit(this.bytecode);
+    ILoadNameLoc.emit(this.bc, ctx).setFrame(frame).setOffset(offset);
+    IAssign.emit(this.bc, ctx);
 
     // Check if this function is, in fact, main
     if (fnName === "main") {
@@ -279,8 +279,8 @@ export class Assembler extends GoVisitor<void> {
       this.visit(ctx.expr()); // compile RHS
       const ident = ctx.ident().getText();
       const [frame, offset] = this.env.lookup(ident);
-      ILoadNameLoc.emit(this.bytecode).setFrame(frame).setOffset(offset);
-      IAssign.emit(this.bytecode);
+      ILoadNameLoc.emit(this.bc, ctx).setFrame(frame).setOffset(offset);
+      IAssign.emit(this.bc, ctx);
     } else {
       // @todo: need to find a way to handle default initialization
       //
@@ -297,7 +297,7 @@ export class Assembler extends GoVisitor<void> {
   visitReturnStmt = (ctx: ReturnStmtContext) => {
     // @todo handle empty return statements!
     this.visit(ctx.expr()); // compile the thing to return
-    IReturn.emit(this.bytecode);
+    IReturn.emit(this.bc, ctx);
   };
 
   visitForStmt = (ctx: ForStmtContext) => {
@@ -312,26 +312,26 @@ export class Assembler extends GoVisitor<void> {
         contis.forEach((conti) => conti.setWhere(startAddr));
       }
       if (breaks.length > 0) {
-        breaks.forEach((brk) => brk.setWhere(this.bytecode.wc()));
+        breaks.forEach((brk) => brk.setWhere(this.bc.wc()));
 
         // We need to insert an [ExitBlock] here, because a break statement
         // would not exit the block as per normal.
-        IExitBlock.emit(this.bytecode);
+        IExitBlock.emit(this.bc);
       }
     };
 
     // There are three kinds of [for] loops.
     if (ctx.condition()) {
       // basically a while loop
-      const startAddr = this.bytecode.wc();
+      const startAddr = this.bc.wc();
       this.visit(ctx.condition());
-      const jof = IJof.emit(this.bytecode);
+      const jof = IJof.emit(this.bc, ctx.condition());
       this.visit(ctx.block());
-      IGoto.emit(this.bytecode).setWhere(startAddr);
+      IGoto.emit(this.bc, ctx).setWhere(startAddr);
 
       processContinuesAndBreaks(startAddr);
 
-      const endAddr = this.bytecode.wc();
+      const endAddr = this.bc.wc();
       jof.setWhere(endAddr);
     } else if (ctx.forClause()) {
       // C-style for loop
@@ -342,26 +342,26 @@ export class Assembler extends GoVisitor<void> {
       if (init.shortVarDecl()) {
         // We may be declaring a variable. In which case we'll create a new
         // block surrounding this for statement, with that new variable inside.
-        IEnterBlock.emit(this.bytecode).setNumVars(1);
+        IEnterBlock.emit(this.bc).setNumVars(1);
         const ident = init.shortVarDecl().lvalue().getText();
         this.env.pushFrame([ident]);
       }
 
       this.visit(init);
-      const startAddr = this.bytecode.wc();
+      const startAddr = this.bc.wc();
       this.visit(cond);
-      const jof = IJof.emit(this.bytecode);
+      const jof = IJof.emit(this.bc);
       this.visit(ctx.block());
       this.visit(post);
-      IGoto.emit(this.bytecode).setWhere(startAddr);
+      IGoto.emit(this.bc).setWhere(startAddr);
 
       processContinuesAndBreaks(startAddr);
 
-      const endAddr = this.bytecode.wc();
+      const endAddr = this.bc.wc();
       jof.setWhere(endAddr);
 
       if (init.shortVarDecl()) {
-        IExitBlock.emit(this.bytecode);
+        IExitBlock.emit(this.bc);
         this.env.popFrame();
       }
     } else if (ctx.rangeClause()) {
@@ -374,38 +374,38 @@ export class Assembler extends GoVisitor<void> {
   };
 
   visitBreakStmt = (_: BreakStmtContext) => {
-    const goto = IGoto.emit(this.bytecode);
+    const goto = IGoto.emit(this.bc);
     this.breakss.peek().push(goto);
   };
 
   visitContinueStmt = (_: ContinueStmtContext) => {
-    const goto = IGoto.emit(this.bytecode);
+    const goto = IGoto.emit(this.bc);
     this.contiss.peek().push(goto);
   };
 
   visitIfStmt = (ctx: IfStmtContext) => {
     this.visit(ctx._cond); // compile the condition
-    const jof = IJof.emit(this.bytecode);
+    const jof = IJof.emit(this.bc);
     this.visit(ctx._cons); // compile consequent
-    const goto = IGoto.emit(this.bytecode);
-    jof.setWhere(this.bytecode.wc());
+    const goto = IGoto.emit(this.bc);
+    jof.setWhere(this.bc.wc());
     if (ctx.alt()) {
       this.visit(ctx.alt());
     }
-    goto.setWhere(this.bytecode.wc());
+    goto.setWhere(this.bc.wc());
   };
 
   visitBlock = (ctx: BlockContext) => {
     const names = Assembler.scanDecls(ctx);
     this.env.pushFrame(names);
 
-    IEnterBlock.emit(this.bytecode).setNumVars(names.length);
+    IEnterBlock.emit(this.bc).setNumVars(names.length);
     // @todo: we need to let individual stmts handle this
     ctx.stmt_list().forEach((decl) => {
       this.visit(decl);
-      IPop.emit(this.bytecode);
+      IPop.emit(this.bc);
     });
-    IExitBlock.emit(this.bytecode);
+    IExitBlock.emit(this.bc);
 
     this.env.popFrame();
   };
@@ -421,19 +421,19 @@ export class Assembler extends GoVisitor<void> {
   visitLvalue = (ctx: LvalueContext) => {
     const ident = ctx.ident().getText();
     const [frame, offset] = this.env.lookup(ident);
-    ILoadNameLoc.emit(this.bytecode).setFrame(frame).setOffset(offset);
+    ILoadNameLoc.emit(this.bc).setFrame(frame).setOffset(offset);
   };
 
   visitAssignment = (ctx: AssignmentContext) => {
     this.visit(ctx._rhs);
     this.visit(ctx._lhs);
-    IAssign.emit(this.bytecode);
+    IAssign.emit(this.bc);
   };
 
   visitShortVarDecl = (ctx: ShortVarDeclContext) => {
     this.visit(ctx.expr());
     this.visit(ctx.lvalue());
-    IAssign.emit(this.bytecode);
+    IAssign.emit(this.bc);
   };
 
   visitExpr = (ctx: ExprContext) => {
@@ -463,15 +463,14 @@ export class Assembler extends GoVisitor<void> {
       this.visit(fn); // emit code to evaluate the callable thing
       this.visit(args); // emit code to evaluate each arg
 
-      const call = ICall.emit(this.bytecode);
-      call.setArgc(argc);
+      ICall.emit(this.bc, ctx).setArgc(argc);
     } else if (ctx._base) {
       // @todo: figure out this shit - it means we are accessing a field/method?
     }
   };
 
   visitNumericOp = (ctx: NumericOpContext) => {
-    const op = IBinaryOp.emit(this.bytecode);
+    const op = IBinaryOp.emit(this.bc);
 
     if (ctx.PLUS()) {
       op.setOp(BinaryOp.Add);
@@ -487,7 +486,7 @@ export class Assembler extends GoVisitor<void> {
   };
 
   visitRelOp = (ctx: RelOpContext) => {
-    const op = IBinaryOp.emit(this.bytecode);
+    const op = IBinaryOp.emit(this.bc);
     if (ctx.EQ()) {
       op.setOp(BinaryOp.Eq);
     } else if (ctx.NEQ()) {
@@ -508,19 +507,19 @@ export class Assembler extends GoVisitor<void> {
   visitIdent = (ctx: IdentContext) => {
     const ident = ctx.getText();
     const [frame, offset] = this.env.lookup(ident);
-    ILoadName.emit(this.bytecode).setFrame(frame).setOffset(offset);
+    ILoadName.emit(this.bc).setFrame(frame).setOffset(offset);
   };
 
   visitNumber = (ctx: NumberContext) => {
     const val = parseInt(ctx.getText());
-    ILoadC.emit(this.bytecode).setVal(val);
+    ILoadC.emit(this.bc).setVal(val);
   };
 }
 
 /**
  * Compiles given source code into bytecode.
  */
-export const compileSrc = (src: string): DataView => {
+export const compileSrc = (src: string): [DataView, Map<number, number>] => {
   const chars = new CharStream(src);
   const lexer = new GoLexer(chars);
   const tokens = new CommonTokenStream(lexer);
@@ -530,5 +529,5 @@ export const compileSrc = (src: string): DataView => {
   const ass = new Assembler();
   ass.visit(tree);
 
-  return ass.bytecode.code();
+  return [ass.bc.code(), ass.bc.srcMap()];
 };
