@@ -1,6 +1,6 @@
 import { ParserRuleContext, CharStream, CommonTokenStream } from "antlr4";
 import GoLexer from "../antlr/GoLexer";
-import GoParser, { LitStrContext } from "../antlr/GoParser";
+import GoParser, { ExprListContext, LitStrContext } from "../antlr/GoParser";
 import {
   AssignmentContext,
   BlockContext,
@@ -47,6 +47,7 @@ import {
   BinaryOp,
   IPush,
   ILoadStr,
+  IPackTuple,
 } from "./instructions";
 import { ArrayStack, Stack, StrPool } from "./util";
 import { builtinSymbols } from "./heapviews";
@@ -303,8 +304,8 @@ export class Assembler extends GoVisitor<void> {
   };
 
   visitReturnStmt = (ctx: ReturnStmtContext) => {
-    // @todo handle empty return statements!
-    this.visit(ctx.expr()); // compile the thing to return
+    // @todo handle empty return statements! - we probably can just check if the list is empty, then push Nil or something?
+    this.visit(ctx.exprList()); // compile the thing to return
     IReturn.emit(this.bc, ctx);
   };
 
@@ -491,6 +492,20 @@ export class Assembler extends GoVisitor<void> {
       ICall.emit(this.bc, ctx).setArgc(argc);
     } else if (ctx._base) {
       // @todo: figure out this shit - it means we are accessing a field/method?
+    }
+  };
+
+  /**
+   * Compiles an expression list. Expression lists should only appear on the RHS of
+   * assignments (short var decls and assignments).
+   *
+   * If there is more than 1 expression, we pack it into a tuple.
+   */
+  visitExprList = (ctx: ExprListContext) => {
+    const len = ctx.expr_list().length;
+    this.visitChildren(ctx);
+    if (len > 1) {
+      IPackTuple.emit(this.bc).setLen(len);
     }
   };
 

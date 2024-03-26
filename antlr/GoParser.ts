@@ -955,7 +955,7 @@ export default class GoParser extends Parser {
         if (((_la & ~0x1f) === 0 && ((1 << _la) & 1610621246) !== 0) || _la === 32 || _la === 42) {
           {
             this.state = 206;
-            this.expr(0);
+            this.exprList();
           }
         }
       }
@@ -2460,7 +2460,7 @@ export default class GoParser extends Parser {
     1, 0, 0, 0, 192, 193, 3, 38, 19, 0, 193, 194, 5, 27, 0, 0, 194, 199, 1, 0, 0, 0, 195, 196, 3, 96, 48, 0, 196, 197,
     5, 28, 0, 0, 197, 199, 1, 0, 0, 0, 198, 192, 1, 0, 0, 0, 198, 195, 1, 0, 0, 0, 199, 200, 1, 0, 0, 0, 200, 201, 5,
     19, 0, 0, 201, 202, 3, 36, 18, 0, 202, 31, 1, 0, 0, 0, 203, 204, 3, 36, 18, 0, 204, 33, 1, 0, 0, 0, 205, 207, 5, 7,
-    0, 0, 206, 208, 3, 36, 18, 0, 207, 206, 1, 0, 0, 0, 207, 208, 1, 0, 0, 0, 208, 35, 1, 0, 0, 0, 209, 210, 6, 18, -1,
+    0, 0, 206, 208, 3, 38, 19, 0, 207, 206, 1, 0, 0, 0, 207, 208, 1, 0, 0, 0, 208, 35, 1, 0, 0, 0, 209, 210, 6, 18, -1,
     0, 210, 215, 3, 40, 20, 0, 211, 212, 3, 50, 25, 0, 212, 213, 3, 36, 18, 2, 213, 215, 1, 0, 0, 0, 214, 209, 1, 0, 0,
     0, 214, 211, 1, 0, 0, 0, 215, 222, 1, 0, 0, 0, 216, 217, 10, 1, 0, 0, 217, 218, 3, 52, 26, 0, 218, 219, 3, 36, 18,
     2, 219, 221, 1, 0, 0, 0, 220, 216, 1, 0, 0, 0, 221, 224, 1, 0, 0, 0, 222, 220, 1, 0, 0, 0, 222, 223, 1, 0, 0, 0,
@@ -3185,8 +3185,8 @@ export class ReturnStmtContext extends ParserRuleContext {
   public RETURN(): TerminalNode {
     return this.getToken(GoParser.RETURN, 0);
   }
-  public expr(): ExprContext {
-    return this.getTypedRuleContext(ExprContext, 0) as ExprContext;
+  public exprList(): ExprListContext {
+    return this.getTypedRuleContext(ExprListContext, 0) as ExprListContext;
   }
   public get ruleIndex(): number {
     return GoParser.RULE_returnStmt;

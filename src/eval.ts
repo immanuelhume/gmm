@@ -14,6 +14,7 @@ import {
   BlockFrameView,
   Global,
   GlobalView,
+  TupleView,
 } from "./heapviews";
 import {
   IAssign,
@@ -35,6 +36,7 @@ import {
   ILoadName,
   ILoadStr,
   IJof,
+  IPackTuple,
 } from "./instructions";
 
 type EvalFn = (state: MachineState) => void;
@@ -129,25 +131,29 @@ export const microcode: Record<Opcode, EvalFn> = {
   },
   [Opcode.Assign]: function (state: MachineState): void {
     const count = new IAssign(state.bytecode, state.pc).getCount();
-    const lhss = [];
-    const rhss = [];
-    for (let i = 0; i < count; ++i) {
-      lhss.push(state.os.pop());
-    }
-    for (let i = 0; i < count; ++i) {
-      rhss.push(state.os.pop());
-    }
 
     // Note that assignment here differs from how CS4215 assignments handled
     // it. We don't always have a frame and offset to assign into (e.g. maybe
     // we are assigning to a field of a struct?) so we assign directly to
     // an address.
-    for (let i = 0; i < count; ++i) {
-      state.heap.setFloat64(lhss[i], rhss[i]);
+
+    if (count == 1) {
+      const lhs = state.os.pop();
+      const rhs = state.os.peek();
+      state.heap.setFloat64(lhs, rhs);
+    } else {
+      const lhss = [];
+      for (let i = 0; i < count; ++i) {
+        lhss.push(state.os.pop());
+      }
+      const _rhs = state.os.peek(); // it's a tuple
+      const rhs = new TupleView(state.heap, _rhs);
+      for (let i = 0; i < count; ++i) {
+        state.heap.setFloat64(lhss[i], rhs.get(i));
+      }
     }
 
     state.pc += IAssign.size;
-    state.os.push(state.globals[Global.Nil]); // push a dummy value on
   },
   [Opcode.LoadNameLoc]: function (state: MachineState): void {
     const instr = new ILoadNameLoc(state.bytecode, state.pc);
@@ -226,6 +232,16 @@ export const microcode: Record<Opcode, EvalFn> = {
     const instr = new IPush(state.bytecode, state.pc);
     state.os.push(instr.val());
     state.pc += IPush.size;
+  },
+  [Opcode.PackTuple]: function (state: MachineState): void {
+    const instr = new IPackTuple(state.bytecode, state.pc);
+    const tuple = TupleView.allocate(state, instr.len());
+    for (let i = 0; i < instr.len(); ++i) {
+      tuple.set(i, state.os.pop());
+    }
+
+    state.os.push(tuple.addr);
+    state.pc += IPackTuple.size;
   },
   [Opcode.Done]: function (state: MachineState): void {
     throw new Error("Done not implemented.");

@@ -59,6 +59,7 @@ export const enum DataType {
   CallFrame,
   BlockFrame,
   Pointer,
+  Tuple,
 }
 
 /**
@@ -569,6 +570,33 @@ export class StringView extends NodeView {
   }
 }
 
+/**
+ * A collection of addresses. Not the same as a slice!
+ */
+export class TupleView extends NodeView {
+  static allocate(state: Memory, n: number): TupleView {
+    const addr = allocate(state, DataType.Tuple, 0, n);
+    return new TupleView(state.heap, addr);
+  }
+  constructor(heap: DataView, addr: Address) {
+    super(heap, addr);
+    this.checkType(DataType.Tuple);
+  }
+  toString(): string {
+    return ""; // @todo
+  }
+  get(i: number): Address {
+    return this.getChild(i);
+  }
+  set(i: number, data: Address): TupleView {
+    this.setChild(i, data);
+    return this;
+  }
+  size(): number {
+    return this.nrefs();
+  }
+}
+
 class PointerView extends NodeView {
   // @todo
   toString(): string {
@@ -595,4 +623,5 @@ const nodeClass: Record<DataType, { new (heap: DataView, addr: Address, ctx?: He
   [DataType.CallFrame]: CallFrameView,
   [DataType.BlockFrame]: BlockFrameView,
   [DataType.Pointer]: PointerView,
+  [DataType.Tuple]: TupleView,
 };

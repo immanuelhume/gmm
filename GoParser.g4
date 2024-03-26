@@ -43,11 +43,11 @@ condition : expr ;
 
 forClause : init=simpleStmt? ';' cond=condition? ';' post=simpleStmt? ;
 
-rangeClause : ( exprList '=' | identList ':=' ) 'range' expr ;
+rangeClause : ( lvalueList '=' | lvalueList ':=' ) 'range' expr ;
 
 exprStmt : expr ;
 
-returnStmt : 'return' expr? ;
+returnStmt : 'return' exprList? ;
 
 expr : primaryExpr | unaryOp expr | lhs=expr binaryOp rhs=expr ;
 exprList : expr (',' expr)* ;

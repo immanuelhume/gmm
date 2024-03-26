@@ -19,6 +19,7 @@ export const enum Opcode {
   LoadC,
   LoadStr,
   Push,
+  PackTuple,
   Done,
 }
 
@@ -575,6 +576,36 @@ export class IPush extends InstrView {
   }
 }
 
+/**
+ * Packs n items on the OS into a tuple.
+ */
+export class IPackTuple extends InstrView {
+  static size = 9;
+  readonly size = 9;
+
+  static emit(w: Emitter, ctx?: ParserRuleContext): IPackTuple {
+    const pc = w.reserve(Opcode.PackTuple, IPackTuple.size, ctx);
+    return new IPackTuple(w.code(), pc);
+  }
+
+  constructor(bytecode: DataView, addr: number) {
+    super(bytecode, addr);
+    assert(this.opcode() === Opcode.PackTuple);
+  }
+
+  toString(): string {
+    return `PackTuple ${this.len()}`;
+  }
+
+  len(): number {
+    return this.bytecode.getFloat64(this.addr + 1);
+  }
+  setLen(size: number): IPackTuple {
+    this.bytecode.setFloat64(this.addr + 1, size);
+    return this;
+  }
+}
+
 export class IDone extends InstrView {
   static size = 1;
   readonly size = 1;
@@ -609,6 +640,7 @@ const opcodeClass: Record<Opcode, { new (bytecode: DataView, addr: number): Inst
   [Opcode.LoadC]: ILoadC,
   [Opcode.LoadStr]: ILoadStr,
   [Opcode.Push]: IPush,
+  [Opcode.PackTuple]: IPackTuple,
   [Opcode.Done]: IDone,
 };
 
