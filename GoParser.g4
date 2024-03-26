@@ -79,8 +79,9 @@ typeDecl : 'type' ident type ;
 varDecl : 'var' ident type ('=' expr)? ;
 
 funcDecl : 'func' ident signature funcBody ;
-signature : '(' params ')' type? ;
+signature : '(' params ')' funcResult ;
 funcBody : block ;
+funcResult : type? | '(' type? ')' | '(' type (',' type)* ')' ;
 
 litFunc : 'func' signature funcBody ;
 

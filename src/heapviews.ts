@@ -46,7 +46,7 @@ export interface MachineState extends Memory, Registers {
  * These are data types used at runtime, i.e. the different kinds of nodes we
  * find in memory. They don't necessarily correspond to JS or Go data types.
  * */
-export const enum DataType {
+export enum DataType {
   Float64 = 0x00,
   Int64,
   Channel,
@@ -193,9 +193,15 @@ export abstract class NodeView {
   }
 
   checkType(type: DataType) {
-    assert(this.dataType() === type);
+    if (this.dataType() !== type) {
+      const want = DataType[type];
+      const got = DataType[this.dataType()];
+      throw new NodeTypeError(`Expected ${want}, got ${got}`);
+    }
   }
 }
+
+class NodeTypeError extends Error {}
 
 /**
  * ┌──────┬──────┐

@@ -39,6 +39,7 @@ import { VarDeclContext } from "./GoParser";
 import { FuncDeclContext } from "./GoParser";
 import { SignatureContext } from "./GoParser";
 import { FuncBodyContext } from "./GoParser";
+import { FuncResultContext } from "./GoParser";
 import { LitFuncContext } from "./GoParser";
 import { ParamsContext } from "./GoParser";
 import { ParamContext } from "./GoParser";
@@ -433,6 +434,16 @@ export default class GoParserListener extends ParseTreeListener {
    * @param ctx the parse tree
    */
   exitFuncBody?: (ctx: FuncBodyContext) => void;
+  /**
+   * Enter a parse tree produced by `GoParser.funcResult`.
+   * @param ctx the parse tree
+   */
+  enterFuncResult?: (ctx: FuncResultContext) => void;
+  /**
+   * Exit a parse tree produced by `GoParser.funcResult`.
+   * @param ctx the parse tree
+   */
+  exitFuncResult?: (ctx: FuncResultContext) => void;
   /**
    * Enter a parse tree produced by `GoParser.litFunc`.
    * @param ctx the parse tree

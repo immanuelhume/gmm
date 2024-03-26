@@ -476,11 +476,6 @@ export class Assembler extends GoVisitor<number> {
 
   visitAssignment = (ctx: AssignmentContext): number => {
     const nnames = ctx._lhs.lvalue_list().length;
-    const nexprs = ctx._rhs.expr_list().length;
-    // @todo: this is wrong! we may have a function returning multiple things
-    if (nnames !== nexprs) {
-      throw new Error(`${nnames} items on LHS, but ${nexprs} on RHS`);
-    }
     this.visit(ctx._rhs);
     this.visit(ctx._lhs);
     IAssign.emit(this.bc).setCount(nnames);
@@ -492,11 +487,6 @@ export class Assembler extends GoVisitor<number> {
     //
     // @todo make them into a common function
     const nnames = ctx._lhs.lvalue_list().length;
-    const nexprs = ctx._rhs.expr_list().length;
-    // @todo: this is wrong! we may have a function returning multiple things
-    if (nnames !== nexprs) {
-      throw new Error(`${nnames} items on LHS, but ${nexprs} on RHS`);
-    }
     this.visit(ctx._rhs);
     this.visit(ctx._lhs);
     IAssign.emit(this.bc).setCount(nnames);
