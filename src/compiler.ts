@@ -118,6 +118,10 @@ class CompileTimeEnvironment {
     // @todo: is it ok to throw an Error here?
     throw new Error(`Identifier [${ident}] not found in compile time environment`);
   }
+
+  depth(): number {
+    return this.env.length;
+  }
 }
 
 /**
@@ -177,8 +181,8 @@ export class Assembler extends GoVisitor<number> {
 
   main: number | undefined; // keep track of where the main function starts
 
-  contiss: Stack<IGoto[]>;
-  breakss: Stack<IGoto[]>;
+  contiss: Stack<[IGoto[], number]>;
+  breakss: Stack<[IGoto[], number]>;
 
   strPool: StrPool;
 
@@ -321,35 +325,34 @@ export class Assembler extends GoVisitor<number> {
   };
 
   visitForStmt = (ctx: ForStmtContext): number => {
-    this.contiss.push([]);
-    this.breakss.push([]);
-
+    const recordDepth = () => {
+      const curDepth = this.env.depth();
+      this.contiss.push([[], curDepth]);
+      this.breakss.push([[], curDepth]);
+    };
+    /**
+     * Call this at the location where break statements should jump to!
+     */
     const processContinuesAndBreaks = (postAddr: number) => {
       // Process continues and breaks.
-      const contis = this.contiss.pop();
-      const breaks = this.breakss.pop();
-      if (contis.length > 0) {
-        contis.forEach((conti) => conti.setWhere(postAddr));
-      }
-      if (breaks.length > 0) {
-        breaks.forEach((brk) => brk.setWhere(this.bc.wc()));
-
-        // We need to insert an [ExitBlock] here, because a break statement
-        // would not exit the block as per normal.
-        IExitBlock.emit(this.bc);
-      }
+      const [contis] = this.contiss.pop();
+      const [breaks] = this.breakss.pop();
+      contis.forEach((conti) => conti.setWhere(postAddr));
+      breaks.forEach((brk) => brk.setWhere(this.bc.wc()));
     };
 
     // There are three kinds of [for] loops.
     if (ctx.condition()) {
+      recordDepth();
+
       // basically a while loop
       const startAddr = this.bc.wc();
       this.visit(ctx.condition());
       const jof = IJof.emit(this.bc, ctx.condition());
       this.visit(ctx.block());
-      const goto = IGoto.emit(this.bc, ctx).setWhere(startAddr);
+      IGoto.emit(this.bc, ctx).setWhere(startAddr);
 
-      processContinuesAndBreaks(goto.addr);
+      processContinuesAndBreaks(startAddr);
 
       const endAddr = this.bc.wc();
       jof.setWhere(endAddr);
@@ -372,6 +375,8 @@ export class Assembler extends GoVisitor<number> {
           .map((lvalue) => lvalue.getText());
         this.env.pushFrame(idents);
       }
+
+      recordDepth();
 
       if (init) this.visit(init);
       const startAddr = this.bc.wc();
@@ -404,15 +409,27 @@ export class Assembler extends GoVisitor<number> {
   };
 
   visitBreakStmt = (_: BreakStmtContext): number => {
+    const curDepth = this.env.depth();
+    const [xs, startDepth] = this.breakss.peek();
+    const toClear = curDepth - startDepth;
+    for (let i = 0; i < toClear; ++i) {
+      IExitBlock.emit(this.bc);
+    }
     const goto = IGoto.emit(this.bc);
-    this.breakss.peek().push(goto);
+    xs.push(goto);
     return 0;
   };
 
   visitContinueStmt = (_: ContinueStmtContext): number => {
-    IExitBlock.emit(this.bc);
+    const curDepth = this.env.depth();
+    const [xs, startDepth] = this.contiss.peek();
+    const toClear = curDepth - startDepth;
+    console.log("clearing", toClear);
+    for (let i = 0; i < toClear; ++i) {
+      IExitBlock.emit(this.bc);
+    }
     const goto = IGoto.emit(this.bc);
-    this.contiss.peek().push(goto);
+    xs.push(goto);
     return 0;
   };
 
