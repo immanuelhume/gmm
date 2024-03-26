@@ -7,7 +7,7 @@ func main() {
 	}
 
 	a, b := 5, 2
-	if a+b != 3 {
+	if a-b != 3 {
 		panic("expected 3, got", a+b)
 	}
 }
