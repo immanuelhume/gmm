@@ -337,6 +337,104 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           }
         },
       ],
+      [
+        BinaryOp.Mul,
+        (state, lhsAddr, rhsAddr) => {
+          const lhs = new Float64View(state.heap, lhsAddr);
+          const rhs = new Float64View(state.heap, rhsAddr);
+
+          const lhsValue = lhs.getValue();
+          const rhsValue = rhs.getValue();
+
+          const resValue = lhsValue * rhsValue;
+
+          const res = Float64View.allocate(state);
+          res.setValue(resValue);
+
+          return res.addr;
+        },
+      ],
+      [
+        BinaryOp.Div,
+        (state, lhsAddr, rhsAddr) => {
+          const lhs = new Float64View(state.heap, lhsAddr);
+          const rhs = new Float64View(state.heap, rhsAddr);
+
+          const lhsValue = lhs.getValue();
+          const rhsValue = rhs.getValue();
+
+          const resValue = lhsValue / rhsValue;
+
+          const res = Float64View.allocate(state);
+          res.setValue(resValue);
+
+          return res.addr;
+        },
+      ],
+      [
+        BinaryOp.Leq,
+        (state, lhsAddr, rhsAddr) => {
+          const lhs = new Float64View(state.heap, lhsAddr);
+          const rhs = new Float64View(state.heap, rhsAddr);
+
+          const lhsValue = lhs.getValue();
+          const rhsValue = rhs.getValue();
+
+          if (lhsValue <= rhsValue) {
+            return state.globals[Global.True];
+          } else {
+            return state.globals[Global.False];
+          }
+        },
+      ],
+      [
+        BinaryOp.Geq,
+        (state, lhsAddr, rhsAddr) => {
+          const lhs = new Float64View(state.heap, lhsAddr);
+          const rhs = new Float64View(state.heap, rhsAddr);
+
+          const lhsValue = lhs.getValue();
+          const rhsValue = rhs.getValue();
+
+          if (lhsValue >= rhsValue) {
+            return state.globals[Global.True];
+          } else {
+            return state.globals[Global.False];
+          }
+        },
+      ],
+      [
+        BinaryOp.L,
+        (state, lhsAddr, rhsAddr) => {
+          const lhs = new Float64View(state.heap, lhsAddr);
+          const rhs = new Float64View(state.heap, rhsAddr);
+
+          const lhsValue = lhs.getValue();
+          const rhsValue = rhs.getValue();
+
+          if (lhsValue < rhsValue) {
+            return state.globals[Global.True];
+          } else {
+            return state.globals[Global.False];
+          }
+        },
+      ],
+      [
+        BinaryOp.G,
+        (state, lhsAddr, rhsAddr) => {
+          const lhs = new Float64View(state.heap, lhsAddr);
+          const rhs = new Float64View(state.heap, rhsAddr);
+
+          const lhsValue = lhs.getValue();
+          const rhsValue = rhs.getValue();
+
+          if (lhsValue > rhsValue) {
+            return state.globals[Global.True];
+          } else {
+            return state.globals[Global.False];
+          }
+        },
+      ],
     ]),
   ],
 ]);
@@ -367,6 +465,12 @@ const unaryBuiltins = new Map<[DataType, UnaryOp], UnaryOpFn>([
       res.setValue(-val);
 
       return res.addr;
+    },
+  ],
+  [
+    [DataType.Float64, UnaryOp.Add],
+    (state, addr) => {
+      return addr;
     },
   ],
 ]);
