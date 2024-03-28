@@ -39,6 +39,7 @@ import {
   IJof,
   IPackTuple,
   IPackStruct,
+  IGetStructField,
 } from "./instructions";
 
 type EvalFn = (state: MachineState) => void;
@@ -255,6 +256,14 @@ export const microcode: Record<Opcode, EvalFn> = {
     state.os.push(struct.addr);
     state.pc += IPackStruct.size;
   },
+  [Opcode.GetStructField]: function (state: MachineState): void {
+    const instr = new IGetStructField(state.bytecode, state.pc);
+    const struct = new StructView(state.heap, state.os.pop());
+    const fieldAddr = struct.getField(instr.offset());
+
+    state.os.push(fieldAddr);
+    state.pc += IGetStructField.size;
+  },
   [Opcode.Done]: function (state: MachineState): void {
     throw new Error("Done not implemented.");
   },
@@ -327,7 +336,8 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
 
           const lhsValue = lhs.getValue();
           const rhsValue = rhs.getValue();
-          if (lhsValue != rhsValue) {
+
+          if (lhsValue !== rhsValue) {
             return state.globals[Global.True];
           } else {
             return state.globals[Global.False];

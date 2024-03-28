@@ -21,6 +21,7 @@ export const enum Opcode {
   Push,
   PackTuple,
   PackStruct,
+  GetStructField,
   Done,
 }
 
@@ -639,6 +640,36 @@ export class IPackStruct extends InstrView {
   }
 }
 
+/**
+ * Packs n items on the OS into a struct.
+ */
+export class IGetStructField extends InstrView {
+  static size = 2;
+  readonly size = 2;
+
+  static emit(w: Emitter, ctx?: ParserRuleContext): IGetStructField {
+    const pc = w.reserve(Opcode.GetStructField, IGetStructField.size, ctx);
+    return new IGetStructField(w.code(), pc);
+  }
+
+  constructor(bytecode: DataView, addr: number) {
+    super(bytecode, addr);
+    assert(this.opcode() === Opcode.GetStructField);
+  }
+
+  toString(): string {
+    return `GetStructField ${this.offset()}`;
+  }
+
+  offset(): number {
+    return this.bytecode.getUint8(this.addr + 1);
+  }
+  setOffset(size: number): IGetStructField {
+    this.bytecode.setUint8(this.addr + 1, size);
+    return this;
+  }
+}
+
 export class IDone extends InstrView {
   static size = 1;
   readonly size = 1;
@@ -675,6 +706,7 @@ const opcodeClass: Record<Opcode, { new (bytecode: DataView, addr: number): Inst
   [Opcode.Push]: IPush,
   [Opcode.PackTuple]: IPackTuple,
   [Opcode.PackStruct]: IPackStruct,
+  [Opcode.GetStructField]: IGetStructField,
   [Opcode.Done]: IDone,
 };
 
