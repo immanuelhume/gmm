@@ -1,7 +1,6 @@
-import { ParserRuleContext, CharStream, CommonTokenStream, RuleNode } from "antlr4";
+import { ParserRuleContext, CharStream, CommonTokenStream } from "antlr4";
 import GoLexer from "../antlr/GoLexer";
 import GoParser, {
-  ChannelTypeContext,
   ExprListContext,
   FieldContext,
   LitStrContext,
@@ -9,8 +8,6 @@ import GoParser, {
   LnameContext,
   StructTypeContext,
   TypeContext,
-  TypeLitContext,
-  TypeNameContext,
 } from "../antlr/GoParser";
 import {
   AssignmentContext,
@@ -30,7 +27,6 @@ import {
   NumericOpContext,
   ForStmtContext,
   RelOpContext,
-  LvalueContext,
   BreakStmtContext,
   ContinueStmtContext,
   GoStmtContext,
@@ -60,6 +56,7 @@ import {
   ILoadStr,
   IPackTuple,
   IPackStruct,
+  IGetStructField,
 } from "./instructions";
 import { ArrayStack, Stack, StrPool } from "./util";
 import { builtinSymbols } from "./heapviews";
@@ -187,10 +184,9 @@ class DeclScanner extends GoVisitor<string[]> {
   }
 }
 
-const getTypeRepr = (ctx: TypeContext): TypeRepr => {
+const getTypeRepr = (ctx: TypeContext, store: TypeStore): TypeRepr | undefined => {
   if (ctx.typeName()) {
-    const data = ctx.typeName().getText();
-    return { kind: "alias", data };
+    return store.lookup(ctx.typeName().getText());
   } else if (ctx.typeLit()) {
     const lit = ctx.typeLit();
     if (lit.structType()) {
@@ -218,6 +214,11 @@ const getTypeReprStruct = (ctx: StructTypeContext): StructType => {
 
 class TypeDeclScanner extends GoVisitor<[string, TypeRepr][]> {
   private stop: boolean = false;
+  private store: TypeStore;
+  constructor(store: TypeStore) {
+    super();
+    this.store = store;
+  }
   visitProg = (ctx: ProgContext) => {
     if (this.stop) return [];
     this.stop = true;
@@ -230,7 +231,10 @@ class TypeDeclScanner extends GoVisitor<[string, TypeRepr][]> {
   };
   visitTypeDecl = (ctx: TypeDeclContext) => {
     const name = ctx.name().getText();
-    const ty = getTypeRepr(ctx.type_());
+    const ty = getTypeRepr(ctx.type_(), this.store);
+    if (ty === undefined) {
+      throw new Error(`Could not find type for ${name}`);
+    }
     return [[name, ty] as [string, TypeRepr]];
   };
   visitChildren(node: ParserRuleContext): [string, TypeRepr][] {
@@ -239,8 +243,7 @@ class TypeDeclScanner extends GoVisitor<[string, TypeRepr][]> {
   }
 }
 
-// @todo allow function types?
-type TypeRepr = StructType | ChannelType | PrimitiveType | AliasType;
+type TypeRepr = StructType | ChannelType | PrimitiveType | FuncType;
 type StructType = {
   kind: "struct";
   fields: [string, string][];
@@ -251,17 +254,60 @@ type ChannelType = {
 };
 type PrimitiveType = {
   kind: "primitive";
+  name: PrimitiveTypeName;
 };
-type AliasType = {
-  kind: "alias";
-  data: string;
+type FuncType = {
+  kind: "func";
+  params: TypeRepr[];
+  results: TypeRepr[];
 };
 
-const _primitiveTypes = ["int64", "float64"];
-const primitiveTypes: Map<string, PrimitiveType> = new Map();
-for (const prim of _primitiveTypes) {
-  primitiveTypes.set(prim, { kind: "primitive" });
-}
+const arraysEqual = <T>(xs: T[], ys: T[], equal: (x: T, y: T) => boolean): boolean => {
+  if (xs.length !== ys.length) return false;
+  for (let i = 0; i < xs.length; ++i) {
+    const x = xs[i];
+    const y = ys[i];
+    if (!equal(x, y)) return false;
+  }
+  return true;
+};
+
+const areTypesEqual = (lhs: TypeRepr, rhs: TypeRepr): boolean => {
+  if (lhs.kind !== rhs.kind) return false;
+  let _rhs;
+  switch (lhs.kind) {
+    case "struct":
+      _rhs = rhs as StructType;
+      return arraysEqual(lhs.fields, _rhs.fields, (a, b) => a[0] === b[0] && a[1] === b[1]);
+    case "chan":
+      _rhs = rhs as ChannelType;
+      return lhs.elem === _rhs.elem;
+    case "primitive":
+      _rhs = rhs as PrimitiveType;
+      return lhs.name === _rhs.name;
+    case "func":
+      _rhs = rhs as FuncType;
+      return (
+        arraysEqual(lhs.params, _rhs.params, (u, v) => u === v) && arraysEqual(lhs.results, _rhs.results, areTypesEqual)
+      );
+  }
+};
+
+type PrimitiveTypeName = "int64" | "float64" | "bool" | "string";
+const makePrimitive = (name: PrimitiveTypeName): PrimitiveType => ({ kind: "primitive", name });
+const primitiveTypes: Map<string, PrimitiveType> = new Map([
+  ["int", makePrimitive("int64")],
+  ["float", makePrimitive("float64")],
+  ["int64", makePrimitive("int64")],
+  ["float64", makePrimitive("float64")],
+  ["bool", makePrimitive("bool")],
+  ["string", makePrimitive("string")],
+]);
+
+// const builtinFuncTypes: Map<string, TypeRepr> = new Map([
+//   ["dbg", {kind: "func", params: [], results: []}],
+//   ["log", {kind: "func", params: [], results: []}],
+// ])
 
 type TypeFrame = Map<string, TypeRepr>;
 class TypeStore {
@@ -282,23 +328,29 @@ class TypeStore {
   }
 }
 class TypeEnv {
-  frames: Map<string, string>[] = []; // search from left -> right
+  private frames: Map<string, TypeRepr>[] = []; // search from left -> right
   pushFrame() {
     this.frames.unshift(new Map());
+  }
+  pushFrame_(frame: Map<string, TypeRepr>) {
+    this.frames.unshift(frame);
   }
   popFrame() {
     this.frames.unshift();
   }
-  lookup(name: string): string | undefined {
+  lookup(name: string): TypeRepr | undefined {
     for (const frame of this.frames) {
       const ty = frame.get(name);
       if (ty !== undefined) return ty;
     }
     return undefined;
   }
+  set(name: string, ty: TypeRepr) {
+    this.frames[0].set(name, ty);
+  }
 }
 
-class Typer extends GoVisitor<string | undefined> {
+class Typer extends GoVisitor<TypeRepr[] | undefined> {
   store: TypeStore;
   env: TypeEnv;
   constructor(store: TypeStore, env: TypeEnv) {
@@ -306,6 +358,116 @@ class Typer extends GoVisitor<string | undefined> {
     this.store = store;
     this.env = env;
   }
+  visitExpr = (ctx: ExprContext) => {
+    if (ctx.binaryOp()) {
+      const lhs = this.visit(ctx._lhs);
+      const rhs = this.visit(ctx._rhs);
+      if (lhs === undefined || rhs === undefined) {
+        return undefined;
+      }
+      // @todo we're assuming all binary operations take the same types?
+      if (!arraysEqual(lhs, rhs, areTypesEqual)) return undefined;
+      return lhs;
+    } else if (ctx.unaryOp()) {
+      throw new Error("Unimplemented");
+    } else if (ctx.primaryExpr()) {
+      return this.visit(ctx.primaryExpr());
+    } else {
+      throw new Error("Unreachable");
+    }
+  };
+  visitPrimaryExpr = (ctx: PrimaryExprContext): TypeRepr[] | undefined => {
+    if (ctx.lit()) {
+      return this.visit(ctx.lit());
+    } else if (ctx.name()) {
+      return this.visit(ctx.name());
+    } else if (ctx._fn) {
+      const ty = this.visit(ctx._fn);
+      if (ty === undefined || ty.length === 0 || ty[0].kind !== "func") return undefined;
+      return ty[0].results;
+    } else if (ctx._base) {
+      const baseType = this.visit(ctx._base);
+      if (baseType === undefined) return undefined;
+      const final = ctx.selector().name().getText();
+      if (baseType.length > 1) {
+        // Doesn't make sense.
+        return undefined;
+      }
+      switch (baseType[0].kind) {
+        case "struct":
+          const field = baseType[0].fields.find(([name, _]) => name === final);
+          if (field === undefined) return undefined;
+          const ret = this.store.lookup(field[1]);
+          if (ret === undefined) return ret;
+          return [ret];
+        default:
+          return undefined;
+      }
+    }
+  };
+  visitLitStruct = (ctx: LitStructContext): TypeRepr[] | undefined => {
+    if (ctx.typeName()) {
+      // @todo Should we type-check the fields?
+      const ret = this.store.lookup(ctx.typeName().getText());
+      if (ret === undefined) return ret;
+      return [ret];
+    } else if (ctx.structType()) {
+      return [getTypeReprStruct(ctx.structType())];
+    } else {
+      throw new Error("Unreachable");
+    }
+  };
+  visitNumber = (ctx: NumberContext): TypeRepr[] | undefined => {
+    if (ctx.INT()) {
+      return [{ kind: "primitive", name: "int64" }];
+    } else if (ctx.FLOAT()) {
+      return [{ kind: "primitive", name: "float64" }];
+    } else {
+      throw new Error("Unreachable");
+    }
+  };
+  visitName = (ctx: NameContext): TypeRepr[] | undefined => {
+    const ret = this.env.lookup(ctx.getText());
+    if (ret === undefined) return ret;
+    return [ret];
+  };
+  visitChildren(node: ParserRuleContext): TypeRepr[] | undefined {
+    if (!node.children) return undefined;
+    const ret = node.children
+      .flatMap((child) => this.visit(child))
+      .filter((child) => child !== undefined) as TypeRepr[];
+    if (ret.length === 0) return undefined;
+    return ret;
+  }
+}
+
+class FuncTypeBumper extends GoVisitor<void> {
+  tenv: TypeEnv;
+  tstore: TypeStore;
+  constructor(tenv: TypeEnv, tstore: TypeStore) {
+    super();
+    this.tenv = tenv;
+    this.tstore = tstore;
+  }
+  visitFuncDecl = (ctx: FuncDeclContext) => {
+    const fname = ctx.name().getText();
+    const _params = ctx
+      .signature()
+      .params()
+      .param_list()
+      .map((param) => this.tstore.lookup(param.typeName().getText()));
+    const _results = ctx
+      .signature()
+      .funcResult()
+      .type__list()
+      .map((ty) => getTypeRepr(ty, this.tstore));
+    if (_results.includes(undefined) || _params.includes(undefined)) {
+      throw new Error(`Could not determine function type for ${fname}`);
+    }
+    const params = _params as TypeRepr[];
+    const results = _results as TypeRepr[];
+    this.tenv.set(fname, { kind: "func", params, results });
+  };
 }
 
 export class Assembler extends GoVisitor<number> {
@@ -333,15 +495,16 @@ export class Assembler extends GoVisitor<number> {
     this.tstore = new TypeStore();
 
     this.env.pushFrame(builtinSymbols);
+    this.tenv.pushFrame();
     this.tstore.pushFrame(primitiveTypes);
   }
 
-  static scanDecls = (ctx: ParserRuleContext): string[] => {
+  scanDecls = (ctx: ParserRuleContext): string[] => {
     const scanner = new DeclScanner();
     return scanner.visit(ctx);
   };
-  static scanTypeDecls = (ctx: ParserRuleContext): TypeFrame => {
-    const scanner = new TypeDeclScanner();
+  scanTypeDecls = (ctx: ParserRuleContext): TypeFrame => {
+    const scanner = new TypeDeclScanner(this.tstore);
     const frame = scanner.visit(ctx);
     return new Map(frame);
   };
@@ -352,11 +515,15 @@ export class Assembler extends GoVisitor<number> {
   };
 
   visitProg = (ctx: ProgContext) => {
-    const names = Assembler.scanDecls(ctx);
+    const names = this.scanDecls(ctx);
     this.env.pushFrame(names);
+    this.tenv.pushFrame();
 
-    const types = Assembler.scanTypeDecls(ctx);
+    const types = this.scanTypeDecls(ctx);
     this.tstore.pushFrame(types);
+
+    // Before compiling the body, let's push the type of functions.
+    new FuncTypeBumper(this.tenv, this.tstore).visit(ctx);
 
     // Wrap the entire program in a block. Don't care about exiting the block.
     IEnterBlock.emit(this.bc, ctx).setNumVars(names.length);
@@ -398,11 +565,12 @@ export class Assembler extends GoVisitor<number> {
       });
 
     const fnPc = this.bc.wc();
-
     ldf.setPc(fnPc).setArgc(params.length);
 
     this.env.pushFrame(params);
+    this.tenv.pushFrame();
     this.visit(ctx.funcBody()); // compile the body
+    this.tenv.popFrame();
     this.env.popFrame();
 
     // @todo: also handle non-returning funcs - this involves pushing "undefined"
@@ -448,9 +616,6 @@ export class Assembler extends GoVisitor<number> {
       ILoadNameLoc.emit(this.bc, ctx).setFrame(frame).setOffset(offset);
       IAssign.emit(this.bc, ctx).setCount(1);
     } else {
-      // IPush.emit(this.bc); // @todo: FIXME we just pushin dummy stuff for now
-      // @todo: need to find a way to handle default initialization
-      //
       // perhaps we can have a global representing "uninitialized"? and then initialize it when
       // we first access the value?
       // console.log(`variable ${ctx.name().getText()} was default initialized`);
@@ -460,12 +625,11 @@ export class Assembler extends GoVisitor<number> {
   };
 
   visitTypeDecl = (ctx: TypeDeclContext): number => {
-    // @todo: wtf to do for type declarations?
+    // @todo: is there anything to do for type declarations?
     return 0;
   };
 
   visitReturnStmt = (ctx: ReturnStmtContext) => {
-    // @todo handle empty return statements! - we probably can just check if the list is empty, then push Nil or something?
     const n = this.visit(ctx.exprList()); // compile the thing to return
     IReturn.emit(this.bc, ctx);
     return n;
@@ -521,6 +685,7 @@ export class Assembler extends GoVisitor<number> {
           .lname_list()
           .map((lvalue) => lvalue.getText());
         this.env.pushFrame(names);
+        this.tenv.pushFrame();
       }
 
       recordDepth();
@@ -541,6 +706,7 @@ export class Assembler extends GoVisitor<number> {
 
       if (hasLoopVar) {
         IExitBlock.emit(this.bc);
+        this.tenv.popFrame();
         this.env.popFrame();
       }
     } else if (ctx.rangeClause()) {
@@ -593,17 +759,20 @@ export class Assembler extends GoVisitor<number> {
   };
 
   visitBlock = (ctx: BlockContext): number => {
-    const names = Assembler.scanDecls(ctx);
+    const names = this.scanDecls(ctx);
     this.env.pushFrame(names);
+    this.tenv.pushFrame();
 
-    const types = Assembler.scanTypeDecls(ctx);
+    const types = this.scanTypeDecls(ctx);
     this.tstore.pushFrame(types);
 
     IEnterBlock.emit(this.bc).setNumVars(names.length);
     this.visitChildren(ctx);
     IExitBlock.emit(this.bc);
 
+    this.tenv.popFrame();
     this.env.popFrame();
+    this.tstore.popFrame();
     return 0;
   };
 
@@ -645,6 +814,19 @@ export class Assembler extends GoVisitor<number> {
     this.visit(ctx._rhs);
     this.visit(ctx._lhs);
     IAssign.emit(this.bc).setCount(nnames);
+
+    const rhsTypes = ctx._rhs.expr_list().flatMap((expr) => new Typer(this.tstore, this.tenv).visit(expr));
+    if (rhsTypes.length !== nnames) {
+      throw new Error(`There are ${nnames} on LHS but ${rhsTypes.length} on RHS`);
+    }
+    for (let i = 0; i < nnames; ++i) {
+      const lhs = ctx._lhs.lname_list()[i].getText();
+      const ty = rhsTypes[i];
+      if (ty === undefined) {
+        throw new Error(`Could not determine type for ${lhs}`);
+      }
+      this.tenv.set(lhs, ty);
+    }
     return 0;
   };
 
@@ -678,7 +860,26 @@ export class Assembler extends GoVisitor<number> {
 
       ICall.emit(this.bc, ctx).setArgc(argc);
     } else if (ctx._base) {
-      // @todo: figure out this shit - it means we are accessing a field/method?
+      const baseType = new Typer(this.tstore, this.tenv).visit(ctx._base);
+      if (baseType === undefined || baseType.length === 0) {
+        throw new Error(`Could not deduce type for ${ctx.getText()}`);
+      }
+      if (baseType.length > 1) {
+        throw new Error(`Bad dot access on ${ctx.getText()} - multiple values on LHS`);
+      }
+      switch (baseType[0].kind) {
+        case "struct":
+          const final = ctx.selector().name().getText();
+          const offset = baseType[0].fields.findIndex(([name, _]) => name === final);
+          if (offset === -1) {
+            throw new Error(`Field ${final} does not exist on ${ctx._base.getText()}`);
+          }
+          this.visit(ctx._base); // get the base onto the OS
+          IGetStructField.emit(this.bc).setOffset(offset);
+          break;
+        default:
+          throw new Error("Expected struct");
+      }
     }
     return 1;
   };
@@ -752,7 +953,15 @@ export class Assembler extends GoVisitor<number> {
   };
 
   visitNumber = (ctx: NumberContext): number => {
-    const val = parseInt(ctx.getText());
+    let val = 0;
+    const raw = ctx.getText();
+    if (ctx.INT()) {
+      val = parseInt(raw);
+    } else if (ctx.FLOAT()) {
+      val = parseFloat(raw);
+    } else {
+      throw new Error("Unreachable");
+    }
     ILoadC.emit(this.bc).setVal(val);
     return 1;
   };
@@ -791,16 +1000,14 @@ export class Assembler extends GoVisitor<number> {
           break;
         case "chan":
         case "primitive":
-        case "alias":
           throw new Error(`Expectd struct type, but got ${repr.kind}`);
       }
     } else if (ctx.structType()) {
       const repr = getTypeReprStruct(ctx.structType());
-      // @todo
+      // @todo or we just don't allow it i.e. it would be a parse error
       throw new Error("Unimplemented");
     } else {
-      // @todo
-      throw new Error("Unimplemented");
+      throw new Error("Unreachable");
     }
     return 1;
   };
