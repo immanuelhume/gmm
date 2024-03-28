@@ -50,8 +50,8 @@ import { ChannelTypeContext } from "./GoParser";
 import { ElementTypeContext } from "./GoParser";
 import { StructTypeContext } from "./GoParser";
 import { FieldDeclContext } from "./GoParser";
-import { IdentContext } from "./GoParser";
-import { IdentListContext } from "./GoParser";
+import { NameContext } from "./GoParser";
+import { NameListContext } from "./GoParser";
 import { LitContext } from "./GoParser";
 import { LitNilContext } from "./GoParser";
 import { LitStrContext } from "./GoParser";
@@ -545,25 +545,25 @@ export default class GoParserListener extends ParseTreeListener {
    */
   exitFieldDecl?: (ctx: FieldDeclContext) => void;
   /**
-   * Enter a parse tree produced by `GoParser.ident`.
+   * Enter a parse tree produced by `GoParser.name`.
    * @param ctx the parse tree
    */
-  enterIdent?: (ctx: IdentContext) => void;
+  enterName?: (ctx: NameContext) => void;
   /**
-   * Exit a parse tree produced by `GoParser.ident`.
+   * Exit a parse tree produced by `GoParser.name`.
    * @param ctx the parse tree
    */
-  exitIdent?: (ctx: IdentContext) => void;
+  exitName?: (ctx: NameContext) => void;
   /**
-   * Enter a parse tree produced by `GoParser.identList`.
+   * Enter a parse tree produced by `GoParser.nameList`.
    * @param ctx the parse tree
    */
-  enterIdentList?: (ctx: IdentListContext) => void;
+  enterNameList?: (ctx: NameListContext) => void;
   /**
-   * Exit a parse tree produced by `GoParser.identList`.
+   * Exit a parse tree produced by `GoParser.nameList`.
    * @param ctx the parse tree
    */
-  exitIdentList?: (ctx: IdentListContext) => void;
+  exitNameList?: (ctx: NameListContext) => void;
   /**
    * Enter a parse tree produced by `GoParser.lit`.
    * @param ctx the parse tree

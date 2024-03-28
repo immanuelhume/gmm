@@ -126,8 +126,8 @@ export default class GoParser extends Parser {
   public static readonly RULE_elementType = 45;
   public static readonly RULE_structType = 46;
   public static readonly RULE_fieldDecl = 47;
-  public static readonly RULE_ident = 48;
-  public static readonly RULE_identList = 49;
+  public static readonly RULE_name = 48;
+  public static readonly RULE_nameList = 49;
   public static readonly RULE_lit = 50;
   public static readonly RULE_litNil = 51;
   public static readonly RULE_litStr = 52;
@@ -277,8 +277,8 @@ export default class GoParser extends Parser {
     "elementType",
     "structType",
     "fieldDecl",
-    "ident",
-    "identList",
+    "name",
+    "nameList",
     "lit",
     "litNil",
     "litStr",
@@ -733,7 +733,7 @@ export default class GoParser extends Parser {
       this.enterOuterAlt(localctx, 1);
       {
         this.state = 171;
-        this.ident();
+        this.name();
       }
     } catch (re) {
       if (re instanceof RecognitionException) {
@@ -1131,7 +1131,7 @@ export default class GoParser extends Parser {
           case 42:
             {
               this.state = 236;
-              this.ident();
+              this.name();
             }
             break;
           case 1:
@@ -1220,7 +1220,7 @@ export default class GoParser extends Parser {
         this.state = 249;
         this.match(GoParser.PERIOD);
         this.state = 250;
-        this.ident();
+        this.name();
       }
     } catch (re) {
       if (re instanceof RecognitionException) {
@@ -1626,7 +1626,7 @@ export default class GoParser extends Parser {
         this.state = 303;
         this.match(GoParser.TYPE);
         this.state = 304;
-        this.ident();
+        this.name();
         this.state = 305;
         this.type_();
       }
@@ -1654,7 +1654,7 @@ export default class GoParser extends Parser {
         this.state = 307;
         this.match(GoParser.VAR);
         this.state = 308;
-        this.ident();
+        this.name();
         this.state = 309;
         this.type_();
         this.state = 312;
@@ -1692,7 +1692,7 @@ export default class GoParser extends Parser {
         this.state = 314;
         this.match(GoParser.FUNC);
         this.state = 315;
-        this.ident();
+        this.name();
         this.state = 316;
         this.signature();
         this.state = 317;
@@ -1953,7 +1953,7 @@ export default class GoParser extends Parser {
       this.enterOuterAlt(localctx, 1);
       {
         this.state = 367;
-        this.ident();
+        this.name();
         this.state = 368;
         this.typeName();
       }
@@ -2017,7 +2017,7 @@ export default class GoParser extends Parser {
       this.enterOuterAlt(localctx, 1);
       {
         this.state = 374;
-        this.ident();
+        this.name();
       }
     } catch (re) {
       if (re instanceof RecognitionException) {
@@ -2170,7 +2170,7 @@ export default class GoParser extends Parser {
       this.enterOuterAlt(localctx, 1);
       {
         this.state = 397;
-        this.ident();
+        this.name();
         this.state = 398;
         this.type_();
       }
@@ -2188,9 +2188,9 @@ export default class GoParser extends Parser {
     return localctx;
   }
   // @RuleVersion(0)
-  public ident(): IdentContext {
-    let localctx: IdentContext = new IdentContext(this, this._ctx, this.state);
-    this.enterRule(localctx, 96, GoParser.RULE_ident);
+  public name(): NameContext {
+    let localctx: NameContext = new NameContext(this, this._ctx, this.state);
+    this.enterRule(localctx, 96, GoParser.RULE_name);
     try {
       this.enterOuterAlt(localctx, 1);
       {
@@ -2211,15 +2211,15 @@ export default class GoParser extends Parser {
     return localctx;
   }
   // @RuleVersion(0)
-  public identList(): IdentListContext {
-    let localctx: IdentListContext = new IdentListContext(this, this._ctx, this.state);
-    this.enterRule(localctx, 98, GoParser.RULE_identList);
+  public nameList(): NameListContext {
+    let localctx: NameListContext = new NameListContext(this, this._ctx, this.state);
+    this.enterRule(localctx, 98, GoParser.RULE_nameList);
     let _la: number;
     try {
       this.enterOuterAlt(localctx, 1);
       {
         this.state = 402;
-        this.ident();
+        this.name();
         this.state = 407;
         this._errHandler.sync(this);
         _la = this._input.LA(1);
@@ -2229,7 +2229,7 @@ export default class GoParser extends Parser {
               this.state = 403;
               this.match(GoParser.COMMA);
               this.state = 404;
-              this.ident();
+              this.name();
             }
           }
           this.state = 409;
@@ -3037,8 +3037,8 @@ export class LvalueContext extends ParserRuleContext {
     super(parent, invokingState);
     this.parser = parser;
   }
-  public ident(): IdentContext {
-    return this.getTypedRuleContext(IdentContext, 0) as IdentContext;
+  public name(): NameContext {
+    return this.getTypedRuleContext(NameContext, 0) as NameContext;
   }
   public get ruleIndex(): number {
     return GoParser.RULE_lvalue;
@@ -3383,8 +3383,8 @@ export class PrimaryExprContext extends ParserRuleContext {
     super(parent, invokingState);
     this.parser = parser;
   }
-  public ident(): IdentContext {
-    return this.getTypedRuleContext(IdentContext, 0) as IdentContext;
+  public name(): NameContext {
+    return this.getTypedRuleContext(NameContext, 0) as NameContext;
   }
   public lit(): LitContext {
     return this.getTypedRuleContext(LitContext, 0) as LitContext;
@@ -3429,8 +3429,8 @@ export class SelectorContext extends ParserRuleContext {
   public PERIOD(): TerminalNode {
     return this.getToken(GoParser.PERIOD, 0);
   }
-  public ident(): IdentContext {
-    return this.getTypedRuleContext(IdentContext, 0) as IdentContext;
+  public name(): NameContext {
+    return this.getTypedRuleContext(NameContext, 0) as NameContext;
   }
   public get ruleIndex(): number {
     return GoParser.RULE_selector;
@@ -3859,8 +3859,8 @@ export class TypeDeclContext extends ParserRuleContext {
   public TYPE(): TerminalNode {
     return this.getToken(GoParser.TYPE, 0);
   }
-  public ident(): IdentContext {
-    return this.getTypedRuleContext(IdentContext, 0) as IdentContext;
+  public name(): NameContext {
+    return this.getTypedRuleContext(NameContext, 0) as NameContext;
   }
   public type_(): TypeContext {
     return this.getTypedRuleContext(TypeContext, 0) as TypeContext;
@@ -3896,8 +3896,8 @@ export class VarDeclContext extends ParserRuleContext {
   public VAR(): TerminalNode {
     return this.getToken(GoParser.VAR, 0);
   }
-  public ident(): IdentContext {
-    return this.getTypedRuleContext(IdentContext, 0) as IdentContext;
+  public name(): NameContext {
+    return this.getTypedRuleContext(NameContext, 0) as NameContext;
   }
   public type_(): TypeContext {
     return this.getTypedRuleContext(TypeContext, 0) as TypeContext;
@@ -3939,8 +3939,8 @@ export class FuncDeclContext extends ParserRuleContext {
   public FUNC(): TerminalNode {
     return this.getToken(GoParser.FUNC, 0);
   }
-  public ident(): IdentContext {
-    return this.getTypedRuleContext(IdentContext, 0) as IdentContext;
+  public name(): NameContext {
+    return this.getTypedRuleContext(NameContext, 0) as NameContext;
   }
   public signature(): SignatureContext {
     return this.getTypedRuleContext(SignatureContext, 0) as SignatureContext;
@@ -4170,8 +4170,8 @@ export class ParamContext extends ParserRuleContext {
     super(parent, invokingState);
     this.parser = parser;
   }
-  public ident(): IdentContext {
-    return this.getTypedRuleContext(IdentContext, 0) as IdentContext;
+  public name(): NameContext {
+    return this.getTypedRuleContext(NameContext, 0) as NameContext;
   }
   public typeName(): TypeNameContext {
     return this.getTypedRuleContext(TypeNameContext, 0) as TypeNameContext;
@@ -4238,8 +4238,8 @@ export class TypeNameContext extends ParserRuleContext {
     super(parent, invokingState);
     this.parser = parser;
   }
-  public ident(): IdentContext {
-    return this.getTypedRuleContext(IdentContext, 0) as IdentContext;
+  public name(): NameContext {
+    return this.getTypedRuleContext(NameContext, 0) as NameContext;
   }
   public get ruleIndex(): number {
     return GoParser.RULE_typeName;
@@ -4417,8 +4417,8 @@ export class FieldDeclContext extends ParserRuleContext {
     super(parent, invokingState);
     this.parser = parser;
   }
-  public ident(): IdentContext {
-    return this.getTypedRuleContext(IdentContext, 0) as IdentContext;
+  public name(): NameContext {
+    return this.getTypedRuleContext(NameContext, 0) as NameContext;
   }
   public type_(): TypeContext {
     return this.getTypedRuleContext(TypeContext, 0) as TypeContext;
@@ -4446,7 +4446,7 @@ export class FieldDeclContext extends ParserRuleContext {
   }
 }
 
-export class IdentContext extends ParserRuleContext {
+export class NameContext extends ParserRuleContext {
   constructor(parser?: GoParser, parent?: ParserRuleContext, invokingState?: number) {
     super(parent, invokingState);
     this.parser = parser;
@@ -4455,38 +4455,38 @@ export class IdentContext extends ParserRuleContext {
     return this.getToken(GoParser.WORD, 0);
   }
   public get ruleIndex(): number {
-    return GoParser.RULE_ident;
+    return GoParser.RULE_name;
   }
   public enterRule(listener: GoParserListener): void {
-    if (listener.enterIdent) {
-      listener.enterIdent(this);
+    if (listener.enterName) {
+      listener.enterName(this);
     }
   }
   public exitRule(listener: GoParserListener): void {
-    if (listener.exitIdent) {
-      listener.exitIdent(this);
+    if (listener.exitName) {
+      listener.exitName(this);
     }
   }
   // @Override
   public accept<Result>(visitor: GoParserVisitor<Result>): Result {
-    if (visitor.visitIdent) {
-      return visitor.visitIdent(this);
+    if (visitor.visitName) {
+      return visitor.visitName(this);
     } else {
       return visitor.visitChildren(this);
     }
   }
 }
 
-export class IdentListContext extends ParserRuleContext {
+export class NameListContext extends ParserRuleContext {
   constructor(parser?: GoParser, parent?: ParserRuleContext, invokingState?: number) {
     super(parent, invokingState);
     this.parser = parser;
   }
-  public ident_list(): IdentContext[] {
-    return this.getTypedRuleContexts(IdentContext) as IdentContext[];
+  public name_list(): NameContext[] {
+    return this.getTypedRuleContexts(NameContext) as NameContext[];
   }
-  public ident(i: number): IdentContext {
-    return this.getTypedRuleContext(IdentContext, i) as IdentContext;
+  public name(i: number): NameContext {
+    return this.getTypedRuleContext(NameContext, i) as NameContext;
   }
   public COMMA_list(): TerminalNode[] {
     return this.getTokens(GoParser.COMMA);
@@ -4495,22 +4495,22 @@ export class IdentListContext extends ParserRuleContext {
     return this.getToken(GoParser.COMMA, i);
   }
   public get ruleIndex(): number {
-    return GoParser.RULE_identList;
+    return GoParser.RULE_nameList;
   }
   public enterRule(listener: GoParserListener): void {
-    if (listener.enterIdentList) {
-      listener.enterIdentList(this);
+    if (listener.enterNameList) {
+      listener.enterNameList(this);
     }
   }
   public exitRule(listener: GoParserListener): void {
-    if (listener.exitIdentList) {
-      listener.exitIdentList(this);
+    if (listener.exitNameList) {
+      listener.exitNameList(this);
     }
   }
   // @Override
   public accept<Result>(visitor: GoParserVisitor<Result>): Result {
-    if (visitor.visitIdentList) {
-      return visitor.visitIdentList(this);
+    if (visitor.visitNameList) {
+      return visitor.visitNameList(this);
     } else {
       return visitor.visitChildren(this);
     }

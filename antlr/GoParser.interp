@@ -145,8 +145,8 @@ channelType
 elementType
 structType
 fieldDecl
-ident
-identList
+name
+nameList
 lit
 litNil
 litStr
