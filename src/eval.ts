@@ -3,6 +3,7 @@ import {
   CallFrameView,
   DataType,
   Float64View,
+  BooleanView,
   FnView,
   BuiltinView,
   FrameView,
@@ -23,6 +24,8 @@ import {
   UnaryOp,
   BinaryOp,
   IUnaryOp,
+  LogicalOp,
+  ILogicalOp,
   ICall,
   IBinaryOp,
   IGoto,
@@ -51,6 +54,11 @@ export const microcode: Record<Opcode, EvalFn> = {
     const instr = new IUnaryOp(state.bytecode, state.pc);
     execUnaryOp(state, instr.op());
     state.pc += IUnaryOp.size;
+  },
+  [Opcode.LogicalOp]: function (state: MachineState): void {
+    const instr = new ILogicalOp(state.bytecode, state.pc);
+    execLogicalOp(state, instr.op());
+    state.pc += ILogicalOp.size;
   },
   [Opcode.Call]: function (state: MachineState): void {
     const instr = new ICall(state.bytecode, state.pc);
@@ -429,6 +437,72 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           const rhsValue = rhs.getValue();
 
           if (lhsValue > rhsValue) {
+            return state.globals[Global.True];
+          } else {
+            return state.globals[Global.False];
+          }
+        },
+      ],
+    ]),
+  ],
+]);
+
+const execLogicalOp = (state: MachineState, op: LogicalOp): void => {
+  const rhsAddr = state.os.pop();
+  const lhsAddr = state.os.pop();
+
+  const lhsType = NodeView.getDataType(state.heap, lhsAddr);
+  const rhsType = NodeView.getDataType(state.heap, rhsAddr);
+
+  // ??
+  if (lhsType !== rhsType) {
+    throw new Error("Can't perform logical operation on different data types!");
+  }
+
+  if (lhsType !== DataType.Boolean) {
+    throw new Error("Can't perform logical operation on non boolean values!");
+  }
+
+  const f = logicalBuiltins.get(lhsType)?.get(op);
+  if (!f) throw new Error("No logical operation defined!"); // @todo: format string
+
+  const res = f(state, lhsAddr, rhsAddr);
+
+  state.os.push(res);
+};
+
+type LogicalOpFn = (state: MachineState, lhs: Address, rhs: Address) => Address;
+
+export const logicalBuiltins = new Map<DataType, Map<LogicalOp, LogicalOpFn>>([
+  [
+    DataType.Boolean,
+    new Map([
+      [
+        LogicalOp.And,
+        (state, lhsAddr, rhsAddr) => {
+          const lhs = new BooleanView(state.heap, lhsAddr);
+          const rhs = new BooleanView(state.heap, rhsAddr);
+
+          const lhsValue = lhs.getValue();
+          const rhsValue = rhs.getValue();
+
+          if (lhsValue && rhsValue) {
+            return state.globals[Global.True];
+          } else {
+            return state.globals[Global.False];
+          }
+        },
+      ],
+      [
+        LogicalOp.Or,
+        (state, lhsAddr, rhsAddr) => {
+          const lhs = new BooleanView(state.heap, lhsAddr);
+          const rhs = new BooleanView(state.heap, rhsAddr);
+
+          const lhsValue = lhs.getValue();
+          const rhsValue = rhs.getValue();
+
+          if (lhsValue || rhsValue) {
             return state.globals[Global.True];
           } else {
             return state.globals[Global.False];
