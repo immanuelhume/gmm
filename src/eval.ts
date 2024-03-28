@@ -15,6 +15,7 @@ import {
   Global,
   GlobalView,
   TupleView,
+  StructView,
 } from "./heapviews";
 import {
   IAssign,
@@ -37,6 +38,7 @@ import {
   ILoadStr,
   IJof,
   IPackTuple,
+  IPackStruct,
 } from "./instructions";
 
 type EvalFn = (state: MachineState) => void;
@@ -242,6 +244,16 @@ export const microcode: Record<Opcode, EvalFn> = {
 
     state.os.push(tuple.addr);
     state.pc += IPackTuple.size;
+  },
+  [Opcode.PackStruct]: function (state: MachineState): void {
+    const instr = new IPackStruct(state.bytecode, state.pc);
+    const struct = StructView.allocate(state, instr.fieldc());
+    for (let i = 0; i < instr.fieldc(); ++i) {
+      struct.setField(i, state.os.pop());
+    }
+
+    state.os.push(struct.addr);
+    state.pc += IPackStruct.size;
   },
   [Opcode.Done]: function (state: MachineState): void {
     throw new Error("Done not implemented.");

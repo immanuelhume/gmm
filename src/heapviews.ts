@@ -60,6 +60,7 @@ export enum DataType {
   BlockFrame,
   Pointer,
   Tuple,
+  Struct,
 }
 
 /**
@@ -603,6 +604,40 @@ export class TupleView extends NodeView {
   }
 }
 
+/**
+ * A collection of addresses. Not the same as a slice!
+ */
+export class StructView extends NodeView {
+  static allocate(state: Memory, fieldc: number): StructView {
+    const addr = allocate(state, DataType.Struct, 0, fieldc);
+    return new StructView(state.heap, addr);
+  }
+  constructor(heap: DataView, addr: Address) {
+    super(heap, addr);
+    this.checkType(DataType.Struct);
+  }
+  toString(): string {
+    const fields = [];
+    for (let i = 0; i < this.fieldc(); ++i) {
+      const field = this.getField(i);
+      const fieldStr = NodeView.of(this.heap, field).toString();
+      fields.push(fieldStr);
+    }
+    const fieldsStr = fields.join(", ");
+    return `Struct { ${fieldsStr} }`;
+  }
+  getField(i: number): Address {
+    return this.getChild(i);
+  }
+  setField(i: number, data: Address): StructView {
+    this.setChild(i, data);
+    return this;
+  }
+  fieldc(): number {
+    return this.nrefs();
+  }
+}
+
 class PointerView extends NodeView {
   // @todo
   toString(): string {
@@ -630,4 +665,5 @@ const nodeClass: Record<DataType, { new (heap: DataView, addr: Address, ctx?: He
   [DataType.BlockFrame]: BlockFrameView,
   [DataType.Pointer]: PointerView,
   [DataType.Tuple]: TupleView,
+  [DataType.Struct]: StructView,
 };

@@ -25,6 +25,7 @@ ELSE : 'else' ;
 RANGE : 'range' ;
 
 PERIOD : '.' ;
+COLON : ':' ;
 
 L_BRACE : '{' ;
 R_BRACE : '}' -> mode(NLSEMI) ;

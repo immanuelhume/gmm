@@ -55,8 +55,8 @@ returnStmt : 'return' exprList? ;
 expr : primaryExpr | unaryOp expr | lhs=expr binaryOp rhs=expr ;
 exprList : expr (',' expr)* ;
 
-primaryExpr : name
-	| lit
+primaryExpr : lit
+	| name
 	| fn=primaryExpr args
 	| base=primaryExpr selector
 	;
@@ -92,7 +92,7 @@ params : param (',' param)* ','? | param? ;
 param : name typeName ;
 
 type : typeName | typeLit ;
-typeName : name ;
+typeName : WORD ;
 typeLit : structType | channelType ; // exclude pointer types for now - we probably won't need them
 
 channelType : 'chan' elementType ;
@@ -104,11 +104,15 @@ fieldDecl : name type ;
 name : WORD ;
 nameList : name (',' name)* ;
 
-lit : number | litStr | litNil | litBool | litFunc ;
+lit : number | litStr | litNil | litBool | litFunc | litStruct ;
 
 litNil : NIL ;
 litStr : LIT_STR ;
 litBool : TRUE | FALSE ;
+
+litStruct : (structType | typeName) '{' keyedElems '}' ;
+keyedElems : keyedElem (',' keyedElem)* ','? ;
+keyedElem : lname ':' expr ;
 
 number : INT | FLOAT ;
 

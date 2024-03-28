@@ -59,6 +59,9 @@ import { LitContext } from "./GoParser";
 import { LitNilContext } from "./GoParser";
 import { LitStrContext } from "./GoParser";
 import { LitBoolContext } from "./GoParser";
+import { LitStructContext } from "./GoParser";
+import { KeyedElemsContext } from "./GoParser";
+import { KeyedElemContext } from "./GoParser";
 import { NumberContext } from "./GoParser";
 import { EosContext } from "./GoParser";
 
@@ -412,6 +415,24 @@ export default class GoParserVisitor<Result> extends ParseTreeVisitor<Result> {
    * @return the visitor result
    */
   visitLitBool?: (ctx: LitBoolContext) => Result;
+  /**
+   * Visit a parse tree produced by `GoParser.litStruct`.
+   * @param ctx the parse tree
+   * @return the visitor result
+   */
+  visitLitStruct?: (ctx: LitStructContext) => Result;
+  /**
+   * Visit a parse tree produced by `GoParser.keyedElems`.
+   * @param ctx the parse tree
+   * @return the visitor result
+   */
+  visitKeyedElems?: (ctx: KeyedElemsContext) => Result;
+  /**
+   * Visit a parse tree produced by `GoParser.keyedElem`.
+   * @param ctx the parse tree
+   * @return the visitor result
+   */
+  visitKeyedElem?: (ctx: KeyedElemContext) => Result;
   /**
    * Visit a parse tree produced by `GoParser.number`.
    * @param ctx the parse tree

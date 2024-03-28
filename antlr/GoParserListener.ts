@@ -59,6 +59,9 @@ import { LitContext } from "./GoParser";
 import { LitNilContext } from "./GoParser";
 import { LitStrContext } from "./GoParser";
 import { LitBoolContext } from "./GoParser";
+import { LitStructContext } from "./GoParser";
+import { KeyedElemsContext } from "./GoParser";
+import { KeyedElemContext } from "./GoParser";
 import { NumberContext } from "./GoParser";
 import { EosContext } from "./GoParser";
 
@@ -637,6 +640,36 @@ export default class GoParserListener extends ParseTreeListener {
    * @param ctx the parse tree
    */
   exitLitBool?: (ctx: LitBoolContext) => void;
+  /**
+   * Enter a parse tree produced by `GoParser.litStruct`.
+   * @param ctx the parse tree
+   */
+  enterLitStruct?: (ctx: LitStructContext) => void;
+  /**
+   * Exit a parse tree produced by `GoParser.litStruct`.
+   * @param ctx the parse tree
+   */
+  exitLitStruct?: (ctx: LitStructContext) => void;
+  /**
+   * Enter a parse tree produced by `GoParser.keyedElems`.
+   * @param ctx the parse tree
+   */
+  enterKeyedElems?: (ctx: KeyedElemsContext) => void;
+  /**
+   * Exit a parse tree produced by `GoParser.keyedElems`.
+   * @param ctx the parse tree
+   */
+  exitKeyedElems?: (ctx: KeyedElemsContext) => void;
+  /**
+   * Enter a parse tree produced by `GoParser.keyedElem`.
+   * @param ctx the parse tree
+   */
+  enterKeyedElem?: (ctx: KeyedElemContext) => void;
+  /**
+   * Exit a parse tree produced by `GoParser.keyedElem`.
+   * @param ctx the parse tree
+   */
+  exitKeyedElem?: (ctx: KeyedElemContext) => void;
   /**
    * Enter a parse tree produced by `GoParser.number`.
    * @param ctx the parse tree

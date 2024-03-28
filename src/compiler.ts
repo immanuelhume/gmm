@@ -1,6 +1,17 @@
 import { ParserRuleContext, CharStream, CommonTokenStream, RuleNode } from "antlr4";
 import GoLexer from "../antlr/GoLexer";
-import GoParser, { ExprListContext, FieldContext, LitStrContext, LnameContext } from "../antlr/GoParser";
+import GoParser, {
+  ChannelTypeContext,
+  ExprListContext,
+  FieldContext,
+  LitStrContext,
+  LitStructContext,
+  LnameContext,
+  StructTypeContext,
+  TypeContext,
+  TypeLitContext,
+  TypeNameContext,
+} from "../antlr/GoParser";
 import {
   AssignmentContext,
   BlockContext,
@@ -48,6 +59,7 @@ import {
   IPush,
   ILoadStr,
   IPackTuple,
+  IPackStruct,
 } from "./instructions";
 import { ArrayStack, Stack, StrPool } from "./util";
 import { builtinSymbols } from "./heapviews";
@@ -92,7 +104,7 @@ class BytecodeWriter implements Emitter {
   }
 }
 
-class CompileTimeEnvironment {
+class CompTimeEnv {
   private env: string[][];
 
   constructor() {
@@ -175,9 +187,132 @@ class DeclScanner extends GoVisitor<string[]> {
   }
 }
 
+const getTypeRepr = (ctx: TypeContext): TypeRepr => {
+  if (ctx.typeName()) {
+    const data = ctx.typeName().getText();
+    return { kind: "alias", data };
+  } else if (ctx.typeLit()) {
+    const lit = ctx.typeLit();
+    if (lit.structType()) {
+      return getTypeReprStruct(lit.structType());
+    } else if (lit.channelType()) {
+      // @todo
+      throw new Error("Unimplemented");
+    } else {
+      throw new Error("Unreachable");
+    }
+  } else {
+    throw new Error("Unreachable");
+  }
+};
+
+const getTypeReprStruct = (ctx: StructTypeContext): StructType => {
+  const fs = ctx.fieldDecl_list();
+  const fields: [string, string][] = fs.map((field) => {
+    const name = field.name().getText();
+    const ty = field.type_().getText();
+    return [name, ty];
+  });
+  return { kind: "struct", fields };
+};
+
+class TypeDeclScanner extends GoVisitor<[string, TypeRepr][]> {
+  private stop: boolean = false;
+  visitProg = (ctx: ProgContext) => {
+    if (this.stop) return [];
+    this.stop = true;
+    return this.visitChildren(ctx);
+  };
+  visitBlock = (ctx: BlockContext) => {
+    if (this.stop) return [];
+    this.stop = true;
+    return this.visitChildren(ctx);
+  };
+  visitTypeDecl = (ctx: TypeDeclContext) => {
+    const name = ctx.name().getText();
+    const ty = getTypeRepr(ctx.type_());
+    return [[name, ty] as [string, TypeRepr]];
+  };
+  visitChildren(node: ParserRuleContext): [string, TypeRepr][] {
+    if (!node.children) return [];
+    return node.children.flatMap((child) => this.visit(child)).filter((ty) => ty !== undefined);
+  }
+}
+
+// @todo allow function types?
+type TypeRepr = StructType | ChannelType | PrimitiveType | AliasType;
+type StructType = {
+  kind: "struct";
+  fields: [string, string][];
+};
+type ChannelType = {
+  kind: "chan";
+  elem: string;
+};
+type PrimitiveType = {
+  kind: "primitive";
+};
+type AliasType = {
+  kind: "alias";
+  data: string;
+};
+
+const _primitiveTypes = ["int64", "float64"];
+const primitiveTypes: Map<string, PrimitiveType> = new Map();
+for (const prim of _primitiveTypes) {
+  primitiveTypes.set(prim, { kind: "primitive" });
+}
+
+type TypeFrame = Map<string, TypeRepr>;
+class TypeStore {
+  // Type declarations themselves are scoped. So we'll need an "environment" for them.
+  frames: TypeFrame[] = []; // search from left -> right
+  pushFrame(types: Map<string, TypeRepr>) {
+    this.frames.unshift(types);
+  }
+  popFrame() {
+    this.frames.unshift();
+  }
+  lookup(typeName: string): TypeRepr | undefined {
+    for (const frame of this.frames) {
+      const repr = frame.get(typeName);
+      if (repr !== undefined) return repr;
+    }
+    return undefined;
+  }
+}
+class TypeEnv {
+  frames: Map<string, string>[] = []; // search from left -> right
+  pushFrame() {
+    this.frames.unshift(new Map());
+  }
+  popFrame() {
+    this.frames.unshift();
+  }
+  lookup(name: string): string | undefined {
+    for (const frame of this.frames) {
+      const ty = frame.get(name);
+      if (ty !== undefined) return ty;
+    }
+    return undefined;
+  }
+}
+
+class Typer extends GoVisitor<string | undefined> {
+  store: TypeStore;
+  env: TypeEnv;
+  constructor(store: TypeStore, env: TypeEnv) {
+    super();
+    this.store = store;
+    this.env = env;
+  }
+}
+
 export class Assembler extends GoVisitor<number> {
   bc: BytecodeWriter;
-  env: CompileTimeEnvironment;
+  env: CompTimeEnv;
+  tenv: TypeEnv;
+  tstore: TypeStore;
 
   main: number | undefined; // keep track of where the main function starts
 
@@ -189,17 +324,26 @@ export class Assembler extends GoVisitor<number> {
   constructor() {
     super();
     this.bc = new BytecodeWriter();
-    this.env = new CompileTimeEnvironment();
+    this.env = new CompTimeEnv();
     this.contiss = new ArrayStack();
     this.breakss = new ArrayStack();
     this.strPool = new StrPool();
 
+    this.tenv = new TypeEnv();
+    this.tstore = new TypeStore();
+
     this.env.pushFrame(builtinSymbols);
+    this.tstore.pushFrame(primitiveTypes);
   }
 
   static scanDecls = (ctx: ParserRuleContext): string[] => {
     const scanner = new DeclScanner();
     return scanner.visit(ctx);
+  };
+  static scanTypeDecls = (ctx: ParserRuleContext): TypeFrame => {
+    const scanner = new TypeDeclScanner();
+    const frame = scanner.visit(ctx);
+    return new Map(frame);
   };
 
   visitChildren = (node: ParserRuleContext): number => {
@@ -210,6 +354,9 @@ export class Assembler extends GoVisitor<number> {
   visitProg = (ctx: ProgContext) => {
     const names = Assembler.scanDecls(ctx);
     this.env.pushFrame(names);
+
+    const types = Assembler.scanTypeDecls(ctx);
+    this.tstore.pushFrame(types);
 
     // Wrap the entire program in a block. Don't care about exiting the block.
     IEnterBlock.emit(this.bc, ctx).setNumVars(names.length);
@@ -449,6 +596,9 @@ export class Assembler extends GoVisitor<number> {
     const names = Assembler.scanDecls(ctx);
     this.env.pushFrame(names);
 
+    const types = Assembler.scanTypeDecls(ctx);
+    this.tstore.pushFrame(types);
+
     IEnterBlock.emit(this.bc).setNumVars(names.length);
     this.visitChildren(ctx);
     IExitBlock.emit(this.bc);
@@ -604,6 +754,54 @@ export class Assembler extends GoVisitor<number> {
   visitNumber = (ctx: NumberContext): number => {
     const val = parseInt(ctx.getText());
     ILoadC.emit(this.bc).setVal(val);
+    return 1;
+  };
+
+  visitLitStruct = (ctx: LitStructContext): number => {
+    const sortFields = <T>(givenFields: [string, T][], expectedFields: [string, string][]): [string, T][] => {
+      const ret: [string, T][] = [];
+      for (const [name1, _] of expectedFields) {
+        for (const [name2, t] of givenFields) {
+          if (name1 !== name2) continue;
+          ret.push([name2, t]);
+          break;
+        }
+      }
+      return ret;
+    };
+    if (ctx.typeName()) {
+      const ty = ctx.typeName().getText();
+      const repr = this.tstore.lookup(ty);
+      if (repr === undefined) {
+        throw new Error(`Type ${ty} is not declared`);
+      }
+      switch (repr.kind) {
+        case "struct":
+          const fieldc = repr.fields.length;
+          const fields = ctx
+            .keyedElems()
+            .keyedElem_list()
+            .map((elem) => [elem.lname().getText(), elem.expr()] as [string, ExprContext]);
+          const sorted = sortFields(fields, repr.fields);
+          if (sorted.length !== fieldc) {
+            throw new Error("Some fields are missing"); // @todo btr err msg
+          }
+          sorted.reverse().forEach(([_, expr]) => this.visit(expr)); // compile each field's expression
+          IPackStruct.emit(this.bc).setFieldc(fieldc);
+          break;
+        case "chan":
+        case "primitive":
+        case "alias":
+          throw new Error(`Expectd struct type, but got ${repr.kind}`);
+      }
+    } else if (ctx.structType()) {
+      const repr = getTypeReprStruct(ctx.structType());
+      // @todo
+      throw new Error("Unimplemented");
+    } else {
+      // @todo
+      throw new Error("Unimplemented");
+    }
     return 1;
   };
 }
