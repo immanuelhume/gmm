@@ -39,7 +39,8 @@ import {
   IJof,
   IPackTuple,
   IPackStruct,
-  IGetStructField,
+  ILoadStructField,
+  ILoadStructFieldLoc,
 } from "./instructions";
 
 type EvalFn = (state: MachineState) => void;
@@ -256,13 +257,21 @@ export const microcode: Record<Opcode, EvalFn> = {
     state.os.push(struct.addr);
     state.pc += IPackStruct.size;
   },
-  [Opcode.GetStructField]: function (state: MachineState): void {
-    const instr = new IGetStructField(state.bytecode, state.pc);
+  [Opcode.LoadStructField]: function (state: MachineState): void {
+    const instr = new ILoadStructField(state.bytecode, state.pc);
     const struct = new StructView(state.heap, state.os.pop());
     const fieldAddr = struct.getField(instr.offset());
 
     state.os.push(fieldAddr);
-    state.pc += IGetStructField.size;
+    state.pc += ILoadStructField.size;
+  },
+  [Opcode.LoadStructFieldLoc]: function (state: MachineState): void {
+    const instr = new ILoadStructFieldLoc(state.bytecode, state.pc);
+    const struct = new StructView(state.heap, state.os.pop());
+    const fieldLoc = struct.getFieldLoc(instr.offset());
+
+    state.os.push(fieldLoc);
+    state.pc += ILoadStructField.size;
   },
   [Opcode.Done]: function (state: MachineState): void {
     throw new Error("Done not implemented.");

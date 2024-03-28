@@ -633,6 +633,9 @@ export class StructView extends NodeView {
     this.setChild(i, data);
     return this;
   }
+  getFieldLoc(i: number): Address {
+    return this.childByteOffset(i);
+  }
   fieldc(): number {
     return this.nrefs();
   }

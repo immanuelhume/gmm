@@ -56,7 +56,8 @@ import {
   ILoadStr,
   IPackTuple,
   IPackStruct,
-  IGetStructField,
+  ILoadStructField,
+  ILoadStructFieldLoc,
 } from "./instructions";
 import { ArrayStack, Stack, StrPool } from "./util";
 import { builtinSymbols } from "./heapviews";
@@ -794,8 +795,24 @@ export class Assembler extends GoVisitor<number> {
   };
 
   visitField = (ctx: FieldContext): number => {
-    // @todo LValue field
-    return 0;
+    const baseType = new Typer(this.tstore, this.tenv).visit(ctx._base);
+    if (baseType === undefined || baseType.length !== 1) {
+      throw new Error(`Type of ${ctx._base.getText()} could not be determined`);
+    }
+    const ty = baseType[0];
+    switch (ty.kind) {
+      case "struct":
+        const last = ctx._last.text;
+        const offset = ty.fields.findIndex(([name, _]) => name === last);
+        if (offset === -1) {
+          throw new Error(`Field ${last} not found on ${ctx._base.getText()}`);
+        }
+        this.visit(ctx._base); // compile the base first
+        ILoadStructFieldLoc.emit(this.bc).setOffset(offset);
+        return 0;
+      default:
+        throw new Error(`Expected struct, got got ${ty.kind} for ${ctx._base.getText()}`);
+    }
   };
 
   visitAssignment = (ctx: AssignmentContext): number => {
@@ -875,7 +892,7 @@ export class Assembler extends GoVisitor<number> {
             throw new Error(`Field ${final} does not exist on ${ctx._base.getText()}`);
           }
           this.visit(ctx._base); // get the base onto the OS
-          IGetStructField.emit(this.bc).setOffset(offset);
+          ILoadStructField.emit(this.bc).setOffset(offset);
           break;
         default:
           throw new Error("Expected struct");
