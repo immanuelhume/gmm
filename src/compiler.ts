@@ -1,6 +1,6 @@
 import { ParserRuleContext, CharStream, CommonTokenStream, RuleNode } from "antlr4";
 import GoLexer from "../antlr/GoLexer";
-import GoParser, { ExprListContext, LitStrContext } from "../antlr/GoParser";
+import GoParser, { ExprListContext, FieldContext, LitStrContext, LnameContext } from "../antlr/GoParser";
 import {
   AssignmentContext,
   BlockContext,
@@ -143,8 +143,8 @@ class DeclScanner extends GoVisitor<string[]> {
 
   visitShortVarDecl = (ctx: ShortVarDeclContext) => {
     return ctx
-      .lvalueList()
-      .lvalue_list()
+      .lnameList()
+      .lname_list()
       .map((lvalue) => lvalue.getText());
   };
 
@@ -370,8 +370,8 @@ export class Assembler extends GoVisitor<number> {
         IEnterBlock.emit(this.bc).setNumVars(1);
         const names = init
           .shortVarDecl()
-          .lvalueList()
-          .lvalue_list()
+          .lnameList()
+          .lname_list()
           .map((lvalue) => lvalue.getText());
         this.env.pushFrame(names);
       }
@@ -467,11 +467,16 @@ export class Assembler extends GoVisitor<number> {
     // @todo
   };
 
-  visitLvalue = (ctx: LvalueContext): number => {
-    const name = ctx.name().getText();
+  visitLname = (ctx: LnameContext): number => {
+    const name = ctx.getText();
     const [frame, offset] = this.env.lookup(name);
     ILoadNameLoc.emit(this.bc).setFrame(frame).setOffset(offset);
     return 1;
+  };
+
+  visitField = (ctx: FieldContext): number => {
+    // @todo LValue field
+    return 0;
   };
 
   visitAssignment = (ctx: AssignmentContext): number => {
@@ -486,7 +491,7 @@ export class Assembler extends GoVisitor<number> {
     // Identical to [visitAssignment]
     //
     // @todo make them into a common function
-    const nnames = ctx._lhs.lvalue_list().length;
+    const nnames = ctx._lhs.lname_list().length;
     this.visit(ctx._rhs);
     this.visit(ctx._lhs);
     IAssign.emit(this.bc).setCount(nnames);

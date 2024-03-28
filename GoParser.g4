@@ -35,7 +35,10 @@ goStmt : 'go' primaryExpr ; // [primaryExpr] has to be a function call
 assignment : lhs=lvalueList '=' rhs=exprList ;
 
 lvalueList : lvalue (',' lvalue)* ;
-lvalue : name ; // we'll define this properly in the future
+lvalue : lname | field; // we'll define this properly in the future
+lname : WORD ; // a name which appears on LHS
+lnameList : lname (',' lname)* ;
+field : base=primaryExpr '.' last=WORD ;
 
 forStmt : 'for' (condition | forClause | rangeClause) block ;
 
@@ -43,7 +46,7 @@ condition : expr ;
 
 forClause : init=simpleStmt? ';' cond=condition? ';' post=simpleStmt? ;
 
-rangeClause : ( lvalueList '=' | lvalueList ':=' ) 'range' expr ;
+rangeClause : ( lvalueList '=' | lnameList ':=' ) 'range' expr ;
 
 exprStmt : expr ;
 
@@ -72,7 +75,7 @@ logicalOp : '||' | '&&' ;
 relOp : '==' | '!=' | '<' | '<=' | '>' | '>=' ;
 numericOp : '+' | '-' | '*' | '/' ;
 
-shortVarDecl : lhs=lvalueList ':=' rhs=exprList ;
+shortVarDecl : lhs=lnameList ':=' rhs=exprList ;
 
 decl : funcDecl | varDecl | typeDecl ;
 typeDecl : 'type' name type ;

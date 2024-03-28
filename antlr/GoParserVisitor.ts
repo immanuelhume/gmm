@@ -14,6 +14,9 @@ import { GoStmtContext } from "./GoParser";
 import { AssignmentContext } from "./GoParser";
 import { LvalueListContext } from "./GoParser";
 import { LvalueContext } from "./GoParser";
+import { LnameContext } from "./GoParser";
+import { LnameListContext } from "./GoParser";
+import { FieldContext } from "./GoParser";
 import { ForStmtContext } from "./GoParser";
 import { ConditionContext } from "./GoParser";
 import { ForClauseContext } from "./GoParser";
@@ -139,6 +142,24 @@ export default class GoParserVisitor<Result> extends ParseTreeVisitor<Result> {
    * @return the visitor result
    */
   visitLvalue?: (ctx: LvalueContext) => Result;
+  /**
+   * Visit a parse tree produced by `GoParser.lname`.
+   * @param ctx the parse tree
+   * @return the visitor result
+   */
+  visitLname?: (ctx: LnameContext) => Result;
+  /**
+   * Visit a parse tree produced by `GoParser.lnameList`.
+   * @param ctx the parse tree
+   * @return the visitor result
+   */
+  visitLnameList?: (ctx: LnameListContext) => Result;
+  /**
+   * Visit a parse tree produced by `GoParser.field`.
+   * @param ctx the parse tree
+   * @return the visitor result
+   */
+  visitField?: (ctx: FieldContext) => Result;
   /**
    * Visit a parse tree produced by `GoParser.forStmt`.
    * @param ctx the parse tree
