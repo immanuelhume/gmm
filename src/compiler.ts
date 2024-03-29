@@ -122,7 +122,7 @@ class CompTimeEnv {
     this.env.shift();
   }
 
-  lookup(name: string): [number, number] {
+  lookup(name: string): [number, number] | undefined {
     for (let i = 0; i < this.env.length; ++i) {
       const frame = this.env[i];
       const offset = frame.indexOf(name);
@@ -130,8 +130,15 @@ class CompTimeEnv {
         return [i, offset];
       }
     }
-    // @todo: is it ok to throw an Error here?
-    throw new Error(`Identifier [${name}] not found in compile time environment`);
+    return undefined;
+  }
+
+  lookupExn(name: string, ctx: ParserRuleContext): [number, number] {
+    const ret = this.lookup(name);
+    if (ret === undefined) {
+      err(ctx, `undefined: ${name}`);
+    }
+    return ret!;
   }
 
   depth(): number {
@@ -276,7 +283,7 @@ class TypeDeclScanner extends GoVisitor<[string, TypeRepr][]> {
     const name = ctx.name().getText();
     const ty = getTypeRepr(ctx.type_(), this.store);
     if (ty === undefined) {
-      throw new Error(`Could not find type for ${name}`);
+      err(ctx, `could not find out about type ${name}`);
     }
     return [[name, ty] as [string, TypeRepr]];
   };
@@ -300,12 +307,12 @@ const getTypeRepr = (ctx: TypeContext, store: TypeStore): TypeRepr | undefined =
       return getTypeReprStruct(lit.structType());
     } else if (lit.channelType()) {
       // @todo
-      throw new Error("Unimplemented");
+      throw "Channel types are not supported yet";
     } else {
-      throw new Error("Unreachable");
+      throw "Unreachable";
     }
   } else {
-    throw new Error("Unreachable");
+    throw "Unreachable";
   }
 };
 
@@ -349,6 +356,14 @@ class TypeStore {
       if (repr !== undefined) return repr;
     }
     return undefined;
+  }
+
+  lookupExn(typeName: string, ctx: ParserRuleContext): TypeRepr {
+    const ret = this.lookup(typeName);
+    if (ret === undefined) {
+      err(ctx, `undefined: ${typeName}`);
+    }
+    return ret!;
   }
 }
 
@@ -412,11 +427,12 @@ class Typer extends GoVisitor<TypeRepr[] | undefined> {
       if (!arraysEqual(lhs, rhs, areTypesEqual)) return undefined;
       return lhs;
     } else if (ctx.unaryOp()) {
-      throw new Error("Unimplemented");
+      // @todo
+      throw "Unimplemented";
     } else if (ctx.primaryExpr()) {
       return this.visit(ctx.primaryExpr());
     } else {
-      throw new Error("Unreachable");
+      throw "Unreachable";
     }
   };
 
@@ -459,7 +475,7 @@ class Typer extends GoVisitor<TypeRepr[] | undefined> {
     } else if (ctx.structType()) {
       return [getTypeReprStruct(ctx.structType())];
     } else {
-      throw new Error("Unreachable");
+      throw "Unreachable";
     }
   };
 
@@ -469,7 +485,7 @@ class Typer extends GoVisitor<TypeRepr[] | undefined> {
     } else if (ctx.FLOAT()) {
       return [{ kind: "primitive", name: "float64" }];
     } else {
-      throw new Error("Unreachable");
+      throw "Unreachable";
     }
   };
 
@@ -517,7 +533,7 @@ class FuncTypeBumper extends GoVisitor<void> {
       .type__list()
       .map((ty) => getTypeRepr(ty, this.tstore));
     if (_results.includes(undefined) || _params.includes(undefined)) {
-      throw new Error(`Could not determine function type for ${fname}`);
+      err(ctx, `could not find type of function ${fname}`);
     }
     const params = _params as TypeRepr[];
     const results = _results as TypeRepr[];
@@ -586,13 +602,13 @@ export class Assembler extends GoVisitor<number> {
     this.visitChildren(ctx);
 
     if (!this.main) {
-      throw new Error("A [main] function was not declared");
+      err(ctx, "main function is undeclared");
     }
 
     // We'll need to jump to [main] to start running the program. So we just
     // append a call instruction to the end of the program.
 
-    const [frame, offset] = this.env.lookup("main");
+    const [frame, offset] = this.env.lookupExn("main", ctx);
     ILoadName.emit(this.bc).setFrame(frame).setOffset(offset);
     ICall.emit(this.bc).setArgc(0); // call [main]
     IDone.emit(this.bc); // last instruction
@@ -643,14 +659,14 @@ export class Assembler extends GoVisitor<number> {
     //
     // This is a limitation of not working with an AST.
     const fnName = ctx.name().getText();
-    const [frame, offset] = this.env.lookup(fnName);
+    const [frame, offset] = this.env.lookupExn(fnName, ctx);
     ILoadNameLoc.emit(this.bc, ctx).setFrame(frame).setOffset(offset);
     IAssign.emit(this.bc, ctx).setCount(1);
 
     // Check if this function is, in fact, main
     if (fnName === "main") {
       if (this.main) {
-        throw new Error("Multiple [main] functions declared");
+        err(ctx, "multiple main functions declared");
       }
       this.main = fnPc;
     }
@@ -663,7 +679,7 @@ export class Assembler extends GoVisitor<number> {
     if (ctx.expr()) {
       this.visit(ctx.expr()); // compile RHS
       const name = ctx.name().getText();
-      const [frame, offset] = this.env.lookup(name);
+      const [frame, offset] = this.env.lookupExn(name, ctx);
       ILoadNameLoc.emit(this.bc, ctx).setFrame(frame).setOffset(offset);
       IAssign.emit(this.bc, ctx).setCount(1);
     } else {
@@ -766,7 +782,7 @@ export class Assembler extends GoVisitor<number> {
       // @todo
     } else {
       // impossible
-      throw new Error("Entered unreachable code");
+      throw "Unreachable";
     }
 
     // For loops leave nothing on da stack
@@ -840,7 +856,7 @@ export class Assembler extends GoVisitor<number> {
 
   visitLname = (ctx: LnameContext): number => {
     const name = ctx.getText();
-    const [frame, offset] = this.env.lookup(name);
+    const [frame, offset] = this.env.lookupExn(name, ctx);
     ILoadNameLoc.emit(this.bc).setFrame(frame).setOffset(offset);
     return 1;
   };
@@ -848,21 +864,22 @@ export class Assembler extends GoVisitor<number> {
   visitField = (ctx: FieldContext): number => {
     const baseType = new Typer(this.tstore, this.tenv).visit(ctx._base);
     if (baseType === undefined || baseType.length !== 1) {
-      throw new Error(`Type of ${ctx._base.getText()} could not be determined`);
+      err(ctx, `could not find type of ${ctx._base.getText()}`);
     }
-    const ty = baseType[0];
+    const ty = baseType![0];
     switch (ty.kind) {
       case "struct":
         const last = ctx._last.text;
         const offset = ty.fields.findIndex(([name, _]) => name === last);
         if (offset === -1) {
-          throw new Error(`Field ${last} not found on ${ctx._base.getText()}`);
+          err(ctx, `field ${last} not found on ${ctx._base.getText()}`);
         }
         this.visit(ctx._base); // compile the base first
         ILoadStructFieldLoc.emit(this.bc).setOffset(offset);
         return 0;
       default:
-        throw new Error(`Expected struct, got got ${ty.kind} for ${ctx._base.getText()}`);
+        err(ctx, `expected struct but got ${ty.kind} as type of ${ctx._base.getText()}`);
+        throw "Unreachable";
     }
   };
 
@@ -885,15 +902,15 @@ export class Assembler extends GoVisitor<number> {
 
     const rhsTypes = ctx._rhs.expr_list().flatMap((expr) => new Typer(this.tstore, this.tenv).visit(expr));
     if (rhsTypes.length !== nnames) {
-      throw new Error(`There are ${nnames} on LHS but ${rhsTypes.length} on RHS`);
+      err(ctx, `${nnames} on LHS but ${rhsTypes.length} on RHS`);
     }
     for (let i = 0; i < nnames; ++i) {
       const lhs = ctx._lhs.lname_list()[i].getText();
       const ty = rhsTypes[i];
       if (ty === undefined) {
-        throw new Error(`Could not determine type for ${lhs}`);
+        err(ctx, `could not find type for ${lhs}`);
       }
-      this.tenv.set(lhs, ty);
+      this.tenv.set(lhs, ty!);
     }
     return 0;
   };
@@ -930,23 +947,24 @@ export class Assembler extends GoVisitor<number> {
     } else if (ctx._base) {
       const baseType = new Typer(this.tstore, this.tenv).visit(ctx._base);
       if (baseType === undefined || baseType.length === 0) {
-        throw new Error(`Could not deduce type for ${ctx.getText()}`);
+        err(ctx, `could not find type for ${ctx.getText()}`);
       }
-      if (baseType.length > 1) {
-        throw new Error(`Bad dot access on ${ctx.getText()} - multiple values on LHS`);
+      if (baseType!.length > 1) {
+        err(ctx, `bad access on ${ctx.getText()} - multiple values on LHS`);
       }
-      switch (baseType[0].kind) {
+      const kind = baseType![0].kind;
+      switch (kind) {
         case "struct":
           const final = ctx.selector().name().getText();
-          const offset = baseType[0].fields.findIndex(([name, _]) => name === final);
+          const offset = baseType![0].fields.findIndex(([name, _]) => name === final);
           if (offset === -1) {
-            throw new Error(`Field ${final} does not exist on ${ctx._base.getText()}`);
+            err(ctx, `field ${final} not found on ${ctx._base.getText()}`);
           }
           this.visit(ctx._base); // get the base onto the OS
           ILoadStructField.emit(this.bc).setOffset(offset);
           break;
         default:
-          throw new Error("Expected struct");
+          err(ctx, `expected struct but got ${kind} for type of ${ctx._base.getText()}`);
       }
     }
     return 1;
@@ -979,7 +997,7 @@ export class Assembler extends GoVisitor<number> {
     } else if (ctx.DIV()) {
       op.setOp(BinaryOp.Div);
     } else {
-      throw new Error(`Unexpected numeric operator`); // @todo a better error msg
+      err(ctx, `unexpected numeric operator ${ctx.getText()}`);
     }
 
     return 0;
@@ -1000,14 +1018,14 @@ export class Assembler extends GoVisitor<number> {
     } else if (ctx.GEQ()) {
       op.setOp(BinaryOp.Geq);
     } else {
-      throw new Error(`Unexpected relation operator`); // @todo a better error msg
+      err(ctx, `unexpected relation operator ${ctx.getText()}`);
     }
     return 0;
   };
 
   visitName = (ctx: NameContext): number => {
     const name = ctx.getText();
-    const [frame, offset] = this.env.lookup(name);
+    const [frame, offset] = this.env.lookupExn(name, ctx);
     ILoadName.emit(this.bc).setFrame(frame).setOffset(offset);
     return 1;
   };
@@ -1028,7 +1046,7 @@ export class Assembler extends GoVisitor<number> {
     } else if (ctx.FLOAT()) {
       val = parseFloat(raw);
     } else {
-      throw new Error("Unreachable");
+      throw "Unreachable";
     }
     ILoadC.emit(this.bc).setVal(val);
     return 1;
@@ -1054,10 +1072,7 @@ export class Assembler extends GoVisitor<number> {
 
     if (ctx.typeName()) {
       const ty = ctx.typeName().getText();
-      const repr = this.tstore.lookup(ty);
-      if (repr === undefined) {
-        throw new Error(`Type ${ty} is not declared`);
-      }
+      const repr = this.tstore.lookupExn(ty, ctx);
       switch (repr.kind) {
         case "struct":
           const fieldc = repr.fields.length;
@@ -1067,25 +1082,37 @@ export class Assembler extends GoVisitor<number> {
             .map((elem) => [elem.lname().getText(), elem.expr()] as [string, ExprContext]);
           const sorted = sortFields(fields, repr.fields);
           if (sorted.length !== fieldc) {
-            throw new Error(`Expected ${fieldc} fields, but got ${sorted.length}`);
+            err(ctx, `in struct literal of ${ty} - expected ${fieldc} fields, but got ${sorted.length}`);
           }
           sorted.reverse().forEach(([_, expr]) => this.visit(expr)); // compile each field's expression
           IPackStruct.emit(this.bc).setFieldc(fieldc);
           break;
         case "chan":
         case "primitive":
-          throw new Error(`Expectd struct type, but got ${repr.kind}`);
+          err(ctx, `expected struct but got ${repr.kind}`);
       }
     } else if (ctx.structType()) {
       const repr = getTypeReprStruct(ctx.structType());
       // @todo or we just don't allow it i.e. it would be a parse error
-      throw new Error("Unimplemented");
+      throw "Unimplemented";
     } else {
-      throw new Error("Unreachable");
+      throw "Unreachable";
     }
     return 1;
   };
 }
+
+class CompileError extends Error {}
+
+/**
+ * Throws a compile time error.
+ */
+const err = (ctx: ParserRuleContext, msg: string): never => {
+  const lineno = ctx.start.line;
+  const colno = ctx.start.column;
+  const s = `${lineno}:${colno}: ${msg}`;
+  throw new CompileError(s);
+};
 
 interface CompileResult {
   bytecode: DataView;
