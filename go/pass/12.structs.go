@@ -23,11 +23,8 @@ func main() {
 
 	original := Point{x: 1, y: 2}
 	moved := translate(original, 3, 4)
-	if moved.x != 4 {
-		panic("expected 4, got", moved.x)
-	}
-	if moved.y != 6 {
-		panic("expected 6, got", moved.y)
+	if moved.x != 4 || moved.y != 6 {
+		panic("expected (4, 6), got", moved)
 	}
 
 	x := Point{x: 1, y: 0}
