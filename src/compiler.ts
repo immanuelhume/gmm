@@ -310,16 +310,12 @@ class TypeDeclScanner extends GoVisitor<[string, TypeRepr][]> {
 
 /**
  * For a [TypeContext] in the parse tree, tries to retrieve its type
- * information.
+ * information. Will always return a type, otherwise, it throws an exception.
  */
 const getTypeRepr = (ctx: TypeContext, store: TypeStore): TypeRepr => {
   if (ctx.typeName()) {
     const name = ctx.typeName().getText();
-    const ret = store.lookup(name);
-    if (ret === undefined) {
-      err(ctx, `undefined: ${name}`);
-    }
-    return ret!;
+    return store.lookupExn(name, ctx);
   } else if (ctx.typeLit()) {
     const lit = ctx.typeLit();
     if (lit.structType()) {
@@ -558,21 +554,16 @@ class FuncTypeBumper extends GoVisitor<void> {
 
   visitFuncDecl = (ctx: FuncDeclContext) => {
     const fname = ctx.name().getText();
-    const _params = ctx
+    const params = ctx
       .signature()
       .params()
       .param_list()
-      .map((param) => this.tstore.lookup(param.typeName().getText()));
-    const _results = ctx
+      .map((param) => this.tstore.lookupExn(param.typeName().getText(), ctx));
+    const results = ctx
       .signature()
       .funcResult()
       .type__list()
       .map((ty) => getTypeRepr(ty, this.tstore));
-    if (_results.includes(undefined) || _params.includes(undefined)) {
-      err(ctx, `could not find type of function ${fname}`);
-    }
-    const params = _params as TypeRepr[];
-    const results = _results as TypeRepr[];
     this.tenv.set(fname, { kind: "func", params, results });
   };
 }
