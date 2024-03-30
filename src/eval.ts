@@ -3,7 +3,6 @@ import {
   CallFrameView,
   DataType,
   Float64View,
-  BooleanView,
   FnView,
   BuiltinView,
   FrameView,
@@ -11,7 +10,6 @@ import {
   clone,
   BuiltinId,
   MachineState,
-  wordSize,
   BlockFrameView,
   Global,
   GlobalView,
@@ -29,7 +27,6 @@ import {
   ICall,
   IBinaryOp,
   IGoto,
-  InstrView,
   ILoadNameLoc,
   IPop,
   ILoadC,
@@ -77,7 +74,7 @@ export const microcode: Record<Opcode, EvalFn> = {
     switch (fnKind) {
       case DataType.Fn:
         const callFrame = CallFrameView.allocate(state);
-        callFrame.setPc(state.pc + ICall.size); // pc was already incremented to next instruction above
+        callFrame.setPc(state.pc + ICall.size);
         callFrame.setEnv(state.env);
 
         state.rts.push(callFrame.addr);
@@ -278,7 +275,7 @@ const execBinaryOp = (state: MachineState, op: BinaryOp): void => {
 
 type BinaryOpFn = (state: MachineState, lhs: Address, rhs: Address) => Address;
 
-// @todo add more binary builtins
+// @todo add more binary builtins, and reduce the duplication
 export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
   [
     DataType.Float64,
@@ -448,70 +445,38 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
 ]);
 
 const execLogicalOp = (state: MachineState, op: LogicalOp): void => {
-  const rhsAddr = state.os.pop();
   const lhsAddr = state.os.pop();
+  const rhsAddr = state.os.pop();
 
-  const lhsType = NodeView.getDataType(state.heap, lhsAddr);
-  const rhsType = NodeView.getDataType(state.heap, rhsAddr);
+  const _lhs = new GlobalView(state.heap, lhsAddr);
+  const _rhs = new GlobalView(state.heap, rhsAddr);
 
-  // ??
-  if (lhsType !== rhsType) {
-    throw new Error("Can't perform logical operation on different data types!");
+  if (!_lhs.isBoolean() || !_rhs.isBoolean()) {
+    throw new Error("Can't perform logical operation on non-boolean types");
   }
 
-  if (lhsType !== DataType.Boolean) {
-    throw new Error("Can't perform logical operation on non boolean values!");
+  const lhs = _lhs.getKind();
+  const rhs = _rhs.getKind();
+
+  switch (op) {
+    case LogicalOp.And:
+      if (lhs === Global.True && rhs === Global.True) {
+        state.os.push(state.globals[Global.True]);
+      } else {
+        state.os.push(state.globals[Global.False]);
+      }
+      break;
+    case LogicalOp.Or:
+      if (lhs === Global.True || rhs === Global.True) {
+        state.os.push(state.globals[Global.True]);
+      } else {
+        state.os.push(state.globals[Global.False]);
+      }
+      break;
+    default:
+      throw "Unimplemented";
   }
-
-  const f = logicalBuiltins.get(lhsType)?.get(op);
-  if (!f) throw new Error("No logical operation defined!"); // @todo: format string
-
-  const res = f(state, lhsAddr, rhsAddr);
-
-  state.os.push(res);
 };
-
-type LogicalOpFn = (state: MachineState, lhs: Address, rhs: Address) => Address;
-
-export const logicalBuiltins = new Map<DataType, Map<LogicalOp, LogicalOpFn>>([
-  [
-    DataType.Boolean,
-    new Map([
-      [
-        LogicalOp.And,
-        (state, lhsAddr, rhsAddr) => {
-          const lhs = new BooleanView(state.heap, lhsAddr);
-          const rhs = new BooleanView(state.heap, rhsAddr);
-
-          const lhsValue = lhs.getValue();
-          const rhsValue = rhs.getValue();
-
-          if (lhsValue && rhsValue) {
-            return state.globals[Global.True];
-          } else {
-            return state.globals[Global.False];
-          }
-        },
-      ],
-      [
-        LogicalOp.Or,
-        (state, lhsAddr, rhsAddr) => {
-          const lhs = new BooleanView(state.heap, lhsAddr);
-          const rhs = new BooleanView(state.heap, rhsAddr);
-
-          const lhsValue = lhs.getValue();
-          const rhsValue = rhs.getValue();
-
-          if (lhsValue || rhsValue) {
-            return state.globals[Global.True];
-          } else {
-            return state.globals[Global.False];
-          }
-        },
-      ],
-    ]),
-  ],
-]);
 
 const execUnaryOp = (state: MachineState, op: UnaryOp): void => {
   const operandAddr = state.os.pop();

@@ -49,7 +49,6 @@ export interface MachineState extends Memory, Registers {
 export enum DataType {
   Float64 = 0x00,
   Int64,
-  Boolean,
   Channel,
   String,
   Fn,
@@ -261,33 +260,6 @@ export class Int64View extends NodeView {
     return this.getChild(0);
   }
   setValue(value: number): void {
-    this.setChild(0, value);
-  }
-}
-
-/**
- * ┌──────┬───────┐
- * │header│boolean│
- * └──────┴───────┘
- */
-export class BooleanView extends NodeView {
-  static allocate(mem: Memory): BooleanView {
-    const addr = allocate(mem, DataType.Boolean, 1, 0);
-    return new BooleanView(mem.heap, addr);
-  }
-  constructor(heap: DataView, addr: Address) {
-    super(heap, addr);
-    this.checkType(DataType.Boolean);
-  }
-
-  toString(): string {
-    return `Boolean { ${this.getValue()} }`;
-  }
-
-  getValue(): boolean {
-    return this.getChild(0);
-  }
-  setValue(value: boolean): void {
     this.setChild(0, value);
   }
 }
@@ -570,6 +542,11 @@ export class GlobalView extends NodeView {
     this.setChild(0, kind);
     return this;
   }
+
+  isBoolean(): boolean {
+    const kind = this.getKind();
+    return kind === Global.True || kind === Global.False;
+  }
 }
 
 /**
@@ -651,7 +628,6 @@ class ChannelView extends NodeView {
 const nodeClass: Record<DataType, { new (heap: DataView, addr: Address, ctx?: HeapContext): NodeView }> = {
   [DataType.Float64]: Float64View,
   [DataType.Int64]: Int64View,
-  [DataType.Boolean]: BooleanView,
   [DataType.Channel]: ChannelView,
   [DataType.String]: StringView,
   [DataType.Fn]: FnView,
