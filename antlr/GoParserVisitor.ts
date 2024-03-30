@@ -31,7 +31,6 @@ import { ArgsContext } from "./GoParser";
 import { ArgContext } from "./GoParser";
 import { BlockContext } from "./GoParser";
 import { UnaryOpContext } from "./GoParser";
-import { BinaryOpContext } from "./GoParser";
 import { LogicalOpContext } from "./GoParser";
 import { RelOpContext } from "./GoParser";
 import { NumericOpContext } from "./GoParser";
@@ -244,12 +243,6 @@ export default class GoParserVisitor<Result> extends ParseTreeVisitor<Result> {
    * @return the visitor result
    */
   visitUnaryOp?: (ctx: UnaryOpContext) => Result;
-  /**
-   * Visit a parse tree produced by `GoParser.binaryOp`.
-   * @param ctx the parse tree
-   * @return the visitor result
-   */
-  visitBinaryOp?: (ctx: BinaryOpContext) => Result;
   /**
    * Visit a parse tree produced by `GoParser.logicalOp`.
    * @param ctx the parse tree

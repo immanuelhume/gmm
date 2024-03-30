@@ -1,6 +1,12 @@
 import { ParserRuleContext, CharStream, CommonTokenStream, RuleNode } from "antlr4";
 import GoLexer from "../antlr/GoLexer";
-import GoParser, { ExprListContext, FieldContext, LitStrContext, LnameContext } from "../antlr/GoParser";
+import GoParser, {
+  ExprListContext,
+  FieldContext,
+  LitStrContext,
+  LogicalOpContext,
+  LnameContext,
+} from "../antlr/GoParser";
 import {
   AssignmentContext,
   BlockContext,
@@ -48,6 +54,8 @@ import {
   IPush,
   ILoadStr,
   IPackTuple,
+  ILogicalOp,
+  LogicalOp,
 } from "./instructions";
 import { ArrayStack, Stack, StrPool } from "./util";
 import { builtinSymbols } from "./heapviews";
@@ -500,10 +508,18 @@ export class Assembler extends GoVisitor<number> {
 
   visitExpr = (ctx: ExprContext): number => {
     // An expression can be one of three types.
-    if (ctx.binaryOp()) {
+    if (ctx.numericOp()) {
       this.visit(ctx._lhs);
       this.visit(ctx._rhs);
-      this.visit(ctx.binaryOp());
+      this.visit(ctx.numericOp());
+    } else if (ctx.relOp()) {
+      this.visit(ctx._lhs);
+      this.visit(ctx._rhs);
+      this.visit(ctx.relOp());
+    } else if (ctx.logicalOp()) {
+      this.visit(ctx._lhs);
+      this.visit(ctx._rhs);
+      this.visit(ctx.logicalOp());
     } else if (ctx.unaryOp()) {
       this.visit(ctx.expr(0));
       this.visit(ctx.unaryOp());
@@ -582,6 +598,18 @@ export class Assembler extends GoVisitor<number> {
       op.setOp(BinaryOp.Geq);
     } else {
       throw new Error(`Unexpected relation operator`); // @todo a better error msg
+    }
+    return 0;
+  };
+
+  visitLogicalOp = (ctx: LogicalOpContext): number => {
+    const op = ILogicalOp.emit(this.bc);
+    if (ctx.LOGICAL_OR()) {
+      op.setOp(LogicalOp.Or);
+    } else if (ctx.LOGICAL_AND()) {
+      op.setOp(LogicalOp.And);
+    } else {
+      throw new Error("Unexpected logical operator");
     }
     return 0;
   };

@@ -10,7 +10,6 @@ import {
   clone,
   BuiltinId,
   MachineState,
-  wordSize,
   BlockFrameView,
   Global,
   GlobalView,
@@ -23,10 +22,11 @@ import {
   UnaryOp,
   BinaryOp,
   IUnaryOp,
+  LogicalOp,
+  ILogicalOp,
   ICall,
   IBinaryOp,
   IGoto,
-  InstrView,
   ILoadNameLoc,
   IPop,
   ILoadC,
@@ -52,6 +52,11 @@ export const microcode: Record<Opcode, EvalFn> = {
     execUnaryOp(state, instr.op());
     state.pc += IUnaryOp.size;
   },
+  [Opcode.LogicalOp]: function (state: MachineState): void {
+    const instr = new ILogicalOp(state.bytecode, state.pc);
+    execLogicalOp(state, instr.op());
+    state.pc += ILogicalOp.size;
+  },
   [Opcode.Call]: function (state: MachineState): void {
     const instr = new ICall(state.bytecode, state.pc);
     const argc = instr.argc();
@@ -69,7 +74,7 @@ export const microcode: Record<Opcode, EvalFn> = {
     switch (fnKind) {
       case DataType.Fn:
         const callFrame = CallFrameView.allocate(state);
-        callFrame.setPc(state.pc + ICall.size); // pc was already incremented to next instruction above
+        callFrame.setPc(state.pc + ICall.size);
         callFrame.setEnv(state.env);
 
         state.rts.push(callFrame.addr);
@@ -270,7 +275,7 @@ const execBinaryOp = (state: MachineState, op: BinaryOp): void => {
 
 type BinaryOpFn = (state: MachineState, lhs: Address, rhs: Address) => Address;
 
-// @todo add more binary builtins
+// @todo add more binary builtins, and reduce the duplication
 export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
   [
     DataType.Float64,
@@ -337,9 +342,141 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           }
         },
       ],
+      [
+        BinaryOp.Mul,
+        (state, lhsAddr, rhsAddr) => {
+          const lhs = new Float64View(state.heap, lhsAddr);
+          const rhs = new Float64View(state.heap, rhsAddr);
+
+          const lhsValue = lhs.getValue();
+          const rhsValue = rhs.getValue();
+
+          const resValue = lhsValue * rhsValue;
+
+          const res = Float64View.allocate(state);
+          res.setValue(resValue);
+
+          return res.addr;
+        },
+      ],
+      [
+        BinaryOp.Div,
+        (state, lhsAddr, rhsAddr) => {
+          const lhs = new Float64View(state.heap, lhsAddr);
+          const rhs = new Float64View(state.heap, rhsAddr);
+
+          const lhsValue = lhs.getValue();
+          const rhsValue = rhs.getValue();
+
+          const resValue = lhsValue / rhsValue;
+
+          const res = Float64View.allocate(state);
+          res.setValue(resValue);
+
+          return res.addr;
+        },
+      ],
+      [
+        BinaryOp.Leq,
+        (state, lhsAddr, rhsAddr) => {
+          const lhs = new Float64View(state.heap, lhsAddr);
+          const rhs = new Float64View(state.heap, rhsAddr);
+
+          const lhsValue = lhs.getValue();
+          const rhsValue = rhs.getValue();
+
+          if (lhsValue <= rhsValue) {
+            return state.globals[Global.True];
+          } else {
+            return state.globals[Global.False];
+          }
+        },
+      ],
+      [
+        BinaryOp.Geq,
+        (state, lhsAddr, rhsAddr) => {
+          const lhs = new Float64View(state.heap, lhsAddr);
+          const rhs = new Float64View(state.heap, rhsAddr);
+
+          const lhsValue = lhs.getValue();
+          const rhsValue = rhs.getValue();
+
+          if (lhsValue >= rhsValue) {
+            return state.globals[Global.True];
+          } else {
+            return state.globals[Global.False];
+          }
+        },
+      ],
+      [
+        BinaryOp.L,
+        (state, lhsAddr, rhsAddr) => {
+          const lhs = new Float64View(state.heap, lhsAddr);
+          const rhs = new Float64View(state.heap, rhsAddr);
+
+          const lhsValue = lhs.getValue();
+          const rhsValue = rhs.getValue();
+
+          if (lhsValue < rhsValue) {
+            return state.globals[Global.True];
+          } else {
+            return state.globals[Global.False];
+          }
+        },
+      ],
+      [
+        BinaryOp.G,
+        (state, lhsAddr, rhsAddr) => {
+          const lhs = new Float64View(state.heap, lhsAddr);
+          const rhs = new Float64View(state.heap, rhsAddr);
+
+          const lhsValue = lhs.getValue();
+          const rhsValue = rhs.getValue();
+
+          if (lhsValue > rhsValue) {
+            return state.globals[Global.True];
+          } else {
+            return state.globals[Global.False];
+          }
+        },
+      ],
     ]),
   ],
 ]);
+
+const execLogicalOp = (state: MachineState, op: LogicalOp): void => {
+  const lhsAddr = state.os.pop();
+  const rhsAddr = state.os.pop();
+
+  const _lhs = new GlobalView(state.heap, lhsAddr);
+  const _rhs = new GlobalView(state.heap, rhsAddr);
+
+  if (!_lhs.isBoolean() || !_rhs.isBoolean()) {
+    throw new Error("Can't perform logical operation on non-boolean types");
+  }
+
+  const lhs = _lhs.getKind();
+  const rhs = _rhs.getKind();
+
+  switch (op) {
+    case LogicalOp.And:
+      if (lhs === Global.True && rhs === Global.True) {
+        state.os.push(state.globals[Global.True]);
+      } else {
+        state.os.push(state.globals[Global.False]);
+      }
+      break;
+    case LogicalOp.Or:
+      if (lhs === Global.True || rhs === Global.True) {
+        state.os.push(state.globals[Global.True]);
+      } else {
+        state.os.push(state.globals[Global.False]);
+      }
+      break;
+    default:
+      throw "Unimplemented";
+  }
+};
 
 const execUnaryOp = (state: MachineState, op: UnaryOp): void => {
   const operandAddr = state.os.pop();
@@ -367,6 +504,12 @@ const unaryBuiltins = new Map<[DataType, UnaryOp], UnaryOpFn>([
       res.setValue(-val);
 
       return res.addr;
+    },
+  ],
+  [
+    [DataType.Float64, UnaryOp.Add],
+    (state, addr) => {
+      return addr;
     },
   ],
 ]);
