@@ -312,9 +312,14 @@ class TypeDeclScanner extends GoVisitor<[string, TypeRepr][]> {
  * For a [TypeContext] in the parse tree, tries to retrieve its type
  * information.
  */
-const getTypeRepr = (ctx: TypeContext, store: TypeStore): TypeRepr | undefined => {
+const getTypeRepr = (ctx: TypeContext, store: TypeStore): TypeRepr => {
   if (ctx.typeName()) {
-    return store.lookup(ctx.typeName().getText());
+    const name = ctx.typeName().getText();
+    const ret = store.lookup(name);
+    if (ret === undefined) {
+      err(ctx, `undefined: ${name}`);
+    }
+    return ret!;
   } else if (ctx.typeLit()) {
     const lit = ctx.typeLit();
     if (lit.structType()) {
@@ -340,6 +345,7 @@ const getTypeReprStruct = (ctx: StructTypeContext): StructType => {
     const ty = field.type_().getText();
     return [name, ty];
   });
+  // @todo: check that no fields were duped
   return { kind: "struct", fields };
 };
 
