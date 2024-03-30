@@ -64,7 +64,7 @@ import {
   IUnaryOp,
   UnaryOp,
 } from "./instructions";
-import { ArrayStack, Stack, StrPool, arraysEqual } from "./util";
+import { ArrayStack, Stack, StrPool, allUnique, arraysEqual } from "./util";
 import { builtinSymbols } from "./heapviews";
 
 class BytecodeWriter implements Emitter {
@@ -345,7 +345,14 @@ const getTypeReprStruct = (ctx: StructTypeContext): StructType => {
     const ty = field.type_().getText();
     return [name, ty];
   });
-  // @todo: check that no fields were duped
+  const fnames = fields.map(([name, _]) => name);
+  for (let i = 0; i < fnames.length; ++i) {
+    for (let j = i + 1; j < fnames.length; ++j) {
+      if (fnames[i] === fnames[j]) {
+        err(ctx, `multiple declarations of field ${fnames[i]}`);
+      }
+    }
+  }
   return { kind: "struct", fields };
 };
 

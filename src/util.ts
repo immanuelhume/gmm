@@ -100,3 +100,7 @@ export const arraysEqual = <T>(xs: T[], ys: T[], equal: (x: T, y: T) => boolean)
   }
   return true;
 };
+
+export const allUnique = <T>(xs: T[], equal: (u: T, v: T) => boolean): boolean => {
+  return true;
+};
