@@ -1,12 +1,18 @@
 import { ParserRuleContext, CharStream, CommonTokenStream, RuleNode } from "antlr4";
 import GoLexer from "../antlr/GoLexer";
-import GoParser, { ExprListContext, LitStrContext, LogicalOpContext } from "../antlr/GoParser";
+import GoParser, {
+  ExprListContext,
+  FieldContext,
+  LitStrContext,
+  LogicalOpContext,
+  LnameContext,
+} from "../antlr/GoParser";
 import {
   AssignmentContext,
   BlockContext,
   ExprContext,
   FuncDeclContext,
-  IdentContext,
+  NameContext,
   IfStmtContext,
   PrimaryExprContext,
   ReturnStmtContext,
@@ -109,16 +115,16 @@ class CompileTimeEnvironment {
     this.env.shift();
   }
 
-  lookup(ident: string): [number, number] {
+  lookup(name: string): [number, number] {
     for (let i = 0; i < this.env.length; ++i) {
       const frame = this.env[i];
-      const offset = frame.indexOf(ident);
+      const offset = frame.indexOf(name);
       if (offset !== -1) {
         return [i, offset];
       }
     }
     // @todo: is it ok to throw an Error here?
-    throw new Error(`Identifier [${ident}] not found in compile time environment`);
+    throw new Error(`Identifier [${name}] not found in compile time environment`);
   }
 
   depth(): number {
@@ -136,17 +142,17 @@ class DeclScanner extends GoVisitor<string[]> {
   stop: boolean = false;
 
   visitFuncDecl = (ctx: FuncDeclContext) => {
-    return [ctx.ident().getText()];
+    return [ctx.name().getText()];
   };
 
   visitVarDecl = (ctx: VarDeclContext) => {
-    return [ctx.ident().getText()];
+    return [ctx.name().getText()];
   };
 
   visitShortVarDecl = (ctx: ShortVarDeclContext) => {
     return ctx
-      .lvalueList()
-      .lvalue_list()
+      .lnameList()
+      .lname_list()
       .map((lvalue) => lvalue.getText());
   };
 
@@ -249,7 +255,7 @@ export class Assembler extends GoVisitor<number> {
       .params()
       .param_list()
       .map((param) => {
-        return param.ident().getText();
+        return param.name().getText();
       });
 
     const fnPc = this.bc.wc();
@@ -278,7 +284,7 @@ export class Assembler extends GoVisitor<number> {
     // declarations with [func] are not re-written into simple assignment statements.
     //
     // This is a limitation of not working with an AST.
-    const fnName = ctx.ident().getText();
+    const fnName = ctx.name().getText();
     const [frame, offset] = this.env.lookup(fnName);
     ILoadNameLoc.emit(this.bc, ctx).setFrame(frame).setOffset(offset);
     IAssign.emit(this.bc, ctx).setCount(1);
@@ -298,8 +304,8 @@ export class Assembler extends GoVisitor<number> {
   visitVarDecl = (ctx: VarDeclContext): number => {
     if (ctx.expr()) {
       this.visit(ctx.expr()); // compile RHS
-      const ident = ctx.ident().getText();
-      const [frame, offset] = this.env.lookup(ident);
+      const name = ctx.name().getText();
+      const [frame, offset] = this.env.lookup(name);
       ILoadNameLoc.emit(this.bc, ctx).setFrame(frame).setOffset(offset);
       IAssign.emit(this.bc, ctx).setCount(1);
     } else {
@@ -308,7 +314,7 @@ export class Assembler extends GoVisitor<number> {
       //
       // perhaps we can have a global representing "uninitialized"? and then initialize it when
       // we first access the value?
-      // console.log(`variable ${ctx.ident().getText()} was default initialized`);
+      // console.log(`variable ${ctx.name().getText()} was default initialized`);
     }
     // Declarations, even if there is an initializing expression, should leave nothing on the stack.
     return 0;
@@ -370,12 +376,12 @@ export class Assembler extends GoVisitor<number> {
         // We may be declaring a variable. In which case we'll create a new
         // block surrounding this for statement, with that new variable inside.
         IEnterBlock.emit(this.bc).setNumVars(1);
-        const idents = init
+        const names = init
           .shortVarDecl()
-          .lvalueList()
-          .lvalue_list()
+          .lnameList()
+          .lname_list()
           .map((lvalue) => lvalue.getText());
-        this.env.pushFrame(idents);
+        this.env.pushFrame(names);
       }
 
       recordDepth();
@@ -469,11 +475,16 @@ export class Assembler extends GoVisitor<number> {
     // @todo
   };
 
-  visitLvalue = (ctx: LvalueContext): number => {
-    const ident = ctx.ident().getText();
-    const [frame, offset] = this.env.lookup(ident);
+  visitLname = (ctx: LnameContext): number => {
+    const name = ctx.getText();
+    const [frame, offset] = this.env.lookup(name);
     ILoadNameLoc.emit(this.bc).setFrame(frame).setOffset(offset);
     return 1;
+  };
+
+  visitField = (ctx: FieldContext): number => {
+    // @todo LValue field
+    return 0;
   };
 
   visitAssignment = (ctx: AssignmentContext): number => {
@@ -488,7 +499,7 @@ export class Assembler extends GoVisitor<number> {
     // Identical to [visitAssignment]
     //
     // @todo make them into a common function
-    const nnames = ctx._lhs.lvalue_list().length;
+    const nnames = ctx._lhs.lname_list().length;
     this.visit(ctx._rhs);
     this.visit(ctx._lhs);
     IAssign.emit(this.bc).setCount(nnames);
@@ -519,8 +530,8 @@ export class Assembler extends GoVisitor<number> {
   };
 
   visitPrimaryExpr = (ctx: PrimaryExprContext): number => {
-    if (ctx.ident()) {
-      this.visit(ctx.ident());
+    if (ctx.name()) {
+      this.visit(ctx.name());
     } else if (ctx.lit()) {
       this.visit(ctx.lit());
     } else if (ctx._fn) {
@@ -603,9 +614,9 @@ export class Assembler extends GoVisitor<number> {
     return 0;
   };
 
-  visitIdent = (ctx: IdentContext): number => {
-    const ident = ctx.getText();
-    const [frame, offset] = this.env.lookup(ident);
+  visitName = (ctx: NameContext): number => {
+    const name = ctx.getText();
+    const [frame, offset] = this.env.lookup(name);
     ILoadName.emit(this.bc).setFrame(frame).setOffset(offset);
     return 1;
   };

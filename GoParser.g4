@@ -35,7 +35,10 @@ goStmt : 'go' primaryExpr ; // [primaryExpr] has to be a function call
 assignment : lhs=lvalueList '=' rhs=exprList ;
 
 lvalueList : lvalue (',' lvalue)* ;
-lvalue : ident ; // we'll define this properly in the future
+lvalue : lname | field; // we'll define this properly in the future
+lname : WORD ; // a name which appears on LHS
+lnameList : lname (',' lname)* ;
+field : base=primaryExpr '.' last=WORD ;
 
 forStmt : 'for' (condition | forClause | rangeClause) block ;
 
@@ -43,7 +46,7 @@ condition : expr ;
 
 forClause : init=simpleStmt? ';' cond=condition? ';' post=simpleStmt? ;
 
-rangeClause : ( lvalueList '=' | lvalueList ':=' ) 'range' expr ;
+rangeClause : ( lvalueList '=' | lnameList ':=' ) 'range' expr ;
 
 exprStmt : expr ;
 
@@ -57,13 +60,13 @@ expr : primaryExpr
 	;
 exprList : expr (',' expr)* ;
 
-primaryExpr : ident 
+primaryExpr : name
 	| lit
 	| fn=primaryExpr args
 	| base=primaryExpr selector
 	;
 
-selector : '.' ident ;
+selector : '.' name ;
 
 args : '(' arg (',' arg)* ','? ')';
 arg : expr | type ; // functions like [make] take in types as params...
@@ -76,13 +79,13 @@ logicalOp : '||' | '&&' ;
 relOp : '==' | '!=' | '<' | '<=' | '>' | '>=' ;
 numericOp : '+' | '-' | '*' | '/' ;
 
-shortVarDecl : lhs=lvalueList ':=' rhs=exprList ;
+shortVarDecl : lhs=lnameList ':=' rhs=exprList ;
 
 decl : funcDecl | varDecl | typeDecl ;
-typeDecl : 'type' ident type ;
-varDecl : 'var' ident type ('=' expr)? ;
+typeDecl : 'type' name type ;
+varDecl : 'var' name type ('=' expr)? ;
 
-funcDecl : 'func' ident signature funcBody ;
+funcDecl : 'func' name signature funcBody ;
 signature : '(' params ')' funcResult ;
 funcBody : block ;
 funcResult : type? | '(' type? ')' | '(' type (',' type)* ')' ;
@@ -90,20 +93,20 @@ funcResult : type? | '(' type? ')' | '(' type (',' type)* ')' ;
 litFunc : 'func' signature funcBody ;
 
 params : param (',' param)* ','? | param? ;
-param : ident typeName ;
+param : name typeName ;
 
 type : typeName | typeLit ;
-typeName : ident ;
+typeName : name ;
 typeLit : structType | channelType ; // exclude pointer types for now - we probably won't need them
 
 channelType : 'chan' elementType ;
 elementType : type ;
 
 structType : 'struct' '{' (fieldDecl eos)* '}' ;
-fieldDecl : ident type ;
+fieldDecl : name type ;
 
-ident : WORD ;
-identList : ident (',' ident)* ;
+name : WORD ;
+nameList : name (',' name)* ;
 
 lit : number | litStr | litNil | litBool | litFunc ;
 
