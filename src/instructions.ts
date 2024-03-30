@@ -5,6 +5,7 @@ import { ParserRuleContext } from "antlr4";
 export const enum Opcode {
   BinaryOp = 0x00,
   UnaryOp,
+  LogicalOp,
   Return,
   Call,
   Goto,
@@ -92,6 +93,11 @@ export const enum BinaryOp {
   Geq,
 }
 
+export const enum LogicalOp {
+  And = 0x00,
+  Or,
+}
+
 export class IBinaryOp extends InstrView {
   static size = 2;
   readonly size = 2;
@@ -120,6 +126,34 @@ export class IBinaryOp extends InstrView {
   }
 }
 
+export class ILogicalOp extends InstrView {
+  static size = 2;
+  readonly size = 2;
+
+  static emit(w: Emitter, ctx?: ParserRuleContext): ILogicalOp {
+    const pc = w.reserve(Opcode.LogicalOp, ILogicalOp.size, ctx);
+    return new ILogicalOp(w.code(), pc);
+  }
+
+  toString(): string {
+    const sym = logicalOpSyms[this.op()];
+    return `LogicalOp ${sym}`;
+  }
+
+  constructor(bytecode: DataView, addr: number) {
+    super(bytecode, addr);
+    assert(this.opcode() === Opcode.LogicalOp);
+  }
+
+  op(): LogicalOp {
+    return this.bytecode.getUint8(this.addr + 1);
+  }
+  setOp(op: LogicalOp): ILogicalOp {
+    this.bytecode.setUint8(this.addr + 1, op);
+    return this;
+  }
+}
+
 export class IUnaryOp extends InstrView {
   static size = 2;
   readonly size = 2;
@@ -141,6 +175,10 @@ export class IUnaryOp extends InstrView {
 
   op(): UnaryOp {
     return this.bytecode.getUint8(this.addr + 1);
+  }
+  setOp(op: UnaryOp): IUnaryOp {
+    this.bytecode.setUint8(this.addr + 1, op);
+    return this;
   }
 }
 
@@ -726,6 +764,7 @@ const opcodeClass: Record<Opcode, { new (bytecode: DataView, addr: number): Inst
   [Opcode.LoadName]: ILoadName,
   [Opcode.BinaryOp]: IBinaryOp,
   [Opcode.UnaryOp]: IUnaryOp,
+  [Opcode.LogicalOp]: ILogicalOp,
   [Opcode.LoadC]: ILoadC,
   [Opcode.LoadStr]: ILoadStr,
   [Opcode.Push]: IPush,
@@ -758,4 +797,9 @@ const binaryOpSyms: Record<BinaryOp, string> = {
   [BinaryOp.Leq]: "<=",
   [BinaryOp.G]: ">",
   [BinaryOp.Geq]: ">=",
+};
+
+const logicalOpSyms: Record<LogicalOp, string> = {
+  [LogicalOp.And]: "&&",
+  [LogicalOp.Or]: "||",
 };

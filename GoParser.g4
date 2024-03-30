@@ -52,7 +52,13 @@ exprStmt : expr ;
 
 returnStmt : 'return' exprList? ;
 
-expr : primaryExpr | unaryOp expr | lhs=expr binaryOp rhs=expr ;
+expr : primaryExpr
+	| unaryOp expr
+	| lhs=expr numericOp rhs=expr
+	| lhs=expr relOp rhs=expr
+	| lhs=expr logicalOp rhs=expr
+	;
+
 exprList : expr (',' expr)* ;
 
 primaryExpr : lit
@@ -70,7 +76,6 @@ block : '{' (stmt eos)* '}' ;
 
 unaryOp : '-' | '+' | '<-' ;
 
-binaryOp : logicalOp | relOp | numericOp  ;
 logicalOp : '||' | '&&' ;
 relOp : '==' | '!=' | '<' | '<=' | '>' | '>=' ;
 numericOp : '+' | '-' | '*' | '/' ;

@@ -193,6 +193,10 @@ export abstract class NodeView {
     return this.heap.setFloat64(this.childByteOffset(i), val);
   }
 
+  // getBoolChild(i: boolean): boolean {
+  //   return this.heap.get
+  // }
+
   checkType(type: DataType) {
     if (this.dataType() !== type) {
       const want = DataType[type];
@@ -538,6 +542,11 @@ export class GlobalView extends NodeView {
   setKind(kind: Global): GlobalView {
     this.setChild(0, kind);
     return this;
+  }
+
+  isBoolean(): boolean {
+    const kind = this.getKind();
+    return kind === Global.True || kind === Global.False;
   }
 }
 

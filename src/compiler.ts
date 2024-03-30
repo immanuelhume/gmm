@@ -5,9 +5,11 @@ import GoParser, {
   FieldContext,
   LitStrContext,
   LitStructContext,
-  LnameContext,
   StructTypeContext,
   TypeContext,
+  LogicalOpContext,
+  LnameContext,
+  UnaryOpContext,
 } from "../antlr/GoParser";
 import {
   AssignmentContext,
@@ -57,6 +59,10 @@ import {
   IPackStruct,
   ILoadStructField,
   ILoadStructFieldLoc,
+  ILogicalOp,
+  LogicalOp,
+  IUnaryOp,
+  UnaryOp,
 } from "./instructions";
 import { ArrayStack, Stack, StrPool, arraysEqual } from "./util";
 import { builtinSymbols } from "./heapviews";
@@ -242,6 +248,14 @@ const areTypesEqual = (lhs: TypeRepr, rhs: TypeRepr): boolean => {
   }
 };
 
+/**
+ * Checks if a type is a boolean type. Just for convenience.
+ */
+const isBool = (ty: TypeRepr | undefined): boolean => {
+  if (ty === undefined) return false;
+  return ty.kind === "primitive" && ty.name === "bool";
+};
+
 type PrimitiveTypeName = "int64" | "float64" | "bool" | "string";
 const makePrimitive = (name: PrimitiveTypeName): PrimitiveType => ({ kind: "primitive", name });
 
@@ -417,15 +431,24 @@ class Typer extends GoVisitor<TypeRepr[] | undefined> {
   }
 
   visitExpr = (ctx: ExprContext) => {
-    if (ctx.binaryOp()) {
+    if (ctx.numericOp() || ctx.relOp()) {
       const lhs = this.visit(ctx._lhs);
       const rhs = this.visit(ctx._rhs);
-      if (lhs === undefined || rhs === undefined) {
+      if (lhs === undefined || rhs === undefined || lhs.length !== 1 || rhs.length !== 1) {
         return undefined;
       }
+      // @todo: we should check that they are, indeed, numbers?
       // @todo we're assuming all binary operations take the same types?
-      if (!arraysEqual(lhs, rhs, areTypesEqual)) return undefined;
+      if (!areTypesEqual(lhs[0], rhs[0])) return undefined;
       return lhs;
+    } else if (ctx.logicalOp()) {
+      const lhs = this.visit(ctx._lhs);
+      const rhs = this.visit(ctx._rhs);
+      if (lhs === undefined || rhs === undefined || lhs.length !== 1 || rhs.length !== 1) {
+        return undefined;
+      }
+      if (!isBool(lhs[0]) || !isBool(rhs[0])) return undefined;
+      return [makePrimitive("bool")];
     } else if (ctx.unaryOp()) {
       // @todo
       throw "Unimplemented";
@@ -917,10 +940,18 @@ export class Assembler extends GoVisitor<number> {
 
   visitExpr = (ctx: ExprContext): number => {
     // An expression can be one of three types.
-    if (ctx.binaryOp()) {
+    if (ctx.numericOp()) {
       this.visit(ctx._lhs);
       this.visit(ctx._rhs);
-      this.visit(ctx.binaryOp());
+      this.visit(ctx.numericOp());
+    } else if (ctx.relOp()) {
+      this.visit(ctx._lhs);
+      this.visit(ctx._rhs);
+      this.visit(ctx.relOp());
+    } else if (ctx.logicalOp()) {
+      this.visit(ctx._lhs);
+      this.visit(ctx._rhs);
+      this.visit(ctx.logicalOp());
     } else if (ctx.unaryOp()) {
       this.visit(ctx.expr(0));
       this.visit(ctx.unaryOp());
@@ -1019,6 +1050,30 @@ export class Assembler extends GoVisitor<number> {
       op.setOp(BinaryOp.Geq);
     } else {
       err(ctx, `unexpected relation operator ${ctx.getText()}`);
+    }
+    return 0;
+  };
+
+  visitLogicalOp = (ctx: LogicalOpContext): number => {
+    const op = ILogicalOp.emit(this.bc);
+    if (ctx.LOGICAL_OR()) {
+      op.setOp(LogicalOp.Or);
+    } else if (ctx.LOGICAL_AND()) {
+      op.setOp(LogicalOp.And);
+    } else {
+      err(ctx, `unexpected logical operator ${ctx.getText()}`);
+    }
+    return 0;
+  };
+
+  visitUnaryOp = (ctx: UnaryOpContext): number => {
+    const op = IUnaryOp.emit(this.bc);
+    if (ctx.MINUS()) {
+      op.setOp(UnaryOp.Sub);
+    } else if (ctx.PLUS()) {
+      op.setOp(UnaryOp.Add);
+    } else {
+      err(ctx, `unexpected unary operator ${ctx.getText()}`);
     }
     return 0;
   };
