@@ -80,15 +80,18 @@ export const globalSymbols: Record<Global, string> = {
 export const enum BuiltinId {
   Debug = 0x00,
   Panic,
+  New,
 }
-export const builtinSymbols = ["dbg", "panic"]; // need a list for deterministic order
+export const builtinSymbols = ["dbg", "panic", "new"]; // need a list for deterministic order
 export const builtinName2Id: Record<string, BuiltinId> = {
   dbg: BuiltinId.Debug,
   panic: BuiltinId.Panic,
+  new: BuiltinId.New,
 };
 export const builtinId2Name: Record<BuiltinId, string> = {
   [BuiltinId.Debug]: "dbg",
   [BuiltinId.Panic]: "panic",
+  [BuiltinId.New]: "new",
 };
 
 /* Each word is a Float64. So 8 bytes. */
