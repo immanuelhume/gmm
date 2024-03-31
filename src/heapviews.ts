@@ -614,9 +614,25 @@ export class TupleView extends NodeView {
 
 class PointerView extends NodeView {
   // @todo
+  static allocate(state: Memory): PointerView {
+    const addr = allocate(state, DataType.Pointer, 0, 1);
+    return new PointerView(state.heap, addr);
+  }
+  constructor(heap: DataView, addr: Address) {
+    super(heap, addr);
+    this.checkType(DataType.Pointer);
+  }
   toString(): string {
     return "";
   }
+  get(i: number): Address {
+    return this.getChild(i);
+  }
+  set(i: number, data: Address): PointerView {
+    this.setChild(i, data);
+    return this;
+  }
+  //dereference(i: number)
 }
 class ChannelView extends NodeView {
   // @todo
