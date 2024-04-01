@@ -204,161 +204,278 @@ class DeclScanner extends GoVisitor<string[]> {
   }
 }
 
-type Type = {
-  name: string;
-  data: TypeData;
-  methods: Map<string, FuncType>;
-};
-
-type TypeData = StructType | ChannelType | PrimitiveType | FuncType;
-
-type StructType = {
-  kind: "struct";
-  fields: [string, string][];
-};
-
-type ChannelType = {
-  kind: "chan";
-  elem: string;
-};
-
-type PrimitiveType = {
-  kind: "primitive";
-  name: PrimitiveTypeName;
-};
-
-type FuncType = {
-  kind: "func";
-  params: TypeData[];
-  results: TypeData[];
-};
-
-const areTypesEqual = (lhs: TypeData, rhs: TypeData): boolean => {
-  if (lhs.kind !== rhs.kind) return false;
-  let _rhs;
-  switch (lhs.kind) {
-    case "struct":
-      _rhs = rhs as StructType;
-      return arraysEqual(lhs.fields, _rhs.fields, (a, b) => a[0] === b[0] && a[1] === b[1]);
-    case "chan":
-      _rhs = rhs as ChannelType;
-      return lhs.elem === _rhs.elem;
-    case "primitive":
-      _rhs = rhs as PrimitiveType;
-      return lhs.name === _rhs.name;
-    case "func":
-      _rhs = rhs as FuncType;
-      return (
-        arraysEqual(lhs.params, _rhs.params, (u, v) => u === v) && arraysEqual(lhs.results, _rhs.results, areTypesEqual)
-      );
-  }
-};
-
 /**
- * Checks if a type is a boolean type. Just for convenience.
+ * A collection of data and logic related to types at compile time.
  */
-const isBool = (ty: TypeData | undefined): boolean => {
-  if (ty === undefined) return false;
-  return ty.kind === "primitive" && ty.name === "bool";
-};
-
-type PrimitiveTypeName = "int64" | "float64" | "bool" | "string";
-const makePrimitive = (name: PrimitiveTypeName): PrimitiveType => ({ kind: "primitive", name });
-
-const primitiveTypes: Map<string, PrimitiveType> = new Map([
-  ["int", makePrimitive("int64")],
-  ["float", makePrimitive("float64")],
-  ["int64", makePrimitive("int64")],
-  ["float64", makePrimitive("float64")],
-  ["bool", makePrimitive("bool")],
-  ["string", makePrimitive("string")],
-]);
-
-/**
- * Like [DeclScanner], but for types. We'll build up a map from type names
- * (strings) to type info for the provided scope.
- */
-class TypeDeclScanner extends GoVisitor<[string, TypeData][]> {
-  private stop: boolean = false;
-  private store: TypeStore;
-
-  constructor(store: TypeStore) {
-    super();
-    this.store = store;
-  }
-
-  visitProg = (ctx: ProgContext) => {
-    if (this.stop) return [];
-    this.stop = true;
-    return this.visitChildren(ctx);
+namespace Type {
+  export type T = {
+    name?: string;
+    data: Data;
+    /**
+     * All types can have methods, even function types!
+     */
+    // methods: Map<string, Func>;
   };
 
-  visitBlock = (ctx: BlockContext) => {
-    if (this.stop) return [];
-    this.stop = true;
-    return this.visitChildren(ctx);
+  type Data = Struct | Channel | Primitive | Func;
+
+  export type Struct = {
+    kind: "struct";
+    /**
+     * A mapping from field name to its type name. We use a list instead of a
+     * map, because the order is important.
+     */
+    fields: [string, T][];
   };
 
-  visitTypeDecl = (ctx: TypeDeclContext) => {
-    const name = ctx.name().getText();
-    const ty = getTypeData(ctx.type_(), this.store);
-    if (ty === undefined) {
-      err(ctx, `could not find out about type ${name}`);
+  export type Channel = {
+    kind: "chan";
+    /**
+     * Type of the element which the channel accepts.
+     */
+    elem: T;
+  };
+
+  export type Primitive = {
+    kind: "primitive";
+    name: Primitive.Name;
+  };
+
+  export type Func = {
+    kind: "func";
+    params: T[];
+    results: T[];
+  };
+
+  export const equal = (lhs: T, rhs: T): boolean => {
+    // @note: we could also check if their names match
+    return equalData(lhs.data, rhs.data);
+  };
+
+  const equalData = (lhs: Data, rhs: Data): boolean => {
+    if (lhs.kind !== rhs.kind) return false;
+    let _rhs;
+    switch (lhs.kind) {
+      case "struct":
+        _rhs = rhs as Struct;
+        return arraysEqual(lhs.fields, _rhs.fields, (a, b) => a[0] === b[0] && equal(a[1], b[1]));
+      case "chan":
+        _rhs = rhs as Channel;
+        return equal(lhs.elem, _rhs.elem);
+      case "primitive":
+        _rhs = rhs as Primitive;
+        return lhs.name === _rhs.name;
+      case "func":
+        _rhs = rhs as Func;
+        return arraysEqual(lhs.params, _rhs.params, equal) && arraysEqual(lhs.results, _rhs.results, equal);
     }
-    return [[name, ty] as [string, TypeData]];
   };
 
-  visitChildren(node: ParserRuleContext): [string, TypeData][] {
-    if (!node.children) return [];
-    return node.children.flatMap((child) => this.visit(child)).filter((ty) => ty !== undefined);
+  export const isBool = (t: T | undefined): boolean => {
+    if (t === undefined) return false;
+    return t.data.kind === "primitive" && t.data.name === "bool";
+  };
+
+  export namespace Primitive {
+    export type Name = "int64" | "float64" | "bool" | "string";
+
+    export const make = (name: string, underlying: Name): T => {
+      return { name, data: { kind: "primitive", name: underlying } };
+    };
+
+    /**
+     * A list of the primitive types. This is our "root frame" for the compile
+     * time type environment.
+     */
+    export const types: T[] = [
+      make("int", "int64"),
+      make("float", "float64"),
+      make("int64", "int64"),
+      make("float64", "float64"),
+      make("bool", "bool"),
+      make("string", "string"),
+    ];
   }
 }
 
 /**
- * For a [TypeContext] in the parse tree, tries to retrieve its type
- * information. Will always return a type, otherwise, it throws an exception.
+ * Auxiliary stuff for when we are parsing out types, but not resolving them
+ * yet - e.g. for a struct like
+ *
+ *   struct foo bar
+ *
+ * we'll eventually need to know what "bar" is. But when we first encounter
+ * this, we may not have enough information. This is what this namespace
+ * contains - intermediate data structures before we resolve full type info.
  */
-const getTypeData = (ctx: TypeContext, store: TypeStore): TypeData => {
-  if (ctx.typeName()) {
-    const name = ctx.typeName().getText();
-    return store.lookupExn(name, ctx);
-  } else if (ctx.typeLit()) {
-    const lit = ctx.typeLit();
-    if (lit.structType()) {
-      return getTypeDataStruct(lit.structType());
-    } else if (lit.channelType()) {
-      // @todo
-      throw "Channel types are not supported yet";
+namespace _Type {
+  type T = { name: string; data: Data; ctx: ParserRuleContext };
+
+  type Data = Struct | Channel | Func | Alias;
+
+  type Struct = {
+    kind: "struct";
+    fields: [string, string][];
+  };
+
+  type Channel = {
+    kind: "chan";
+    elem: string;
+  };
+
+  type Func = {
+    kind: "func";
+    params: string[];
+    results: string[];
+  };
+
+  type Alias = {
+    kind: "alias";
+    alias: string;
+  };
+
+  /**
+   * Scans type declarations. Does not resolve type references! Everything is stringy.
+   */
+  export class Scanner extends GoVisitor<T[]> {
+    private stop: boolean = false;
+
+    constructor() {
+      super();
+    }
+
+    visitProg = (ctx: ProgContext) => {
+      if (this.stop) return [];
+      this.stop = true;
+      return this.visitChildren(ctx);
+    };
+
+    visitBlock = (ctx: BlockContext) => {
+      if (this.stop) return [];
+      this.stop = true;
+      return this.visitChildren(ctx);
+    };
+
+    visitTypeDecl = (ctx: TypeDeclContext) => {
+      const name = ctx.name().getText();
+      const data = fromContext(ctx.type_());
+      return [{ name, data, ctx }];
+    };
+
+    visitChildren(node: ParserRuleContext): T[] {
+      if (!node.children) return [];
+      return node.children.flatMap((child) => this.visit(child)).filter((ty) => ty !== undefined);
+    }
+  }
+
+  const fromContext = (ctx: TypeContext): Data => {
+    if (ctx.typeName()) {
+      const alias = ctx.typeName().getText();
+      return { kind: "alias", alias };
+    } else if (ctx.typeLit()) {
+      const lit = ctx.typeLit();
+      if (lit.structType()) {
+        return fromStructContext(lit.structType());
+      } else if (lit.channelType()) {
+        // @todo
+        throw "Channel types are not supported yet";
+      } else {
+        throw "Unreachable";
+      }
     } else {
       throw "Unreachable";
     }
-  } else {
-    throw "Unreachable";
-  }
-};
+  };
 
-/**
- * Parses out the type information for a struct literal in the parse tree.
- */
-const getTypeDataStruct = (ctx: StructTypeContext): StructType => {
-  const fs = ctx.fieldDecl_list();
-  const fields: [string, string][] = fs.map((field) => {
-    const name = field.name().getText();
-    const ty = field.type_().getText();
-    return [name, ty];
-  });
-  const fnames = fields.map(([name, _]) => name);
-  for (let i = 0; i < fnames.length; ++i) {
-    for (let j = i + 1; j < fnames.length; ++j) {
-      if (fnames[i] === fnames[j]) {
-        err(ctx, `multiple declarations of field ${fnames[i]}`);
+  const fromStructContext = (ctx: StructTypeContext): Struct => {
+    const fs = ctx.fieldDecl_list();
+    const fields: [string, string][] = fs.map((field) => {
+      const name = field.name().getText();
+      const ty = field.type_().getText();
+      return [name, ty];
+    });
+    const fnames = fields.map(([name, _]) => name);
+    for (let i = 0; i < fnames.length; ++i) {
+      for (let j = i + 1; j < fnames.length; ++j) {
+        if (fnames[i] === fnames[j]) {
+          err(ctx, `multiple declarations of field ${fnames[i]}`);
+        }
       }
     }
-  }
-  return { kind: "struct", fields };
-};
+    return { kind: "struct", fields };
+  };
 
-type TypeFrame = Map<string, TypeData>;
+  /**
+   * An unreasonably complex function. Resolves full type information for a
+   * new frame of types.
+   *
+   * @param ts    A "frame" of types to resolve
+   * @param store The current type store, from previous frames
+   */
+  export const resolve = (ts: T[], store: TypeStore): Type.T[] => {
+    // depth-first searchin' - note that the store would not include types from [ts]
+    // -1: unvisited, 0: visiting, 1: visited
+    const state: number[] = Array(ts.length).fill(-1);
+    const ret: Type.T[] = [];
+    const checkFriends = (name: string): number | undefined => {
+      for (let i = 0; i < ts.length; ++i) {
+        if (ts[i].name === name) return i;
+      }
+      return undefined;
+    };
+    const aux = (name: string, ctx: ParserRuleContext): Type.T => {
+      const idx = checkFriends(name);
+      if (idx === undefined) {
+        const t = store.lookupExn(name, ctx);
+        return t;
+      } else {
+        const t = dfs(idx);
+        return t;
+      }
+    };
+    const dfs = (i: number): Type.T => {
+      if (state[i] == 0) {
+        // @todo recursive pointer types should be allowed - think about how to do this
+        err(ts[i].ctx, `found recursive type: ${ts[i].name}`);
+      } else if (state[i] == 1) {
+        return ret[i];
+      }
+      state[i] = 0;
+      const ty = ts[i];
+      switch (ty.data.kind) {
+        case "struct":
+          const fields = ty.data.fields.map(([name, tyname]) => {
+            const typ = aux(tyname, ty.ctx);
+            return [name, typ] as [string, Type.T];
+          });
+          state[i] = 1;
+          return (ret[i] = { name: ty.name, data: { kind: "struct", fields } });
+        case "chan":
+          const elem = aux(ty.data.elem, ty.ctx);
+          state[i] = 1;
+          return (ret[i] = { name: ty.name, data: { kind: "chan", elem } });
+        case "func":
+          const params = ty.data.params.map((tyname) => aux(tyname, ty.ctx));
+          const results = ty.data.results.map((tyname) => aux(tyname, ty.ctx));
+          state[i] = 1;
+          return (ret[i] = { name: ty.name, data: { kind: "func", params, results } });
+        case "alias":
+          const alias = aux(ty.data.alias, ty.ctx);
+          state[i] = 1;
+          return (ret[i] = alias);
+      }
+    };
+    for (let i = 0; i < ts.length; ++i) {
+      if (state[i] === 1) continue;
+      if (state[i] === 0) {
+        throw "Unreachable";
+      }
+      dfs(i);
+    }
+    console.log(ts, ret);
+    return ret;
+  };
+}
 
 /**
  * Since type declarations themselves are scoped (e.g. we may have a struct
@@ -369,9 +486,9 @@ type TypeFrame = Map<string, TypeData>;
  * lecture notes.
  */
 class TypeStore {
-  frames: TypeFrame[] = []; // search from left -> right
+  frames: Type.T[][] = []; // search from left -> right
 
-  pushFrame(types: Map<string, TypeData>) {
+  pushFrame(types: Type.T[]) {
     this.frames.unshift(types);
   }
 
@@ -379,15 +496,18 @@ class TypeStore {
     this.frames.unshift();
   }
 
-  lookup(typeName: string): TypeData | undefined {
+  lookup(typeName: string): Type.T | undefined {
     for (const frame of this.frames) {
-      const repr = frame.get(typeName);
-      if (repr !== undefined) return repr;
+      for (const t of frame) {
+        if (t.name === typeName) {
+          return t;
+        }
+      }
     }
     return undefined;
   }
 
-  lookupExn(typeName: string, ctx: ParserRuleContext): TypeData {
+  lookupExn(typeName: string, ctx: ParserRuleContext): Type.T {
     const ret = this.lookup(typeName);
     if (ret === undefined) {
       err(ctx, `undefined: ${typeName}`);
@@ -400,13 +520,13 @@ class TypeStore {
  * Mapes variable names to their type.
  */
 class TypeEnv {
-  private frames: Map<string, TypeData>[] = []; // search from left -> right
+  private frames: Map<string, Type.T>[] = []; // search from left -> right
 
   pushFrame() {
     this.frames.unshift(new Map());
   }
 
-  pushFrame_(frame: Map<string, TypeData>) {
+  pushFrame_(frame: Map<string, Type.T>) {
     this.frames.unshift(frame);
   }
 
@@ -414,29 +534,34 @@ class TypeEnv {
     this.frames.unshift();
   }
 
-  lookup(name: string): TypeData | undefined {
+  lookup(name: string): Type.T | undefined {
     for (const frame of this.frames) {
       const ty = frame.get(name);
       if (ty !== undefined) return ty;
     }
     return undefined;
   }
+  lookupExn(name: string, ctx: ParserRuleContext): Type.T {
+    const ret = this.lookup(name);
+    if (ret === undefined) {
+      err(ctx, `undefined: ${name}`);
+    }
+    return ret!;
+  }
 
-  set(name: string, ty: TypeData) {
+  set(name: string, ty: Type.T) {
     this.frames[0].set(name, ty);
   }
 }
 
 /**
- * Types a given expression. If the expression is not well-typed, we return
- * undefined.
+ * Types a given expression.
  *
  * Otherwise, a list of types is returned. This is because expressions like
  * function calls may return multiple things.
  */
-class Typer extends GoVisitor<TypeData[] | undefined> {
+class Typer extends GoVisitor<Type.T[]> {
   store: TypeStore;
-
   env: TypeEnv;
 
   constructor(store: TypeStore, env: TypeEnv) {
@@ -445,25 +570,29 @@ class Typer extends GoVisitor<TypeData[] | undefined> {
     this.env = env;
   }
 
-  visitExpr = (ctx: ExprContext) => {
+  visitExpr = (ctx: ExprContext): Type.T[] => {
     if (ctx.numericOp() || ctx.relOp()) {
       const lhs = this.visit(ctx._lhs);
       const rhs = this.visit(ctx._rhs);
-      if (lhs === undefined || rhs === undefined || lhs.length !== 1 || rhs.length !== 1) {
-        return undefined;
+      if (lhs.length !== 1 || rhs.length !== 1) {
+        err(ctx, "invalid operation"); // @todo a better err msg
       }
       // @todo: we should check that they are, indeed, numbers?
       // @todo we're assuming all binary operations take the same types?
-      if (!areTypesEqual(lhs[0], rhs[0])) return undefined;
+      if (!Type.equal(lhs[0], rhs[0])) {
+        err(ctx, `invalid operation between ${lhs[0].name} and ${lhs[0].name}`);
+      }
       return lhs;
     } else if (ctx.logicalOp()) {
       const lhs = this.visit(ctx._lhs);
       const rhs = this.visit(ctx._rhs);
-      if (lhs === undefined || rhs === undefined || lhs.length !== 1 || rhs.length !== 1) {
-        return undefined;
+      if (lhs.length !== 1 || rhs.length !== 1) {
+        err(ctx, "invalid operation"); // @todo a better err msg
       }
-      if (!isBool(lhs[0]) || !isBool(rhs[0])) return undefined;
-      return [makePrimitive("bool")];
+      if (!Type.isBool(lhs[0]) || !Type.isBool(rhs[0])) {
+        err(ctx, `invalid logical operation, expected bool on both sides but got (${lhs[0].name}, ${lhs[0].name})`);
+      }
+      return [Type.Primitive.make("bool", "bool")];
     } else if (ctx.unaryOp()) {
       // @todo
       throw "Unimplemented";
@@ -474,71 +603,70 @@ class Typer extends GoVisitor<TypeData[] | undefined> {
     }
   };
 
-  visitPrimaryExpr = (ctx: PrimaryExprContext): TypeData[] | undefined => {
+  visitPrimaryExpr = (ctx: PrimaryExprContext): Type.T[] => {
     if (ctx.lit()) {
       return this.visit(ctx.lit());
     } else if (ctx.name()) {
       return this.visit(ctx.name());
     } else if (ctx._fn) {
-      const ty = this.visit(ctx._fn);
-      if (ty === undefined || ty.length === 0 || ty[0].kind !== "func") return undefined;
-      return ty[0].results;
+      const fnty = this.visit(ctx._fn);
+      if (fnty.length !== 1 || fnty[0].data.kind !== "func") {
+        err(ctx, `uncallable: ${ctx._fn.getText()}`);
+      }
+      return (fnty[0].data as Type.Func).results;
     } else if (ctx._base) {
-      const baseType = this.visit(ctx._base);
-      if (baseType === undefined) return undefined;
+      const basety = this.visit(ctx._base);
+      if (basety.length !== 1) {
+        err(ctx, `bad dot access`); // @todo btr err msg
+      }
       const final = ctx.selector().name().getText();
-      if (baseType.length > 1) {
-        // Doesn't make sense.
-        return undefined;
-      }
-      switch (baseType[0].kind) {
+      const base = ctx._base.getText();
+      switch (basety[0].data.kind) {
         case "struct":
-          const field = baseType[0].fields.find(([name, _]) => name === final);
-          if (field === undefined) return undefined;
-          const ret = this.store.lookup(field[1]);
-          if (ret === undefined) return ret;
-          return [ret];
+          const field = basety[0].data.fields.find(([name, _]) => name === final);
+          if (field === undefined) {
+            err(ctx, `field ${final} does not exist on ${base}`);
+          }
+          return [field![1]];
         default:
-          return undefined;
+          err(ctx, `expected struct but type of ${base} was ${basety[0].name}`);
+          throw "Unreachable";
       }
+    } else {
+      throw "Unreachable";
     }
   };
 
-  visitLitStruct = (ctx: LitStructContext): TypeData[] | undefined => {
+  visitLitStruct = (ctx: LitStructContext): Type.T[] => {
     if (ctx.typeName()) {
       // @todo Should we type-check the fields?
-      const ret = this.store.lookup(ctx.typeName().getText());
-      if (ret === undefined) return ret;
+      const ret = this.store.lookupExn(ctx.typeName().getText(), ctx);
       return [ret];
     } else if (ctx.structType()) {
-      return [getTypeDataStruct(ctx.structType())];
+      // @todo: disallow this
+      throw "Unimplemented";
     } else {
       throw "Unreachable";
     }
   };
 
-  visitNumber = (ctx: NumberContext): TypeData[] | undefined => {
+  visitNumber = (ctx: NumberContext): Type.T[] => {
     if (ctx.INT()) {
-      return [{ kind: "primitive", name: "int64" }];
+      return [Type.Primitive.make("int64", "int64")];
     } else if (ctx.FLOAT()) {
-      return [{ kind: "primitive", name: "float64" }];
+      return [Type.Primitive.make("float64", "float64")];
     } else {
       throw "Unreachable";
     }
   };
 
-  visitName = (ctx: NameContext): TypeData[] | undefined => {
-    const ret = this.env.lookup(ctx.getText());
-    if (ret === undefined) return ret;
-    return [ret];
+  visitName = (ctx: NameContext): Type.T[] => {
+    return [this.env.lookupExn(ctx.getText(), ctx)];
   };
 
-  visitChildren(node: ParserRuleContext): TypeData[] | undefined {
-    if (!node.children) return undefined;
-    const ret = node.children
-      .flatMap((child) => this.visit(child))
-      .filter((child) => child !== undefined) as TypeData[];
-    if (ret.length === 0) return undefined;
+  visitChildren(node: ParserRuleContext): Type.T[] {
+    if (!node.children) return [];
+    const ret = node.children.flatMap((child) => this.visit(child)).filter((child) => child !== undefined);
     return ret;
   }
 }
@@ -569,8 +697,9 @@ class FuncTypeBumper extends GoVisitor<void> {
       .signature()
       .funcResult()
       .type__list()
-      .map((ty) => getTypeData(ty, this.tstore));
-    this.tenv.set(fname, { kind: "func", params, results });
+      // @todo: disallow anonymous return types?
+      .map((ty) => this.tstore.lookupExn(ty.typeName().getText(), ctx));
+    this.tenv.set(fname, { data: { kind: "func", params, results } });
   };
 }
 
@@ -600,17 +729,18 @@ export class Assembler extends GoVisitor<number> {
 
     this.env.pushFrame(builtinSymbols);
     this.tenv.pushFrame();
-    this.tstore.pushFrame(primitiveTypes);
+    this.tstore.pushFrame(Type.Primitive.types);
   }
 
   scanDecls = (ctx: ParserRuleContext): string[] => {
     const scanner = new DeclScanner();
     return scanner.visit(ctx);
   };
-  scanTypeDecls = (ctx: ParserRuleContext): TypeFrame => {
-    const scanner = new TypeDeclScanner(this.tstore);
-    const frame = scanner.visit(ctx);
-    return new Map(frame);
+
+  scanTypeDecls = (ctx: ParserRuleContext): Type.T[] => {
+    const scanner = new _Type.Scanner();
+    const rawtypes = scanner.visit(ctx);
+    return _Type.resolve(rawtypes, this.tstore);
   };
 
   visitChildren = (node: ParserRuleContext): number => {
@@ -672,7 +802,16 @@ export class Assembler extends GoVisitor<number> {
     ldf.setPc(fnPc).setArgc(params.length);
 
     this.env.pushFrame(params);
-    this.tenv.pushFrame();
+    this.tenv.pushFrame(); // push a type env frame, and then set types for the params
+    ctx
+      .signature()
+      .params()
+      .param_list()
+      .forEach((param) => {
+        const name = param.name().getText();
+        const typ = this.tstore.lookupExn(param.typeName().getText(), param.typeName());
+        this.tenv.set(name, typ);
+      });
     this.visit(ctx.funcBody()); // compile the body
     this.tenv.popFrame();
     this.env.popFrame();
@@ -896,14 +1035,14 @@ export class Assembler extends GoVisitor<number> {
 
   visitField = (ctx: FieldContext): number => {
     const baseType = new Typer(this.tstore, this.tenv).visit(ctx._base);
-    if (baseType === undefined || baseType.length !== 1) {
-      err(ctx, `could not find type of ${ctx._base.getText()}`);
+    if (baseType.length === 0) {
+      err(ctx, `could not determine type of ${ctx._base.getText()}`);
     }
     const ty = baseType![0];
-    switch (ty.kind) {
+    switch (ty.data.kind) {
       case "struct":
         const last = ctx._last.text;
-        const offset = ty.fields.findIndex(([name, _]) => name === last);
+        const offset = ty.data.fields.findIndex(([name, _]) => name === last);
         if (offset === -1) {
           err(ctx, `field ${last} not found on ${ctx._base.getText()}`);
         }
@@ -911,7 +1050,7 @@ export class Assembler extends GoVisitor<number> {
         ILoadStructFieldLoc.emit(this.bc).setOffset(offset);
         return 0;
       default:
-        err(ctx, `expected struct but got ${ty.kind} as type of ${ctx._base.getText()}`);
+        err(ctx, `expected struct but got ${ty.data.kind} as type of ${ctx._base.getText()}`);
         throw "Unreachable";
     }
   };
@@ -987,17 +1126,17 @@ export class Assembler extends GoVisitor<number> {
       ICall.emit(this.bc, ctx).setArgc(argc);
     } else if (ctx._base) {
       const baseType = new Typer(this.tstore, this.tenv).visit(ctx._base);
-      if (baseType === undefined || baseType.length === 0) {
+      if (baseType.length === 0) {
         err(ctx, `could not find type for ${ctx.getText()}`);
       }
       if (baseType!.length > 1) {
         err(ctx, `bad access on ${ctx.getText()} - multiple values on LHS`);
       }
-      const kind = baseType![0].kind;
+      const kind = baseType![0].data.kind;
       switch (kind) {
         case "struct":
           const final = ctx.selector().name().getText();
-          const offset = baseType![0].fields.findIndex(([name, _]) => name === final);
+          const offset = baseType![0].data.fields.findIndex(([name, _]) => name === final);
           if (offset === -1) {
             err(ctx, `field ${final} not found on ${ctx._base.getText()}`);
           }
@@ -1123,9 +1262,9 @@ export class Assembler extends GoVisitor<number> {
      * order. We just sort the given field expressions into the order based
      * on the struct declaration.
      */
-    const sortFields = <T>(givenFields: [string, T][], expectedFields: [string, string][]): [string, T][] => {
+    const sortFields = <T>(givenFields: [string, T][], expectedFields: string[]): [string, T][] => {
       const ret: [string, T][] = [];
-      for (const [name1, _] of expectedFields) {
+      for (const name1 of expectedFields) {
         for (const [name2, t] of givenFields) {
           if (name1 !== name2) continue;
           ret.push([name2, t]);
@@ -1138,14 +1277,15 @@ export class Assembler extends GoVisitor<number> {
     if (ctx.typeName()) {
       const ty = ctx.typeName().getText();
       const repr = this.tstore.lookupExn(ty, ctx);
-      switch (repr.kind) {
+      switch (repr.data.kind) {
         case "struct":
-          const fieldc = repr.fields.length;
-          const fields = ctx
+          const fieldc = repr.data.fields.length;
+          const given = ctx
             .keyedElems()
             .keyedElem_list()
             .map((elem) => [elem.lname().getText(), elem.expr()] as [string, ExprContext]);
-          const sorted = sortFields(fields, repr.fields);
+          const expected = repr.data.fields.map(([name, _]) => name);
+          const sorted = sortFields(given, expected);
           if (sorted.length !== fieldc) {
             err(ctx, `in struct literal of ${ty} - expected ${fieldc} fields, but got ${sorted.length}`);
           }
@@ -1154,10 +1294,9 @@ export class Assembler extends GoVisitor<number> {
           break;
         case "chan":
         case "primitive":
-          err(ctx, `expected struct but got ${repr.kind}`);
+          err(ctx, `expected struct but got ${repr.data.kind}`);
       }
     } else if (ctx.structType()) {
-      const repr = getTypeDataStruct(ctx.structType());
       // @todo or we just don't allow it i.e. it would be a parse error
       throw "Unimplemented";
     } else {
