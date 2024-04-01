@@ -204,7 +204,13 @@ class DeclScanner extends GoVisitor<string[]> {
   }
 }
 
-type TypeRepr = StructType | ChannelType | PrimitiveType | FuncType;
+type Type = {
+  name: string;
+  data: TypeData;
+  methods: Map<string, FuncType>;
+};
+
+type TypeData = StructType | ChannelType | PrimitiveType | FuncType;
 
 type StructType = {
   kind: "struct";
@@ -223,11 +229,11 @@ type PrimitiveType = {
 
 type FuncType = {
   kind: "func";
-  params: TypeRepr[];
-  results: TypeRepr[];
+  params: TypeData[];
+  results: TypeData[];
 };
 
-const areTypesEqual = (lhs: TypeRepr, rhs: TypeRepr): boolean => {
+const areTypesEqual = (lhs: TypeData, rhs: TypeData): boolean => {
   if (lhs.kind !== rhs.kind) return false;
   let _rhs;
   switch (lhs.kind) {
@@ -251,7 +257,7 @@ const areTypesEqual = (lhs: TypeRepr, rhs: TypeRepr): boolean => {
 /**
  * Checks if a type is a boolean type. Just for convenience.
  */
-const isBool = (ty: TypeRepr | undefined): boolean => {
+const isBool = (ty: TypeData | undefined): boolean => {
   if (ty === undefined) return false;
   return ty.kind === "primitive" && ty.name === "bool";
 };
@@ -272,7 +278,7 @@ const primitiveTypes: Map<string, PrimitiveType> = new Map([
  * Like [DeclScanner], but for types. We'll build up a map from type names
  * (strings) to type info for the provided scope.
  */
-class TypeDeclScanner extends GoVisitor<[string, TypeRepr][]> {
+class TypeDeclScanner extends GoVisitor<[string, TypeData][]> {
   private stop: boolean = false;
   private store: TypeStore;
 
@@ -295,14 +301,14 @@ class TypeDeclScanner extends GoVisitor<[string, TypeRepr][]> {
 
   visitTypeDecl = (ctx: TypeDeclContext) => {
     const name = ctx.name().getText();
-    const ty = getTypeRepr(ctx.type_(), this.store);
+    const ty = getTypeData(ctx.type_(), this.store);
     if (ty === undefined) {
       err(ctx, `could not find out about type ${name}`);
     }
-    return [[name, ty] as [string, TypeRepr]];
+    return [[name, ty] as [string, TypeData]];
   };
 
-  visitChildren(node: ParserRuleContext): [string, TypeRepr][] {
+  visitChildren(node: ParserRuleContext): [string, TypeData][] {
     if (!node.children) return [];
     return node.children.flatMap((child) => this.visit(child)).filter((ty) => ty !== undefined);
   }
@@ -312,14 +318,14 @@ class TypeDeclScanner extends GoVisitor<[string, TypeRepr][]> {
  * For a [TypeContext] in the parse tree, tries to retrieve its type
  * information. Will always return a type, otherwise, it throws an exception.
  */
-const getTypeRepr = (ctx: TypeContext, store: TypeStore): TypeRepr => {
+const getTypeData = (ctx: TypeContext, store: TypeStore): TypeData => {
   if (ctx.typeName()) {
     const name = ctx.typeName().getText();
     return store.lookupExn(name, ctx);
   } else if (ctx.typeLit()) {
     const lit = ctx.typeLit();
     if (lit.structType()) {
-      return getTypeReprStruct(lit.structType());
+      return getTypeDataStruct(lit.structType());
     } else if (lit.channelType()) {
       // @todo
       throw "Channel types are not supported yet";
@@ -334,7 +340,7 @@ const getTypeRepr = (ctx: TypeContext, store: TypeStore): TypeRepr => {
 /**
  * Parses out the type information for a struct literal in the parse tree.
  */
-const getTypeReprStruct = (ctx: StructTypeContext): StructType => {
+const getTypeDataStruct = (ctx: StructTypeContext): StructType => {
   const fs = ctx.fieldDecl_list();
   const fields: [string, string][] = fs.map((field) => {
     const name = field.name().getText();
@@ -352,7 +358,7 @@ const getTypeReprStruct = (ctx: StructTypeContext): StructType => {
   return { kind: "struct", fields };
 };
 
-type TypeFrame = Map<string, TypeRepr>;
+type TypeFrame = Map<string, TypeData>;
 
 /**
  * Since type declarations themselves are scoped (e.g. we may have a struct
@@ -365,7 +371,7 @@ type TypeFrame = Map<string, TypeRepr>;
 class TypeStore {
   frames: TypeFrame[] = []; // search from left -> right
 
-  pushFrame(types: Map<string, TypeRepr>) {
+  pushFrame(types: Map<string, TypeData>) {
     this.frames.unshift(types);
   }
 
@@ -373,7 +379,7 @@ class TypeStore {
     this.frames.unshift();
   }
 
-  lookup(typeName: string): TypeRepr | undefined {
+  lookup(typeName: string): TypeData | undefined {
     for (const frame of this.frames) {
       const repr = frame.get(typeName);
       if (repr !== undefined) return repr;
@@ -381,7 +387,7 @@ class TypeStore {
     return undefined;
   }
 
-  lookupExn(typeName: string, ctx: ParserRuleContext): TypeRepr {
+  lookupExn(typeName: string, ctx: ParserRuleContext): TypeData {
     const ret = this.lookup(typeName);
     if (ret === undefined) {
       err(ctx, `undefined: ${typeName}`);
@@ -394,13 +400,13 @@ class TypeStore {
  * Mapes variable names to their type.
  */
 class TypeEnv {
-  private frames: Map<string, TypeRepr>[] = []; // search from left -> right
+  private frames: Map<string, TypeData>[] = []; // search from left -> right
 
   pushFrame() {
     this.frames.unshift(new Map());
   }
 
-  pushFrame_(frame: Map<string, TypeRepr>) {
+  pushFrame_(frame: Map<string, TypeData>) {
     this.frames.unshift(frame);
   }
 
@@ -408,7 +414,7 @@ class TypeEnv {
     this.frames.unshift();
   }
 
-  lookup(name: string): TypeRepr | undefined {
+  lookup(name: string): TypeData | undefined {
     for (const frame of this.frames) {
       const ty = frame.get(name);
       if (ty !== undefined) return ty;
@@ -416,7 +422,7 @@ class TypeEnv {
     return undefined;
   }
 
-  set(name: string, ty: TypeRepr) {
+  set(name: string, ty: TypeData) {
     this.frames[0].set(name, ty);
   }
 }
@@ -428,7 +434,7 @@ class TypeEnv {
  * Otherwise, a list of types is returned. This is because expressions like
  * function calls may return multiple things.
  */
-class Typer extends GoVisitor<TypeRepr[] | undefined> {
+class Typer extends GoVisitor<TypeData[] | undefined> {
   store: TypeStore;
 
   env: TypeEnv;
@@ -468,7 +474,7 @@ class Typer extends GoVisitor<TypeRepr[] | undefined> {
     }
   };
 
-  visitPrimaryExpr = (ctx: PrimaryExprContext): TypeRepr[] | undefined => {
+  visitPrimaryExpr = (ctx: PrimaryExprContext): TypeData[] | undefined => {
     if (ctx.lit()) {
       return this.visit(ctx.lit());
     } else if (ctx.name()) {
@@ -498,20 +504,20 @@ class Typer extends GoVisitor<TypeRepr[] | undefined> {
     }
   };
 
-  visitLitStruct = (ctx: LitStructContext): TypeRepr[] | undefined => {
+  visitLitStruct = (ctx: LitStructContext): TypeData[] | undefined => {
     if (ctx.typeName()) {
       // @todo Should we type-check the fields?
       const ret = this.store.lookup(ctx.typeName().getText());
       if (ret === undefined) return ret;
       return [ret];
     } else if (ctx.structType()) {
-      return [getTypeReprStruct(ctx.structType())];
+      return [getTypeDataStruct(ctx.structType())];
     } else {
       throw "Unreachable";
     }
   };
 
-  visitNumber = (ctx: NumberContext): TypeRepr[] | undefined => {
+  visitNumber = (ctx: NumberContext): TypeData[] | undefined => {
     if (ctx.INT()) {
       return [{ kind: "primitive", name: "int64" }];
     } else if (ctx.FLOAT()) {
@@ -521,17 +527,17 @@ class Typer extends GoVisitor<TypeRepr[] | undefined> {
     }
   };
 
-  visitName = (ctx: NameContext): TypeRepr[] | undefined => {
+  visitName = (ctx: NameContext): TypeData[] | undefined => {
     const ret = this.env.lookup(ctx.getText());
     if (ret === undefined) return ret;
     return [ret];
   };
 
-  visitChildren(node: ParserRuleContext): TypeRepr[] | undefined {
+  visitChildren(node: ParserRuleContext): TypeData[] | undefined {
     if (!node.children) return undefined;
     const ret = node.children
       .flatMap((child) => this.visit(child))
-      .filter((child) => child !== undefined) as TypeRepr[];
+      .filter((child) => child !== undefined) as TypeData[];
     if (ret.length === 0) return undefined;
     return ret;
   }
@@ -563,7 +569,7 @@ class FuncTypeBumper extends GoVisitor<void> {
       .signature()
       .funcResult()
       .type__list()
-      .map((ty) => getTypeRepr(ty, this.tstore));
+      .map((ty) => getTypeData(ty, this.tstore));
     this.tenv.set(fname, { kind: "func", params, results });
   };
 }
@@ -1151,7 +1157,7 @@ export class Assembler extends GoVisitor<number> {
           err(ctx, `expected struct but got ${repr.kind}`);
       }
     } else if (ctx.structType()) {
-      const repr = getTypeReprStruct(ctx.structType());
+      const repr = getTypeDataStruct(ctx.structType());
       // @todo or we just don't allow it i.e. it would be a parse error
       throw "Unimplemented";
     } else {
