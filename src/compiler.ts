@@ -472,7 +472,6 @@ namespace _Type {
       }
       dfs(i);
     }
-    console.log(ts, ret);
     return ret;
   };
 }
