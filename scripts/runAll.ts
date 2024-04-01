@@ -25,7 +25,7 @@ function runAll() {
 
   console.log("\nChecking files which should fail...");
   ffiles.forEach((file) => {
-    const filePath = join(passDir, file);
+    const filePath = join(failDir, file);
     const command = `npx tsx scripts/run.ts "${filePath}"`;
 
     try {
