@@ -1,4 +1,4 @@
-// Generated from GoParser.g4 by ANTLR 4.13.1
+// Generated from GoParser.g4 by ANTLR 4.12.0
 // noinspection ES6UnusedImports,JSUnusedGlobalSymbols,JSUnusedLocalSymbols
 
 import {
