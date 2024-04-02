@@ -90,3 +90,17 @@ export class StrPool {
     this.addrs.set(id, addr);
   }
 }
+
+export const arraysEqual = <T>(xs: T[], ys: T[], equal: (x: T, y: T) => boolean): boolean => {
+  if (xs.length !== ys.length) return false;
+  for (let i = 0; i < xs.length; ++i) {
+    const x = xs[i];
+    const y = ys[i];
+    if (!equal(x, y)) return false;
+  }
+  return true;
+};
+
+export const allUnique = <T>(xs: T[], equal: (u: T, v: T) => boolean): boolean => {
+  return true;
+};
