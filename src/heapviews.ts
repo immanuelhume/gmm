@@ -53,6 +53,7 @@ export enum DataType {
   String,
   Fn,
   Builtin,
+  Method,
   Global,
   Frame,
   Env,
@@ -514,6 +515,50 @@ export class BuiltinView extends NodeView {
 }
 
 /**
+ * Represents a method. Method differ from functions in that there is a "captured"
+ * receiver which should be used as a parameter.
+ *
+ * ┌──────┬────────┬────┐
+ * │header│receiver│func│
+ * └──────┴────────┴────┘
+ */
+export class MethodView extends NodeView {
+  static allocate(state: Memory): MethodView {
+    const addr = allocate(state, DataType.Method, 0, 2);
+    return new MethodView(state.heap, addr);
+  }
+
+  constructor(heap: DataView, addr: Address) {
+    super(heap, addr);
+    this.checkType(DataType.Method);
+  }
+
+  toString(): string {
+    const rcv = NodeView.of(this.heap, this.receiver()).toString();
+    const func = this.fn().toString();
+    return `Method { receiver: ${rcv}, func: ${func} }`;
+  }
+
+  receiver(): Address {
+    return this.getChild(0);
+  }
+
+  setReceiver(rcv: Address): MethodView {
+    this.setChild(0, rcv);
+    return this;
+  }
+
+  fn(): FnView {
+    return new FnView(this.heap, this.getChild(1));
+  }
+
+  setFn(func: FnView): MethodView {
+    this.setChild(1, func.addr);
+    return this;
+  }
+}
+
+/**
  * Represents a global.
  *
  * ┌──────┬─────────┐
@@ -670,6 +715,7 @@ const nodeClass: Record<DataType, { new (heap: DataView, addr: Address, ctx?: He
   [DataType.String]: StringView,
   [DataType.Fn]: FnView,
   [DataType.Builtin]: BuiltinView,
+  [DataType.Method]: MethodView,
   [DataType.Global]: GlobalView,
   [DataType.Frame]: FrameView,
   [DataType.Env]: EnvView,

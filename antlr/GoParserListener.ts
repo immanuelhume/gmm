@@ -33,9 +33,11 @@ import { BlockContext } from "./GoParser";
 import { UnaryOpContext } from "./GoParser";
 import { LogicalOpContext } from "./GoParser";
 import { RelOpContext } from "./GoParser";
-import { NumericOpContext } from "./GoParser";
+import { MulOpContext } from "./GoParser";
+import { AddOpContext } from "./GoParser";
 import { ShortVarDeclContext } from "./GoParser";
 import { TopLevelDeclContext } from "./GoParser";
+import { MethodDeclContext } from "./GoParser";
 import { DeclContext } from "./GoParser";
 import { TypeDeclContext } from "./GoParser";
 import { VarDeclContext } from "./GoParser";
@@ -381,15 +383,25 @@ export default class GoParserListener extends ParseTreeListener {
    */
   exitRelOp?: (ctx: RelOpContext) => void;
   /**
-   * Enter a parse tree produced by `GoParser.numericOp`.
+   * Enter a parse tree produced by `GoParser.mulOp`.
    * @param ctx the parse tree
    */
-  enterNumericOp?: (ctx: NumericOpContext) => void;
+  enterMulOp?: (ctx: MulOpContext) => void;
   /**
-   * Exit a parse tree produced by `GoParser.numericOp`.
+   * Exit a parse tree produced by `GoParser.mulOp`.
    * @param ctx the parse tree
    */
-  exitNumericOp?: (ctx: NumericOpContext) => void;
+  exitMulOp?: (ctx: MulOpContext) => void;
+  /**
+   * Enter a parse tree produced by `GoParser.addOp`.
+   * @param ctx the parse tree
+   */
+  enterAddOp?: (ctx: AddOpContext) => void;
+  /**
+   * Exit a parse tree produced by `GoParser.addOp`.
+   * @param ctx the parse tree
+   */
+  exitAddOp?: (ctx: AddOpContext) => void;
   /**
    * Enter a parse tree produced by `GoParser.shortVarDecl`.
    * @param ctx the parse tree
@@ -410,6 +422,16 @@ export default class GoParserListener extends ParseTreeListener {
    * @param ctx the parse tree
    */
   exitTopLevelDecl?: (ctx: TopLevelDeclContext) => void;
+  /**
+   * Enter a parse tree produced by `GoParser.methodDecl`.
+   * @param ctx the parse tree
+   */
+  enterMethodDecl?: (ctx: MethodDeclContext) => void;
+  /**
+   * Exit a parse tree produced by `GoParser.methodDecl`.
+   * @param ctx the parse tree
+   */
+  exitMethodDecl?: (ctx: MethodDeclContext) => void;
   /**
    * Enter a parse tree produced by `GoParser.decl`.
    * @param ctx the parse tree

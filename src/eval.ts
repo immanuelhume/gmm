@@ -15,6 +15,7 @@ import {
   GlobalView,
   TupleView,
   StructView,
+  MethodView,
 } from "./heapviews";
 import {
   IAssign,
@@ -41,6 +42,7 @@ import {
   IPackStruct,
   ILoadStructField,
   ILoadStructFieldLoc,
+  ILoadMethod,
 } from "./instructions";
 
 type EvalFn = (state: MachineState) => void;
@@ -76,7 +78,7 @@ export const microcode: Record<Opcode, EvalFn> = {
     const fnAddr = state.os.pop();
     const fnKind = NodeView.getDataType(state.heap, fnAddr);
     switch (fnKind) {
-      case DataType.Fn:
+      case DataType.Fn: {
         const callFrame = CallFrameView.allocate(state);
         callFrame.setPc(state.pc + ICall.size);
         callFrame.setEnv(state.env);
@@ -95,6 +97,7 @@ export const microcode: Record<Opcode, EvalFn> = {
         state.pc = fn.getPc();
 
         break;
+      }
       case DataType.Builtin:
         // We don't bother with creating a new frame, or extending any environment.
         const builtin = new BuiltinView(state.heap, fnAddr);
@@ -103,6 +106,28 @@ export const microcode: Record<Opcode, EvalFn> = {
 
         state.pc += ICall.size;
         break;
+      case DataType.Method: {
+        const callFrame = CallFrameView.allocate(state);
+        callFrame.setPc(state.pc + ICall.size);
+        callFrame.setEnv(state.env);
+
+        state.rts.push(callFrame.addr);
+
+        const mthd = new MethodView(state.heap, fnAddr);
+
+        const frame = FrameView.allocate(state, argc + 1);
+        frame.set(0, mthd.receiver()); // also set the receiver in the frame of parameters
+        for (let i = 0; i < argc; ++i) {
+          frame.set(i + 1, args[i]);
+        }
+
+        const newEnv = mthd.fn().getEnv().extend(state, frame.addr);
+
+        state.env = newEnv;
+        state.pc = mthd.fn().getPc();
+
+        break;
+      }
       default:
         throw new Error(`Uncallable object ${fnKind}`);
     }
@@ -137,6 +162,15 @@ export const microcode: Record<Opcode, EvalFn> = {
 
     state.os.push(fn.addr);
     state.pc += ILoadFn.size;
+  },
+  [Opcode.LoadMethod]: function (state: MachineState): void {
+    const rcv = state.os.pop();
+    const fun = new FnView(state.heap, state.os.pop());
+
+    const mthd = MethodView.allocate(state).setReceiver(rcv).setFn(fun);
+    state.os.push(mthd.addr);
+
+    state.pc += ILoadMethod.size;
   },
   [Opcode.Assign]: function (state: MachineState): void {
     const count = new IAssign(state.bytecode, state.pc).getCount();

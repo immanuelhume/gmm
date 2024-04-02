@@ -14,7 +14,7 @@
             Assuming locally installed
             */
             "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/tsx",
-			"args": ["go/06.builtins.go"],
+			"args": ["go/pass/16.methods.go"],
 
             /*
             Open terminal when debugging starts (Optional)

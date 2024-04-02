@@ -54,7 +54,8 @@ returnStmt : 'return' exprList? ;
 
 expr : primaryExpr
 	| unaryOp expr
-	| lhs=expr numericOp rhs=expr
+	| lhs=expr mulOp rhs=expr
+	| lhs=expr addOp rhs=expr
 	| lhs=expr relOp rhs=expr
 	| lhs=expr logicalOp rhs=expr
 	;
@@ -69,7 +70,7 @@ primaryExpr : lit
 
 selector : '.' name ;
 
-args : '(' arg (',' arg)* ','? ')';
+args : '(' (arg (',' arg)* | arg?) ','? ')';
 arg : expr | type ; // functions like [make] take in types as params...
 
 block : '{' (stmt eos)* '}' ;
@@ -78,14 +79,16 @@ unaryOp : '-' | '+' | '<-' ;
 
 logicalOp : '||' | '&&' ;
 relOp : '==' | '!=' | '<' | '<=' | '>' | '>=' ;
-numericOp : '+' | '-' | '*' | '/' ;
+mulOp : '*' | '/' ;
+addOp : '+' | '-' ;
 
 shortVarDecl : lhs=lnameList ':=' rhs=exprList ;
 
-topLevelDecl : decl | funcDecl ;
+topLevelDecl : decl | funcDecl | methodDecl ;
+methodDecl : 'func' '(' receiver=param ')' name signature funcBody ;
 decl : varDecl | typeDecl ;
 typeDecl : 'type' name type ;
-varDecl : 'var' name type ('=' expr)? ;
+varDecl : 'var' name type '=' expr ;
 
 funcDecl : 'func' name signature funcBody ;
 signature : '(' params ')' funcResult ;

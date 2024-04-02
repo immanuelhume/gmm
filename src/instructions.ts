@@ -10,6 +10,7 @@ export const enum Opcode {
   Call,
   Goto,
   LoadFn,
+  LoadMethod,
   Assign,
   Jof,
   EnterBlock,
@@ -214,6 +215,25 @@ export class ILoadFn extends InstrView {
   setPc(addr: number): ILoadFn {
     this.bytecode.setFloat64(this.addr + 2, addr);
     return this;
+  }
+}
+
+export class ILoadMethod extends InstrView {
+  static size = 1;
+  readonly size = 1;
+
+  static emit(w: Emitter, ctx?: ParserRuleContext): ILoadMethod {
+    const pc = w.reserve(Opcode.LoadMethod, ILoadMethod.size, ctx);
+    return new ILoadMethod(w.code(), pc);
+  }
+
+  toString(): string {
+    return `LoadMethod`;
+  }
+
+  constructor(bytecode: DataView, addr: number) {
+    super(bytecode, addr);
+    assert(this.opcode() === Opcode.LoadMethod);
   }
 }
 
@@ -755,6 +775,7 @@ const opcodeClass: Record<Opcode, { new (bytecode: DataView, addr: number): Inst
   [Opcode.Call]: ICall,
   [Opcode.Goto]: IGoto,
   [Opcode.LoadFn]: ILoadFn,
+  [Opcode.LoadMethod]: ILoadMethod,
   [Opcode.Assign]: IAssign,
   [Opcode.Jof]: IJof,
   [Opcode.EnterBlock]: IEnterBlock,
