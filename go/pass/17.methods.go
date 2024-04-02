@@ -13,7 +13,8 @@ func (s Speaker) WithVolume(volume int) Speaker {
 
 func main() {
     speaker := Speaker{volume: 5}
-    increasedVolume := speaker.Increase()
+    incr := speaker.Increase
+	increasedVolume := incr()
     if increasedVolume != 6 {
         panic("expected 6, got", increasedVolume)
     }
