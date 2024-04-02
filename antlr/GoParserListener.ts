@@ -35,6 +35,7 @@ import { LogicalOpContext } from "./GoParser";
 import { RelOpContext } from "./GoParser";
 import { NumericOpContext } from "./GoParser";
 import { ShortVarDeclContext } from "./GoParser";
+import { TopLevelDeclContext } from "./GoParser";
 import { DeclContext } from "./GoParser";
 import { TypeDeclContext } from "./GoParser";
 import { VarDeclContext } from "./GoParser";
@@ -399,6 +400,16 @@ export default class GoParserListener extends ParseTreeListener {
    * @param ctx the parse tree
    */
   exitShortVarDecl?: (ctx: ShortVarDeclContext) => void;
+  /**
+   * Enter a parse tree produced by `GoParser.topLevelDecl`.
+   * @param ctx the parse tree
+   */
+  enterTopLevelDecl?: (ctx: TopLevelDeclContext) => void;
+  /**
+   * Exit a parse tree produced by `GoParser.topLevelDecl`.
+   * @param ctx the parse tree
+   */
+  exitTopLevelDecl?: (ctx: TopLevelDeclContext) => void;
   /**
    * Enter a parse tree produced by `GoParser.decl`.
    * @param ctx the parse tree

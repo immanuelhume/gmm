@@ -35,6 +35,7 @@ import { LogicalOpContext } from "./GoParser";
 import { RelOpContext } from "./GoParser";
 import { NumericOpContext } from "./GoParser";
 import { ShortVarDeclContext } from "./GoParser";
+import { TopLevelDeclContext } from "./GoParser";
 import { DeclContext } from "./GoParser";
 import { TypeDeclContext } from "./GoParser";
 import { VarDeclContext } from "./GoParser";
@@ -270,6 +271,12 @@ export default class GoParserVisitor<Result> extends ParseTreeVisitor<Result> {
    * @return the visitor result
    */
   visitShortVarDecl?: (ctx: ShortVarDeclContext) => Result;
+  /**
+   * Visit a parse tree produced by `GoParser.topLevelDecl`.
+   * @param ctx the parse tree
+   * @return the visitor result
+   */
+  visitTopLevelDecl?: (ctx: TopLevelDeclContext) => Result;
   /**
    * Visit a parse tree produced by `GoParser.decl`.
    * @param ctx the parse tree

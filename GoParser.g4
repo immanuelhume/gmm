@@ -3,7 +3,7 @@ parser grammar GoParser ;
 options { tokenVocab = GoLexer ; }
 
 // The toplevel is not a sequence of statements, but declarations only!
-prog : (decl eos)* ;
+prog : (topLevelDecl eos)* ;
 
 stmt : decl
 	| returnStmt
@@ -82,7 +82,8 @@ numericOp : '+' | '-' | '*' | '/' ;
 
 shortVarDecl : lhs=lnameList ':=' rhs=exprList ;
 
-decl : funcDecl | varDecl | typeDecl ;
+topLevelDecl : decl | funcDecl ;
+decl : varDecl | typeDecl ;
 typeDecl : 'type' name type ;
 varDecl : 'var' name type ('=' expr)? ;
 
