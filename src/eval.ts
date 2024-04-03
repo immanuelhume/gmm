@@ -14,6 +14,7 @@ import {
   Global,
   GlobalView,
   TupleView,
+  PointerView,
 } from "./heapviews";
 import {
   IAssign,
@@ -535,6 +536,11 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
       console.log("\x1b[31m", "  ", "at line", lineno, "\x1b[0m");
     }
     throw new PanicError(); // we should never recover from this
+  },
+  [BuiltinId.New]: function (state: MachineState, args: number[]): void {
+    const typ = NodeView.getDataType(state.heap, args[0]);
+    // make new instance of type
+    const data = new PointerView(state.heap, args[0]);
   },
 };
 

@@ -615,7 +615,7 @@ export class TupleView extends NodeView {
   }
 }
 
-class PointerView extends NodeView {
+export class PointerView extends NodeView {
   // @todo
   static allocate(state: Memory): PointerView {
     const addr = allocate(state, DataType.Pointer, 0, 1);
@@ -635,7 +635,9 @@ class PointerView extends NodeView {
     this.setChild(i, data);
     return this;
   }
-  //dereference(i: number)
+  dereference(i: number): Address {
+    return this.get(this.get(i));
+  }
 }
 class ChannelView extends NodeView {
   // @todo
