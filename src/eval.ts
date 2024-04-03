@@ -15,6 +15,8 @@ import {
   GlobalView,
   TupleView,
   PointerView,
+  StructView,
+  MethodView,
 } from "./heapviews";
 import {
   IAssign,
@@ -38,6 +40,10 @@ import {
   ILoadStr,
   IJof,
   IPackTuple,
+  IPackStruct,
+  ILoadStructField,
+  ILoadStructFieldLoc,
+  ILoadMethod,
 } from "./instructions";
 
 type EvalFn = (state: MachineState) => void;
@@ -73,7 +79,7 @@ export const microcode: Record<Opcode, EvalFn> = {
     const fnAddr = state.os.pop();
     const fnKind = NodeView.getDataType(state.heap, fnAddr);
     switch (fnKind) {
-      case DataType.Fn:
+      case DataType.Fn: {
         const callFrame = CallFrameView.allocate(state);
         callFrame.setPc(state.pc + ICall.size);
         callFrame.setEnv(state.env);
@@ -92,6 +98,7 @@ export const microcode: Record<Opcode, EvalFn> = {
         state.pc = fn.getPc();
 
         break;
+      }
       case DataType.Builtin:
         // We don't bother with creating a new frame, or extending any environment.
         const builtin = new BuiltinView(state.heap, fnAddr);
@@ -100,6 +107,28 @@ export const microcode: Record<Opcode, EvalFn> = {
 
         state.pc += ICall.size;
         break;
+      case DataType.Method: {
+        const callFrame = CallFrameView.allocate(state);
+        callFrame.setPc(state.pc + ICall.size);
+        callFrame.setEnv(state.env);
+
+        state.rts.push(callFrame.addr);
+
+        const mthd = new MethodView(state.heap, fnAddr);
+
+        const frame = FrameView.allocate(state, argc + 1);
+        frame.set(0, mthd.receiver()); // also set the receiver in the frame of parameters
+        for (let i = 0; i < argc; ++i) {
+          frame.set(i + 1, args[i]);
+        }
+
+        const newEnv = mthd.fn().getEnv().extend(state, frame.addr);
+
+        state.env = newEnv;
+        state.pc = mthd.fn().getPc();
+
+        break;
+      }
       default:
         throw new Error(`Uncallable object ${fnKind}`);
     }
@@ -134,6 +163,15 @@ export const microcode: Record<Opcode, EvalFn> = {
 
     state.os.push(fn.addr);
     state.pc += ILoadFn.size;
+  },
+  [Opcode.LoadMethod]: function (state: MachineState): void {
+    const rcv = state.os.pop();
+    const fun = new FnView(state.heap, state.os.pop());
+
+    const mthd = MethodView.allocate(state).setReceiver(rcv).setFn(fun);
+    state.os.push(mthd.addr);
+
+    state.pc += ILoadMethod.size;
   },
   [Opcode.Assign]: function (state: MachineState): void {
     const count = new IAssign(state.bytecode, state.pc).getCount();
@@ -249,6 +287,32 @@ export const microcode: Record<Opcode, EvalFn> = {
     state.os.push(tuple.addr);
     state.pc += IPackTuple.size;
   },
+  [Opcode.PackStruct]: function (state: MachineState): void {
+    const instr = new IPackStruct(state.bytecode, state.pc);
+    const struct = StructView.allocate(state, instr.fieldc());
+    for (let i = 0; i < instr.fieldc(); ++i) {
+      struct.setField(i, state.os.pop());
+    }
+
+    state.os.push(struct.addr);
+    state.pc += IPackStruct.size;
+  },
+  [Opcode.LoadStructField]: function (state: MachineState): void {
+    const instr = new ILoadStructField(state.bytecode, state.pc);
+    const struct = new StructView(state.heap, state.os.pop());
+    const fieldAddr = struct.getField(instr.offset());
+
+    state.os.push(fieldAddr);
+    state.pc += ILoadStructField.size;
+  },
+  [Opcode.LoadStructFieldLoc]: function (state: MachineState): void {
+    const instr = new ILoadStructFieldLoc(state.bytecode, state.pc);
+    const struct = new StructView(state.heap, state.os.pop());
+    const fieldLoc = struct.getFieldLoc(instr.offset());
+
+    state.os.push(fieldLoc);
+    state.pc += ILoadStructField.size;
+  },
   [Opcode.Done]: function (state: MachineState): void {
     throw new Error("Done not implemented.");
   },
@@ -321,7 +385,8 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
 
           const lhsValue = lhs.getValue();
           const rhsValue = rhs.getValue();
-          if (lhsValue != rhsValue) {
+
+          if (lhsValue !== rhsValue) {
             return state.globals[Global.True];
           } else {
             return state.globals[Global.False];
@@ -483,7 +548,7 @@ const execUnaryOp = (state: MachineState, op: UnaryOp): void => {
   const operandAddr = state.os.pop();
   const typ = NodeView.getDataType(state.heap, operandAddr);
 
-  const f = unaryBuiltins.get([typ, op]);
+  const f = unaryBuiltins.get(typ)?.get(op);
   if (!f) throw new Error("No unary operation defined!"); // @todo: format string
 
   const res = f(state, operandAddr);
@@ -494,24 +559,24 @@ const execUnaryOp = (state: MachineState, op: UnaryOp): void => {
 type UnaryOpFn = (state: MachineState, addr: Address) => Address;
 
 // @todo add more unary builtins
-const unaryBuiltins = new Map<[DataType, UnaryOp], UnaryOpFn>([
+const unaryBuiltins = new Map<DataType, Map<UnaryOp, UnaryOpFn>>([
   [
-    [DataType.Float64, UnaryOp.Sub],
-    (state, addr) => {
-      const num = new Float64View(state.heap, addr);
-      const val = num.getValue();
+    DataType.Float64,
+    new Map([
+      [
+        UnaryOp.Sub,
+        (state, addr) => {
+          const num = new Float64View(state.heap, addr);
+          const val = num.getValue();
 
-      const res = Float64View.allocate(state);
-      res.setValue(-val);
+          const res = Float64View.allocate(state);
+          res.setValue(-val);
 
-      return res.addr;
-    },
-  ],
-  [
-    [DataType.Float64, UnaryOp.Add],
-    (state, addr) => {
-      return addr;
-    },
+          return res.addr;
+        },
+      ],
+      [UnaryOp.Add, (state, addr) => addr],
+    ]),
   ],
 ]);
 

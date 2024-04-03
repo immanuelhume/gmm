@@ -1,4 +1,4 @@
-// Generated from GoParser.g4 by ANTLR 4.13.1
+// Generated from GoParser.g4 by ANTLR 4.12.0
 
 import { ParseTreeListener } from "antlr4";
 
@@ -33,8 +33,11 @@ import { BlockContext } from "./GoParser";
 import { UnaryOpContext } from "./GoParser";
 import { LogicalOpContext } from "./GoParser";
 import { RelOpContext } from "./GoParser";
-import { NumericOpContext } from "./GoParser";
+import { MulOpContext } from "./GoParser";
+import { AddOpContext } from "./GoParser";
 import { ShortVarDeclContext } from "./GoParser";
+import { TopLevelDeclContext } from "./GoParser";
+import { MethodDeclContext } from "./GoParser";
 import { DeclContext } from "./GoParser";
 import { TypeDeclContext } from "./GoParser";
 import { VarDeclContext } from "./GoParser";
@@ -58,6 +61,9 @@ import { LitContext } from "./GoParser";
 import { LitNilContext } from "./GoParser";
 import { LitStrContext } from "./GoParser";
 import { LitBoolContext } from "./GoParser";
+import { LitStructContext } from "./GoParser";
+import { KeyedElemsContext } from "./GoParser";
+import { KeyedElemContext } from "./GoParser";
 import { NumberContext } from "./GoParser";
 import { EosContext } from "./GoParser";
 
@@ -377,15 +383,25 @@ export default class GoParserListener extends ParseTreeListener {
    */
   exitRelOp?: (ctx: RelOpContext) => void;
   /**
-   * Enter a parse tree produced by `GoParser.numericOp`.
+   * Enter a parse tree produced by `GoParser.mulOp`.
    * @param ctx the parse tree
    */
-  enterNumericOp?: (ctx: NumericOpContext) => void;
+  enterMulOp?: (ctx: MulOpContext) => void;
   /**
-   * Exit a parse tree produced by `GoParser.numericOp`.
+   * Exit a parse tree produced by `GoParser.mulOp`.
    * @param ctx the parse tree
    */
-  exitNumericOp?: (ctx: NumericOpContext) => void;
+  exitMulOp?: (ctx: MulOpContext) => void;
+  /**
+   * Enter a parse tree produced by `GoParser.addOp`.
+   * @param ctx the parse tree
+   */
+  enterAddOp?: (ctx: AddOpContext) => void;
+  /**
+   * Exit a parse tree produced by `GoParser.addOp`.
+   * @param ctx the parse tree
+   */
+  exitAddOp?: (ctx: AddOpContext) => void;
   /**
    * Enter a parse tree produced by `GoParser.shortVarDecl`.
    * @param ctx the parse tree
@@ -396,6 +412,26 @@ export default class GoParserListener extends ParseTreeListener {
    * @param ctx the parse tree
    */
   exitShortVarDecl?: (ctx: ShortVarDeclContext) => void;
+  /**
+   * Enter a parse tree produced by `GoParser.topLevelDecl`.
+   * @param ctx the parse tree
+   */
+  enterTopLevelDecl?: (ctx: TopLevelDeclContext) => void;
+  /**
+   * Exit a parse tree produced by `GoParser.topLevelDecl`.
+   * @param ctx the parse tree
+   */
+  exitTopLevelDecl?: (ctx: TopLevelDeclContext) => void;
+  /**
+   * Enter a parse tree produced by `GoParser.methodDecl`.
+   * @param ctx the parse tree
+   */
+  enterMethodDecl?: (ctx: MethodDeclContext) => void;
+  /**
+   * Exit a parse tree produced by `GoParser.methodDecl`.
+   * @param ctx the parse tree
+   */
+  exitMethodDecl?: (ctx: MethodDeclContext) => void;
   /**
    * Enter a parse tree produced by `GoParser.decl`.
    * @param ctx the parse tree
@@ -626,6 +662,36 @@ export default class GoParserListener extends ParseTreeListener {
    * @param ctx the parse tree
    */
   exitLitBool?: (ctx: LitBoolContext) => void;
+  /**
+   * Enter a parse tree produced by `GoParser.litStruct`.
+   * @param ctx the parse tree
+   */
+  enterLitStruct?: (ctx: LitStructContext) => void;
+  /**
+   * Exit a parse tree produced by `GoParser.litStruct`.
+   * @param ctx the parse tree
+   */
+  exitLitStruct?: (ctx: LitStructContext) => void;
+  /**
+   * Enter a parse tree produced by `GoParser.keyedElems`.
+   * @param ctx the parse tree
+   */
+  enterKeyedElems?: (ctx: KeyedElemsContext) => void;
+  /**
+   * Exit a parse tree produced by `GoParser.keyedElems`.
+   * @param ctx the parse tree
+   */
+  exitKeyedElems?: (ctx: KeyedElemsContext) => void;
+  /**
+   * Enter a parse tree produced by `GoParser.keyedElem`.
+   * @param ctx the parse tree
+   */
+  enterKeyedElem?: (ctx: KeyedElemContext) => void;
+  /**
+   * Exit a parse tree produced by `GoParser.keyedElem`.
+   * @param ctx the parse tree
+   */
+  exitKeyedElem?: (ctx: KeyedElemContext) => void;
   /**
    * Enter a parse tree produced by `GoParser.number`.
    * @param ctx the parse tree

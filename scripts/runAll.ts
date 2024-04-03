@@ -2,20 +2,37 @@ import { execSync } from "child_process";
 import { readdirSync } from "fs";
 import { join } from "path";
 
-const directoryPath = join(__dirname, "../go/pass");
+const passDir = join(__dirname, "../go/pass");
+const failDir = join(__dirname, "../go/fail");
 
 function runAll() {
-  const files = readdirSync(directoryPath);
+  const pfiles = readdirSync(passDir);
 
-  files.forEach((file) => {
-    const filePath = join(directoryPath, file);
+  console.log("Checking files which should pass...");
+  pfiles.forEach((file) => {
+    const filePath = join(passDir, file);
     const command = `npx tsx scripts/run.ts "${filePath}"`;
 
     try {
       execSync(command, { stdio: "ignore" });
-      console.log(`${filePath} ✅`);
+      console.log(`${file} ✅`);
     } catch (error) {
-      console.log(`${filePath} ❌`);
+      console.log(`${file} ❌`);
+    }
+  });
+
+  const ffiles = readdirSync(failDir);
+
+  console.log("\nChecking files which should fail...");
+  ffiles.forEach((file) => {
+    const filePath = join(failDir, file);
+    const command = `npx tsx scripts/run.ts "${filePath}"`;
+
+    try {
+      execSync(command, { stdio: "ignore" });
+      console.log(`${file} ❌`);
+    } catch (error) {
+      console.log(`${file} ✅`);
     }
   });
 }

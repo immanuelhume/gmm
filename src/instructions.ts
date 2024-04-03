@@ -10,6 +10,7 @@ export const enum Opcode {
   Call,
   Goto,
   LoadFn,
+  LoadMethod,
   Assign,
   Jof,
   EnterBlock,
@@ -21,6 +22,9 @@ export const enum Opcode {
   LoadStr,
   Push,
   PackTuple,
+  PackStruct,
+  LoadStructField,
+  LoadStructFieldLoc,
   Done,
 }
 
@@ -173,6 +177,10 @@ export class IUnaryOp extends InstrView {
   op(): UnaryOp {
     return this.bytecode.getUint8(this.addr + 1);
   }
+  setOp(op: UnaryOp): IUnaryOp {
+    this.bytecode.setUint8(this.addr + 1, op);
+    return this;
+  }
 }
 
 export class ILoadFn extends InstrView {
@@ -207,6 +215,25 @@ export class ILoadFn extends InstrView {
   setPc(addr: number): ILoadFn {
     this.bytecode.setFloat64(this.addr + 2, addr);
     return this;
+  }
+}
+
+export class ILoadMethod extends InstrView {
+  static size = 1;
+  readonly size = 1;
+
+  static emit(w: Emitter, ctx?: ParserRuleContext): ILoadMethod {
+    const pc = w.reserve(Opcode.LoadMethod, ILoadMethod.size, ctx);
+    return new ILoadMethod(w.code(), pc);
+  }
+
+  toString(): string {
+    return `LoadMethod`;
+  }
+
+  constructor(bytecode: DataView, addr: number) {
+    super(bytecode, addr);
+    assert(this.opcode() === Opcode.LoadMethod);
   }
 }
 
@@ -642,6 +669,90 @@ export class IPackTuple extends InstrView {
   }
 }
 
+/**
+ * Packs n items on the OS into a struct.
+ */
+export class IPackStruct extends InstrView {
+  static size = 9;
+  readonly size = 9;
+
+  static emit(w: Emitter, ctx?: ParserRuleContext): IPackStruct {
+    const pc = w.reserve(Opcode.PackStruct, IPackStruct.size, ctx);
+    return new IPackStruct(w.code(), pc);
+  }
+
+  constructor(bytecode: DataView, addr: number) {
+    super(bytecode, addr);
+    assert(this.opcode() === Opcode.PackStruct);
+  }
+
+  toString(): string {
+    return `PackStruct ${this.fieldc()}`;
+  }
+
+  fieldc(): number {
+    return this.bytecode.getFloat64(this.addr + 1);
+  }
+  setFieldc(size: number): IPackStruct {
+    this.bytecode.setFloat64(this.addr + 1, size);
+    return this;
+  }
+}
+
+export class ILoadStructField extends InstrView {
+  static size = 2;
+  readonly size = 2;
+
+  static emit(w: Emitter, ctx?: ParserRuleContext): ILoadStructField {
+    const pc = w.reserve(Opcode.LoadStructField, ILoadStructField.size, ctx);
+    return new ILoadStructField(w.code(), pc);
+  }
+
+  constructor(bytecode: DataView, addr: number) {
+    super(bytecode, addr);
+    assert(this.opcode() === Opcode.LoadStructField);
+  }
+
+  toString(): string {
+    return `LoadStructField ${this.offset()}`;
+  }
+
+  offset(): number {
+    return this.bytecode.getUint8(this.addr + 1);
+  }
+  setOffset(size: number): ILoadStructField {
+    this.bytecode.setUint8(this.addr + 1, size);
+    return this;
+  }
+}
+
+export class ILoadStructFieldLoc extends InstrView {
+  static size = 2;
+  readonly size = 2;
+
+  static emit(w: Emitter, ctx?: ParserRuleContext): ILoadStructFieldLoc {
+    const pc = w.reserve(Opcode.LoadStructFieldLoc, ILoadStructFieldLoc.size, ctx);
+    return new ILoadStructFieldLoc(w.code(), pc);
+  }
+
+  constructor(bytecode: DataView, addr: number) {
+    super(bytecode, addr);
+    assert(this.opcode() === Opcode.LoadStructFieldLoc);
+  }
+
+  toString(): string {
+    return `LoadStructFieldLoc ${this.offset()}`;
+  }
+
+  offset(): number {
+    return this.bytecode.getUint8(this.addr + 1);
+  }
+  setOffset(size: number): ILoadStructFieldLoc {
+    this.bytecode.setUint8(this.addr + 1, size);
+    return this;
+  }
+}
+
 export class IDone extends InstrView {
   static size = 1;
   readonly size = 1;
@@ -664,6 +775,7 @@ const opcodeClass: Record<Opcode, { new (bytecode: DataView, addr: number): Inst
   [Opcode.Call]: ICall,
   [Opcode.Goto]: IGoto,
   [Opcode.LoadFn]: ILoadFn,
+  [Opcode.LoadMethod]: ILoadMethod,
   [Opcode.Assign]: IAssign,
   [Opcode.Jof]: IJof,
   [Opcode.EnterBlock]: IEnterBlock,
@@ -678,6 +790,9 @@ const opcodeClass: Record<Opcode, { new (bytecode: DataView, addr: number): Inst
   [Opcode.LoadStr]: ILoadStr,
   [Opcode.Push]: IPush,
   [Opcode.PackTuple]: IPackTuple,
+  [Opcode.PackStruct]: IPackStruct,
+  [Opcode.LoadStructField]: ILoadStructField,
+  [Opcode.LoadStructFieldLoc]: ILoadStructFieldLoc,
   [Opcode.Done]: IDone,
 };
 

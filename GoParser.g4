@@ -3,7 +3,7 @@ parser grammar GoParser ;
 options { tokenVocab = GoLexer ; }
 
 // The toplevel is not a sequence of statements, but declarations only!
-prog : (decl eos)* ;
+prog : (topLevelDecl eos)* ;
 
 stmt : decl
 	| returnStmt
@@ -54,21 +54,23 @@ returnStmt : 'return' exprList? ;
 
 expr : primaryExpr
 	| unaryOp expr
-	| lhs=expr numericOp rhs=expr
+	| lhs=expr mulOp rhs=expr
+	| lhs=expr addOp rhs=expr
 	| lhs=expr relOp rhs=expr
 	| lhs=expr logicalOp rhs=expr
 	;
+
 exprList : expr (',' expr)* ;
 
-primaryExpr : name
-	| lit
+primaryExpr : lit
+	| name
 	| fn=primaryExpr args
 	| base=primaryExpr selector
 	;
 
 selector : '.' name ;
 
-args : '(' arg (',' arg)* ','? ')';
+args : '(' (arg (',' arg)* | arg?) ','? ')';
 arg : expr | type ; // functions like [make] take in types as params...
 
 block : '{' (stmt eos)* '}' ;
@@ -77,13 +79,16 @@ unaryOp : '-' | '+' | '<-' ;
 
 logicalOp : '||' | '&&' ;
 relOp : '==' | '!=' | '<' | '<=' | '>' | '>=' ;
-numericOp : '+' | '-' | '*' | '/' ;
+mulOp : '*' | '/' ;
+addOp : '+' | '-' ;
 
 shortVarDecl : lhs=lnameList ':=' rhs=exprList ;
 
-decl : funcDecl | varDecl | typeDecl ;
+topLevelDecl : decl | funcDecl | methodDecl ;
+methodDecl : 'func' '(' receiver=param ')' name signature funcBody ;
+decl : varDecl | typeDecl ;
 typeDecl : 'type' name type ;
-varDecl : 'var' name type ('=' expr)? ;
+varDecl : 'var' name type '=' expr ;
 
 funcDecl : 'func' name signature funcBody ;
 signature : '(' params ')' funcResult ;
@@ -96,7 +101,7 @@ params : param (',' param)* ','? | param? ;
 param : name typeName ;
 
 type : typeName | typeLit ;
-typeName : name ;
+typeName : WORD ;
 typeLit : structType | channelType ; // exclude pointer types for now - we probably won't need them
 
 channelType : 'chan' elementType ;
@@ -108,11 +113,15 @@ fieldDecl : name type ;
 name : WORD ;
 nameList : name (',' name)* ;
 
-lit : number | litStr | litNil | litBool | litFunc ;
+lit : number | litStr | litNil | litBool | litFunc | litStruct ;
 
 litNil : NIL ;
 litStr : LIT_STR ;
 litBool : TRUE | FALSE ;
+
+litStruct : (structType | typeName) '{' keyedElems '}' ;
+keyedElems : keyedElem (',' keyedElem)* ','? ;
+keyedElem : lname ':' expr ;
 
 number : INT | FLOAT ;
 

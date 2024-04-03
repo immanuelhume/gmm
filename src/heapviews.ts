@@ -53,6 +53,7 @@ export enum DataType {
   String,
   Fn,
   Builtin,
+  Method,
   Global,
   Frame,
   Env,
@@ -60,6 +61,7 @@ export enum DataType {
   BlockFrame,
   Pointer,
   Tuple,
+  Struct,
 }
 
 /**
@@ -516,6 +518,50 @@ export class BuiltinView extends NodeView {
 }
 
 /**
+ * Represents a method. Method differ from functions in that there is a "captured"
+ * receiver which should be used as a parameter.
+ *
+ * ┌──────┬────────┬────┐
+ * │header│receiver│func│
+ * └──────┴────────┴────┘
+ */
+export class MethodView extends NodeView {
+  static allocate(state: Memory): MethodView {
+    const addr = allocate(state, DataType.Method, 0, 2);
+    return new MethodView(state.heap, addr);
+  }
+
+  constructor(heap: DataView, addr: Address) {
+    super(heap, addr);
+    this.checkType(DataType.Method);
+  }
+
+  toString(): string {
+    const rcv = NodeView.of(this.heap, this.receiver()).toString();
+    const func = this.fn().toString();
+    return `Method { receiver: ${rcv}, func: ${func} }`;
+  }
+
+  receiver(): Address {
+    return this.getChild(0);
+  }
+
+  setReceiver(rcv: Address): MethodView {
+    this.setChild(0, rcv);
+    return this;
+  }
+
+  fn(): FnView {
+    return new FnView(this.heap, this.getChild(1));
+  }
+
+  setFn(func: FnView): MethodView {
+    this.setChild(1, func.addr);
+    return this;
+  }
+}
+
+/**
  * Represents a global.
  *
  * ┌──────┬─────────┐
@@ -615,6 +661,43 @@ export class TupleView extends NodeView {
   }
 }
 
+/**
+ * A collection of addresses. Not the same as a slice!
+ */
+export class StructView extends NodeView {
+  static allocate(state: Memory, fieldc: number): StructView {
+    const addr = allocate(state, DataType.Struct, 0, fieldc);
+    return new StructView(state.heap, addr);
+  }
+  constructor(heap: DataView, addr: Address) {
+    super(heap, addr);
+    this.checkType(DataType.Struct);
+  }
+  toString(): string {
+    const fields = [];
+    for (let i = 0; i < this.fieldc(); ++i) {
+      const field = this.getField(i);
+      const fieldStr = NodeView.of(this.heap, field).toString();
+      fields.push(fieldStr);
+    }
+    const fieldsStr = fields.join(", ");
+    return `Struct { ${fieldsStr} }`;
+  }
+  getField(i: number): Address {
+    return this.getChild(i);
+  }
+  setField(i: number, data: Address): StructView {
+    this.setChild(i, data);
+    return this;
+  }
+  getFieldLoc(i: number): Address {
+    return this.childByteOffset(i);
+  }
+  fieldc(): number {
+    return this.nrefs();
+  }
+}
+
 export class PointerView extends NodeView {
   // @todo
   static allocate(state: Memory): PointerView {
@@ -653,6 +736,7 @@ const nodeClass: Record<DataType, { new (heap: DataView, addr: Address, ctx?: He
   [DataType.String]: StringView,
   [DataType.Fn]: FnView,
   [DataType.Builtin]: BuiltinView,
+  [DataType.Method]: MethodView,
   [DataType.Global]: GlobalView,
   [DataType.Frame]: FrameView,
   [DataType.Env]: EnvView,
@@ -660,4 +744,5 @@ const nodeClass: Record<DataType, { new (heap: DataView, addr: Address, ctx?: He
   [DataType.BlockFrame]: BlockFrameView,
   [DataType.Pointer]: PointerView,
   [DataType.Tuple]: TupleView,
+  [DataType.Struct]: StructView,
 };
