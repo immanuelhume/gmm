@@ -8,13 +8,14 @@ import { readFileSync } from "fs";
 import { compileSrc } from "../src/compiler";
 import { Address, ArrayStack } from "../src/util";
 import {
+  BuiltinId,
   BuiltinView,
   EnvView,
   FrameView,
   Global,
   GlobalView,
   StringView,
-  builtinName2Id,
+  builtinIds,
   builtinSymbols,
 } from "../src/heapviews";
 import { MachineState, Thread, ThreadCtl } from "../src/machine";
@@ -28,7 +29,7 @@ const run = (filename: string) => {
   const mem = { heap, free: 0 };
 
   // Before initializing the rest of the machine, let's allocate all builtins.
-  const builtinAddrs = builtinSymbols.map((builtin) => BuiltinView.allocate(mem).setId(builtinName2Id[builtin]).addr);
+  const builtinAddrs = builtinIds.map((builtin) => BuiltinView.allocate(mem).setId(builtin).addr);
   const globalEnv = EnvView.allocate(mem, 1);
   const globalFrame = FrameView.allocate(mem, builtinSymbols.length);
   builtinAddrs.forEach((addr, i) => globalFrame.set(i, addr));

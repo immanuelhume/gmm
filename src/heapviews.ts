@@ -62,19 +62,16 @@ export const globalSymbols: Record<Global, string> = {
   [Global.Nil]: "nil",
 };
 
-export const enum BuiltinId {
-  Debug = 0x00,
-  Panic,
+export enum BuiltinId {
+  "dbg" = 0x00,
+  "panic",
+  "Mutex::Lock",
+  "Mutex::Unlock",
 }
-export const builtinSymbols = ["dbg", "panic"]; // need a list for deterministic order
-export const builtinName2Id: Record<string, BuiltinId> = {
-  dbg: BuiltinId.Debug,
-  panic: BuiltinId.Panic,
-};
-export const builtinId2Name: Record<BuiltinId, string> = {
-  [BuiltinId.Debug]: "dbg",
-  [BuiltinId.Panic]: "panic",
-};
+export const builtinSymbols: string[] = Object.keys(BuiltinId).filter((key) => isNaN(Number(key)));
+export const builtinIds: number[] = Object.keys(BuiltinId)
+  .map((key) => Number(key))
+  .filter((key) => !isNaN(key));
 
 /* Each word is a Float64. So 8 bytes. */
 export const wordSize = 8;
@@ -494,7 +491,7 @@ export class BuiltinView extends NodeView {
   }
 
   toString(): string {
-    const name = builtinId2Name[this.getId()];
+    const name = BuiltinId[this.getId()];
     return `Builtin { ${name} }`;
   }
 
@@ -541,12 +538,14 @@ export class MethodView extends NodeView {
     return this;
   }
 
-  fn(): FnView {
-    return new FnView(this.heap, this.getChild(1));
+  /**
+   * Address of the function node.
+   */
+  fn(): Address {
+    return this.getChild(1);
   }
-
-  setFn(func: FnView): MethodView {
-    this.setChild(1, func.addr);
+  setFn(func: Address): MethodView {
+    this.setChild(1, func);
     return this;
   }
 }

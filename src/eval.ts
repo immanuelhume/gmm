@@ -111,19 +111,13 @@ export const microcode: Record<Opcode, EvalFn> = {
         const bifn = builtinFns[builtin.getId()];
         bifn(state, t, args);
 
-        t.pc += ICall.size;
-
         if (go) {
           t.lastPc = t.pc;
         }
+        t.pc += ICall.size;
+
         break;
       case DataType.Method: {
-        const callFrame = CallFrameView.allocate(state);
-        callFrame.setPc(t.pc + ICall.size);
-        callFrame.setEnv(t.env);
-
-        t.rts.push(callFrame.addr);
-
         const mthd = new MethodView(state.heap, fnAddr);
 
         const frame = FrameView.allocate(state, argc + 1);
@@ -132,13 +126,37 @@ export const microcode: Record<Opcode, EvalFn> = {
           frame.set(i + 1, args[i]);
         }
 
-        const newEnv = mthd.fn().getEnv().extend(state, frame.addr);
+        const methodType = NodeView.getDataType(state.heap, mthd.fn());
+        switch (methodType) {
+          case DataType.Fn:
+            const callFrame = CallFrameView.allocate(state);
+            callFrame.setPc(t.pc + ICall.size);
+            callFrame.setEnv(t.env);
 
-        t.env = newEnv;
-        t.pc = mthd.fn().getPc();
+            t.rts.push(callFrame.addr);
 
-        if (go) {
-          t.lastPc = mthd.fn().getLast();
+            const fn = new FnView(state.heap, mthd.fn());
+            const newEnv = fn.getEnv().extend(state, frame.addr);
+
+            t.env = newEnv;
+            t.pc = fn.getPc();
+
+            if (go) {
+              t.lastPc = fn.getLast();
+            }
+            break;
+          case DataType.Builtin:
+            const builtin = new BuiltinView(state.heap, mthd.fn());
+            const bifn = builtinFns[builtin.getId()];
+            bifn(state, t, args);
+
+            if (go) {
+              t.lastPc = t.pc;
+            }
+            t.pc += ICall.size;
+            break;
+          default:
+            throw new Error("unexpected method type");
         }
 
         break;
@@ -199,9 +217,9 @@ export const microcode: Record<Opcode, EvalFn> = {
   },
   [Opcode.LoadMethod]: function (state: MachineState, t: Thread): void {
     const rcv = t.os.pop();
-    const fun = new FnView(state.heap, t.os.pop());
+    const fnAddr = t.os.pop(); // this could be an Fn or a Builtin!
 
-    const mthd = MethodView.allocate(state).setReceiver(rcv).setFn(fun);
+    const mthd = MethodView.allocate(state).setReceiver(rcv).setFn(fnAddr);
     t.os.push(mthd.addr);
 
     t.pc += ILoadMethod.size;
@@ -650,7 +668,7 @@ const unaryBuiltins = new Map<DataType, Map<UnaryOp, UnaryOpFn>>([
 type BuiltinEvalFn = (state: MachineState, t: Thread, args: Address[]) => void;
 
 const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
-  [BuiltinId.Debug]: function (state: MachineState, t: Thread, args: Address[]): void {
+  [BuiltinId["dbg"]]: function (state: MachineState, t: Thread, args: Address[]): void {
     const reprs = args.map((arg) => NodeView.of(state.heap, arg, { strPool: state.strPool }).toString()).join(" ");
     const lineno = state.srcMap.get(t.pc);
     if (lineno !== undefined) {
@@ -659,7 +677,7 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
       console.log(reprs);
     }
   },
-  [BuiltinId.Panic]: function (state: MachineState, t: Thread, args: number[]): void {
+  [BuiltinId["panic"]]: function (state: MachineState, t: Thread, args: number[]): void {
     const reprs = args.map((arg) => NodeView.of(state.heap, arg, { strPool: state.strPool }).toString()).join(" ");
     console.log("\x1b[31m", "panic:", reprs, "\x1b[0m");
     const lineno = state.srcMap.get(t.pc);
@@ -667,6 +685,12 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
       console.log("\x1b[31m", "  ", "at line", lineno, "\x1b[0m");
     }
     throw new PanicError(reprs); // we should never recover from this
+  },
+  [BuiltinId["Mutex::Lock"]]: function (state: MachineState, t: Thread, args: number[]): void {
+    console.log("Mutex::Lock called");
+  },
+  [BuiltinId["Mutex::Unlock"]]: function (state: MachineState, t: Thread, args: number[]): void {
+    console.log("Mutex::Unlock called");
   },
 };
 

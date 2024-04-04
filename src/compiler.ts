@@ -354,6 +354,23 @@ namespace Type {
       make("string", "string"),
     ];
   }
+
+  export const mutex: T = {
+    name: "Mutex",
+    data: {
+      kind: "struct",
+      fields: [
+        ["locked", { data: { kind: "primitive", name: "bool" } }],
+        ["id", { data: { kind: "primitive", name: "int64" } }],
+      ],
+    },
+    // @note: Mutex::Lock and Mutex::Unlock must be implemented as built-in
+    // functions!
+    methods: new Map([
+      ["Lock", { kind: "func", params: [], results: [] }],
+      ["Unlock", { kind: "func", params: [], results: [] }],
+    ]),
+  };
 }
 
 /**
@@ -734,6 +751,18 @@ const baseTypeEnv: Map<string, Type.T> = new Map([
       data: { kind: "func", params: [], results: [] },
     },
   ],
+  [
+    "Mutex::Lock",
+    {
+      data: { kind: "func", params: [], results: [] },
+    },
+  ],
+  [
+    "Mutex::Unlock",
+    {
+      data: { kind: "func", params: [], results: [] },
+    },
+  ],
 ]);
 
 /**
@@ -820,7 +849,7 @@ export class Assembler extends GoVisitor<number> {
 
     this.env.pushFrame(builtinSymbols);
     this.tenv.pushFrame_(baseTypeEnv);
-    this.tstore.pushFrame(Type.Primitive.types);
+    this.tstore.pushFrame(Type.Primitive.types.concat([Type.mutex]));
   }
 
   scanDecls = (ctx: ParserRuleContext): string[] => {
