@@ -19,6 +19,7 @@ import {
 } from "../src/heapviews";
 import { MachineState, Thread, ThreadCtl } from "../src/machine";
 import { Executor } from "../src/executor";
+import { assert } from "console";
 
 const run = (filename: string) => {
   const src = readFileSync(filename).toString();
@@ -88,6 +89,7 @@ const run = (filename: string) => {
 
   let executor = new Executor(state, tctl);
   executor.run();
+  assert(init.os.toList().length === 0);
 };
 
 const filename = process.argv[2];

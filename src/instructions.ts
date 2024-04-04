@@ -1,6 +1,7 @@
 import assert from "assert";
 import { fmtAddress } from "./util";
 import { ParserRuleContext } from "antlr4";
+import { Global } from "./heapviews";
 
 export const enum Opcode {
   BinaryOp = 0x00,
@@ -20,6 +21,7 @@ export const enum Opcode {
   LoadNameLoc,
   LoadName,
   LoadC,
+  LoadGlobal,
   LoadStr,
   Push,
   PackTuple,
@@ -606,6 +608,33 @@ export class ILoadC extends InstrView {
   }
 }
 
+export class ILoadGlobal extends InstrView {
+  static size = 2;
+  readonly size = 2;
+
+  static emit(w: Emitter, ctx?: ParserRuleContext): ILoadGlobal {
+    const pc = w.reserve(Opcode.LoadGlobal, ILoadGlobal.size, ctx);
+    return new ILoadGlobal(w.code(), pc);
+  }
+
+  constructor(bytecode: DataView, addr: number) {
+    super(bytecode, addr);
+    assert(this.opcode() === Opcode.LoadGlobal);
+  }
+
+  toString(): string {
+    return `LoadGlobal ${this.global()}`;
+  }
+
+  global(): Global {
+    return this.bytecode.getUint8(this.addr + 1);
+  }
+  setGlobal(global: Global): ILoadGlobal {
+    this.bytecode.setUint8(this.addr + 1, global);
+    return this;
+  }
+}
+
 /**
  * Loads a string constant.
  *
@@ -816,6 +845,7 @@ const opcodeClass: Record<Opcode, { new (bytecode: DataView, addr: number): Inst
   [Opcode.UnaryOp]: IUnaryOp,
   [Opcode.LogicalOp]: ILogicalOp,
   [Opcode.LoadC]: ILoadC,
+  [Opcode.LoadGlobal]: ILoadGlobal,
   [Opcode.LoadStr]: ILoadStr,
   [Opcode.Push]: IPush,
   [Opcode.PackTuple]: IPackTuple,

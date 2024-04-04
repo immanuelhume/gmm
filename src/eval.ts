@@ -43,6 +43,7 @@ import {
   ILoadStructFieldLoc,
   ILoadMethod,
   IGo,
+  ILoadGlobal,
 } from "./instructions";
 import { MachineState, Thread } from "./machine";
 import { ArgContext } from "../antlr/GoParser";
@@ -296,6 +297,13 @@ export const microcode: Record<Opcode, EvalFn> = {
     t.os.push(val.addr);
     t.pc += ILoadC.size;
   },
+  [Opcode.LoadGlobal]: function (state: MachineState, t: Thread): void {
+    const instr = new ILoadGlobal(state.bytecode, t.pc);
+    const addr = state.globals[instr.global()];
+
+    t.os.push(addr);
+    t.pc += ILoadGlobal.size;
+  },
   [Opcode.LoadStr]: function (state: MachineState, t: Thread): void {
     const instr = new ILoadStr(state.bytecode, t.pc);
     const id = instr.id();
@@ -542,6 +550,31 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
       ],
     ]),
   ],
+  [
+    DataType.Global,
+    new Map([
+      [
+        BinaryOp.Eq,
+        (state, lhsAddr, rhsAddr) => {
+          if (lhsAddr === rhsAddr) {
+            return state.globals[Global.True];
+          } else {
+            return state.globals[Global.False];
+          }
+        },
+      ],
+      [
+        BinaryOp.Neq,
+        (state, lhsAddr, rhsAddr) => {
+          if (lhsAddr !== rhsAddr) {
+            return state.globals[Global.True];
+          } else {
+            return state.globals[Global.False];
+          }
+        },
+      ],
+    ]),
+  ],
 ]);
 
 const execLogicalOp = (state: MachineState, t: Thread, op: LogicalOp): void => {
@@ -625,7 +658,6 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
     } else {
       console.log(reprs);
     }
-    t.os.push(0); // push some garbage, since functions must leave one value on the OS for now @todo FIXME
   },
   [BuiltinId.Panic]: function (state: MachineState, t: Thread, args: number[]): void {
     const reprs = args.map((arg) => NodeView.of(state.heap, arg, { strPool: state.strPool }).toString()).join(" ");

@@ -21,6 +21,7 @@ import GoParser, {
   MethodDeclContext,
   MulOpContext,
   AddOpContext,
+  LitBoolContext,
 } from "../antlr/GoParser";
 import {
   AssignmentContext,
@@ -75,9 +76,10 @@ import {
   UnaryOp,
   ILoadMethod,
   IGo,
+  ILoadGlobal,
 } from "./instructions";
 import { ArrayStack, Stack, StrPool, arraysEqual } from "./util";
-import { builtinSymbols } from "./heapviews";
+import { Global, builtinSymbols } from "./heapviews";
 import { assert } from "console";
 
 class BytecodeWriter implements Emitter {
@@ -849,6 +851,42 @@ export class Assembler extends GoVisitor<number> {
     }
   };
 
+  /**
+   * Generates code for the default initialization of some type.
+   */
+  initDefault = (t: Type.T): void => {
+    switch (t.data.kind) {
+      case "struct":
+        const fieldc = t.data.fields.length;
+        // @note: we must do it in reverse!
+        for (let i = fieldc - 1; i >= 0; --i) {
+          this.initDefault(t.data.fields[i][1]);
+        }
+        IPackStruct.emit(this.bc).setFieldc(fieldc);
+        break;
+      case "primitive":
+        switch (t.data.name) {
+          case "string":
+            const id = this.strPool.add("");
+            ILoadStr.emit(this.bc).setId(id);
+            break;
+          case "int64":
+            ILoadC.emit(this.bc).setVal(0);
+            break;
+          case "float64":
+            ILoadC.emit(this.bc).setVal(0);
+            break;
+          case "bool":
+            ILoadGlobal.emit(this.bc).setGlobal(Global.False);
+            break;
+        }
+        break;
+      case "chan":
+      case "func":
+        throw "Unimplemented";
+    }
+  };
+
   visitChildren = (node: ParserRuleContext): number => {
     if (!node.children) return 0;
     return node.children.map((child) => this.visit(child)).reduce((acc, n) => acc + n, 0);
@@ -927,7 +965,6 @@ export class Assembler extends GoVisitor<number> {
     // return statement(s). These instructions will not affect those functions
     // (since we'll never reach these lines). Instead these are meant for
     // functions without return statements.
-    IPush.emit(this.bc); // for now, just push some garbage @todo maybe push Nil or something?
     IReturn.emit(this.bc);
 
     ldf.setLast(this.bc.prevWc()); // wrap it up
@@ -1002,7 +1039,14 @@ export class Assembler extends GoVisitor<number> {
   };
 
   visitVarDecl = (ctx: VarDeclContext): number => {
-    this.visit(ctx.expr()); // compile RHS
+    if (ctx.expr()) {
+      // @todo type check?
+      this.visit(ctx.expr()); // compile RHS
+    } else {
+      const ty = this.resolveTypeExn(ctx.type_());
+      this.initDefault(ty);
+    }
+
     const name = ctx.name().getText();
     const [frame, offset] = this.env.lookupExn(name, ctx);
     ILoadNameLoc.emit(this.bc, ctx).setFrame(frame).setOffset(offset);
@@ -1012,8 +1056,7 @@ export class Assembler extends GoVisitor<number> {
     const t = this.resolveTypeExn(ctx.type_());
     this.tenv.set(ctx.name().getText(), t);
 
-    // Declarations, even if there is an initializing expression, should leave
-    // nothing on the stack.
+    // Declarations, should leave nothing on the stack.
     return 0;
   };
 
@@ -1448,6 +1491,18 @@ export class Assembler extends GoVisitor<number> {
     return 1;
   };
 
+  visitLitBool = (ctx: LitBoolContext): number => {
+    const raw = ctx.getText();
+    if (raw === "true") {
+      ILoadGlobal.emit(this.bc).setGlobal(Global.True);
+    } else if (raw === "false") {
+      ILoadGlobal.emit(this.bc).setGlobal(Global.False);
+    } else {
+      err(ctx, `unexpected boolean literal ${raw}`);
+    }
+    return 1;
+  };
+
   visitLitStr = (ctx: LitStrContext): number => {
     const raw = ctx.getText();
     const val = raw.slice(1, raw.length - 1); // remove the ""
@@ -1493,6 +1548,7 @@ export class Assembler extends GoVisitor<number> {
       const repr = this.tstore.lookupExn(ty, ctx);
       switch (repr.data.kind) {
         case "struct":
+          // @todo: are we gonna type check the fields?
           const fieldc = repr.data.fields.length;
           const given = ctx
             .keyedElems()
@@ -1567,7 +1623,6 @@ export const compileSrc = (src: string): CompileResult => {
     throw new ParseError(`encountered ${parseErrHandler.errs.length} errors`);
   }
 
-  // @todo: throw parse error if encountered
   const ass = new Assembler();
   ass.visit(tree);
 
