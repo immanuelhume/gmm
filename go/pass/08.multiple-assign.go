@@ -1,7 +1,5 @@
 func main() {
-	var x int
-	var y int
-	x, y = 7, 3
+	x, y := 7, 3
 	if x-y != 4 {
 		panic("expected 4, got", x+y)
 	}
