@@ -75,7 +75,7 @@ import {
   UnaryOp,
   ILoadMethod,
 } from "./instructions";
-import { ArrayStack, Stack, StrPool, allUnique, arraysEqual } from "./util";
+import { ArrayStack, Stack, StrPool, arraysEqual } from "./util";
 import { builtinSymbols } from "./heapviews";
 import { assert } from "console";
 
@@ -639,8 +639,8 @@ class Typer extends GoVisitor<Type.T[]> {
       }
       return [Type.Primitive.make("bool", "bool")];
     } else if (ctx.unaryOp()) {
-      // @todo
-      throw "Unimplemented";
+      // @todo better checks here?
+      return this.visit(ctx.expr(0));
     } else if (ctx.primaryExpr()) {
       return this.visit(ctx.primaryExpr());
     } else {
@@ -673,12 +673,12 @@ class Typer extends GoVisitor<Type.T[]> {
   };
 
   visitLitStruct = (ctx: LitStructContext): Type.T[] => {
+    // @todo Should we type-check the fields?
     if (ctx.typeName()) {
-      // @todo Should we type-check the fields?
       const ret = this.store.lookupExn(ctx.typeName().getText(), ctx);
       return [ret];
     } else if (ctx.structType()) {
-      // @todo: disallow this
+      // @todo maybe disallow this?
       throw "Unimplemented";
     } else {
       throw "Unreachable";
@@ -986,7 +986,7 @@ export class Assembler extends GoVisitor<number> {
     return 0;
   };
 
-  visitTypeDecl = (ctx: TypeDeclContext): number => {
+  visitTypeDecl = (_: TypeDeclContext): number => {
     // @todo: is there anything to do for type declarations?
     return 0;
   };
@@ -1515,12 +1515,12 @@ export const compileSrc = (src: string): CompileResult => {
 class ParsingErrorHandler extends ErrorListener<Token> {
   errs: string[] = [];
   syntaxError(
-    recognizer: Recognizer<Token>,
-    offendingSymbol: Token,
+    _recognizer: Recognizer<Token>,
+    _offendingSymbol: Token,
     line: number,
     column: number,
     msg: string,
-    e: RecognitionException | undefined,
+    _e: RecognitionException | undefined,
   ): void {
     const err = `line ${line}:${column} ${msg}`;
     this.errs.push(err);
