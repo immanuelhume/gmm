@@ -219,13 +219,15 @@ export const microcode: Record<Opcode, EvalFn> = {
       state.heap.setFloat64(lhs, rhs);
     } else {
       const lhss = [];
+      const rhss = [];
       for (let i = 0; i < count; ++i) {
         lhss.push(t.os.pop());
       }
-      const _rhs = t.os.pop(); // it's a tuple
-      const rhs = new TupleView(state.heap, _rhs);
       for (let i = 0; i < count; ++i) {
-        state.heap.setFloat64(lhss[i], rhs.get(i));
+        rhss.push(t.os.pop());
+      }
+      for (let i = 0; i < count; ++i) {
+        state.heap.setFloat64(lhss[i], rhss[i]);
       }
     }
 
@@ -632,7 +634,7 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
     if (lineno !== undefined) {
       console.log("\x1b[31m", "  ", "at line", lineno, "\x1b[0m");
     }
-    throw new PanicError(); // we should never recover from this
+    throw new PanicError(reprs); // we should never recover from this
   },
 };
 

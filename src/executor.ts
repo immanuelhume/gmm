@@ -35,7 +35,7 @@ export class Executor {
             "[",
             t.id,
             "]",
-            `\x1b[33m${fmtAddress(t.pc)}\x1b[0m ${instr.toString()}`.padEnd(48, " "),
+            `\x1b[33m${fmtAddress(t.pc)}\x1b[0m ${instr.toString()}`.padEnd(52, " "),
             toHexList(t.os.toList()).padEnd(48, " "),
             toHexList(t.rts.toList()).padEnd(48, " "),
           );

@@ -717,6 +717,24 @@ class Typer extends GoVisitor<Type.T[]> {
 }
 
 /**
+ * Type environment for builtin stuff.
+ */
+const baseTypeEnv: Map<string, Type.T> = new Map([
+  [
+    "panic",
+    {
+      data: { kind: "func", params: [], results: [] },
+    },
+  ],
+  [
+    "dbg",
+    {
+      data: { kind: "func", params: [], results: [] },
+    },
+  ],
+]);
+
+/**
  * A utility class to help set the types of function declarations into some
  * [TypeStore]. This is needed since functions may be called before they are
  * declared, and we'll need to know their type information.
@@ -799,7 +817,7 @@ export class Assembler extends GoVisitor<number> {
     this.tstore = new TypeStore();
 
     this.env.pushFrame(builtinSymbols);
-    this.tenv.pushFrame();
+    this.tenv.pushFrame_(baseTypeEnv);
     this.tstore.pushFrame(Type.Primitive.types);
   }
 
@@ -1261,25 +1279,41 @@ export class Assembler extends GoVisitor<number> {
       this.visit(ctx.expr(0));
       this.visit(ctx.unaryOp());
     } else {
-      this.visit(ctx.primaryExpr());
+      return this.visit(ctx.primaryExpr());
     }
-    return 1; // resolves to exactly one item on the stack
+    // Most expressions evaluate to 1 item. However, function calls may evaluate
+    // to multiple!
+    return 1;
   };
 
   visitPrimaryExpr = (ctx: PrimaryExprContext): number => {
     if (ctx.name()) {
-      this.visit(ctx.name());
+      return this.visit(ctx.name());
     } else if (ctx.lit()) {
-      this.visit(ctx.lit());
+      return this.visit(ctx.lit());
     } else if (ctx._fn) {
       const args = ctx.args();
       const fn = ctx._fn;
       const argc = args.arg_list().length;
 
+      const typer = new Typer(this.tstore, this.tenv);
+      const _fnType = typer.visit(fn);
+      if (_fnType.length !== 1 || _fnType[0].data.kind !== "func") {
+        err(ctx, `cannot call non-function ${fn.getText()}`);
+      }
+
       this.visit(fn); // emit code to evaluate the callable thing
       this.visit(args); // emit code to evaluate each arg
 
       ICall.emit(this.bc, ctx).setArgc(argc);
+
+      const fnType = _fnType[0].data;
+      switch (fnType.kind) {
+        case "func":
+          return fnType.results.length;
+        default:
+          throw "Unreachable";
+      }
     } else if (ctx._base) {
       const baseType = new Typer(this.tstore, this.tenv).visit(ctx._base);
       if (baseType.length === 0) {
@@ -1328,12 +1362,11 @@ export class Assembler extends GoVisitor<number> {
    * If there is more than 1 expression, we pack it into a tuple.
    */
   visitExprList = (ctx: ExprListContext): number => {
-    const len = ctx.expr_list().length;
+    // @bug: we can't naively pack stuff into a tuple. See 09. FIXME
+    const typer = new Typer(this.tstore, this.tenv);
+    const len = ctx.expr_list().flatMap((expr) => typer.visit(expr)).length;
     this.visitChildren(ctx);
-    if (len > 1) {
-      IPackTuple.emit(this.bc).setLen(len);
-    }
-    return 1;
+    return len;
   };
 
   visitMulOp = (ctx: MulOpContext): number => {
