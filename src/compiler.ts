@@ -770,6 +770,7 @@ export class Assembler extends GoVisitor<number> {
   tstore: TypeStore;
 
   main: number | undefined; // keep track of where the main function starts
+  doneAt: number = -1; // also keep track of where [Done] is
 
   contiss: Stack<[IGoto[], number]>;
   breakss: Stack<[IGoto[], number]>;
@@ -851,6 +852,7 @@ export class Assembler extends GoVisitor<number> {
     const [frame, offset] = this.env.lookupExn("main", ctx);
     ILoadName.emit(this.bc).setFrame(frame).setOffset(offset);
     ICall.emit(this.bc).setArgc(0); // call [main]
+    this.doneAt = this.bc.wc();
     IDone.emit(this.bc); // last instruction
 
     return 0;
@@ -1475,6 +1477,10 @@ interface CompileResult {
   bytecode: DataView;
   srcMap: Map<number, number>;
   strPool: StrPool;
+  /**
+   * Address of the done instruction.
+   */
+  doneAt: number;
 }
 
 /**
@@ -1508,8 +1514,9 @@ export const compileSrc = (src: string): CompileResult => {
   const bytecode = ass.bc.code();
   const srcMap = ass.bc.srcMap();
   const strPool = ass.strPool;
+  const doneAt = ass.doneAt;
 
-  return { bytecode, srcMap, strPool };
+  return { bytecode, srcMap, strPool, doneAt };
 };
 
 class ParsingErrorHandler extends ErrorListener<Token> {

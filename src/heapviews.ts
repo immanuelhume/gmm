@@ -20,26 +20,9 @@
 import assert from "assert";
 import { Address, Stack, StrPool } from "./util";
 
-interface Memory {
+export interface Memory {
   heap: DataView;
   free: number;
-}
-
-interface Registers {
-  pc: number;
-  rts: Stack<Address>;
-  os: Stack<Address>;
-  env: EnvView;
-}
-
-/**
- * State machine, at run time.
- */
-export interface MachineState extends Memory, Registers {
-  bytecode: DataView;
-  srcMap: Map<number, number>;
-  strPool: StrPool;
-  globals: Record<Global, Address>;
 }
 
 /**
