@@ -254,7 +254,7 @@ export const microcode: Record<Opcode, EvalFn> = {
     state.pc += IPop.size;
   },
   [Opcode.LoadC]: function (state: MachineState): void {
-    // @todo: make general, as and when ILoadC is updated - for now we just load numbers...
+    // @todo: this shouldn't always be loading floats...
     const instr = new ILoadC(state.bytecode, state.pc);
     const val = Float64View.allocate(state).setValue(instr.val());
 

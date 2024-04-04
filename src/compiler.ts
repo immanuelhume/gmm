@@ -1,4 +1,12 @@
-import { ParserRuleContext, CharStream, CommonTokenStream } from "antlr4";
+import {
+  ParserRuleContext,
+  CharStream,
+  CommonTokenStream,
+  ErrorListener,
+  RecognitionException,
+  Recognizer,
+  Token,
+} from "antlr4";
 import GoLexer from "../antlr/GoLexer";
 import GoParser, {
   ExprListContext,
@@ -239,6 +247,9 @@ namespace Type {
     fields: [string, T][];
   };
 
+  /**
+   * @todo: should this be parked under Primitive?
+   */
   export type Channel = {
     kind: "chan";
     /**
@@ -258,6 +269,9 @@ namespace Type {
     results: T[];
   };
 
+  /**
+   * Checks if two types are equal.
+   */
   export const equal = (lhs: T, rhs: T): boolean => {
     // @note: we could also check if their names match
     return equalData(lhs.data, rhs.data);
@@ -287,6 +301,10 @@ namespace Type {
     return t.data.kind === "primitive" && t.data.name === "bool";
   };
 
+  /**
+   * Tries to find a given field or method on some type t. Fields are checked
+   * first, then methods.
+   */
   export const findFieldOrMethodExn = (t: T, field: string, ctx: ParserRuleContext): T => {
     if (t.data.kind === "struct") {
       const f = t.data.fields.find(([name, _]) => name === field);
@@ -302,6 +320,9 @@ namespace Type {
   };
 
   export namespace Primitive {
+    /**
+     * Raw names of each kind of primitive.
+     */
     export type Name = "int64" | "float64" | "bool" | "string";
 
     export const make = (name: string, underlying: Name): T => {
@@ -581,8 +602,8 @@ class TypeEnv {
 /**
  * Types a given expression.
  *
- * Otherwise, a list of types is returned. This is because expressions like
- * function calls may return multiple things.
+ * A list of types is returned. This is because expressions like function calls
+ * may return multiple things.
  */
 class Typer extends GoVisitor<Type.T[]> {
   store: TypeStore;
@@ -601,7 +622,7 @@ class Typer extends GoVisitor<Type.T[]> {
       if (lhs.length !== 1 || rhs.length !== 1) {
         err(ctx, "invalid operation"); // @todo a better err msg
       }
-      // @todo: we should check that they are, indeed, numbers?
+      // @todo: we should check that the operation and type are indeed correct? e.g. numbers, bools,
       // @todo we're assuming all binary operations take the same types?
       if (!Type.equal(lhs[0], rhs[0])) {
         err(ctx, `invalid operation between ${lhs[0].name} and ${lhs[0].name}`);
@@ -713,6 +734,9 @@ class FuncTypeBumper extends GoVisitor<void> {
       // @todo: disallow anonymous return types?
       .map((ty) => this.tstore.lookupExn(ty.typeName().getText(), ctx));
 
+    // Unlike functions, the type info for a method is not stored in the type
+    // environment. Instead we attach it to the type info of the type this
+    // method is declared on.
     const rcvType = this.tstore.lookupExn(ctx._receiver.typeName().getText(), ctx);
     const mthdType: Type.Func = { kind: "func", params, results };
     if (rcvType.methods === undefined) {
@@ -1440,6 +1464,7 @@ export class Assembler extends GoVisitor<number> {
 }
 
 class CompileError extends Error {}
+class ParseError extends Error {}
 
 /**
  * Throws a compile time error.
@@ -1465,8 +1490,23 @@ export const compileSrc = (src: string): CompileResult => {
   const lexer = new GoLexer(chars);
   const tokens = new CommonTokenStream(lexer);
   const parser = new GoParser(tokens);
-  const tree = parser.prog();
 
+  const parseErrHandler = new ParsingErrorHandler();
+
+  parser.buildParseTrees = true;
+  parser.removeErrorListeners();
+  parser.addErrorListener(parseErrHandler);
+
+  const tree = parser.prog(); // parse the program
+
+  if (parseErrHandler.errs.length > 0) {
+    for (const err of parseErrHandler.errs) {
+      console.error(err);
+    }
+    throw new ParseError(`encountered ${parseErrHandler.errs.length} errors`);
+  }
+
+  // @todo: throw parse error if encountered
   const ass = new Assembler();
   ass.visit(tree);
 
@@ -1476,3 +1516,18 @@ export const compileSrc = (src: string): CompileResult => {
 
   return { bytecode, srcMap, strPool };
 };
+
+class ParsingErrorHandler extends ErrorListener<Token> {
+  errs: string[] = [];
+  syntaxError(
+    recognizer: Recognizer<Token>,
+    offendingSymbol: Token,
+    line: number,
+    column: number,
+    msg: string,
+    e: RecognitionException | undefined,
+  ): void {
+    const err = `line ${line}:${column} ${msg}`;
+    this.errs.push(err);
+  }
+}
