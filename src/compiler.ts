@@ -1153,10 +1153,10 @@ export class Assembler extends GoVisitor<number> {
   };
 
   visitGoStmt = (ctx: GoStmtContext): number => {
-    if (ctx.primaryExpr()._fn === null) {
+    const func = ctx.primaryExpr();
+    if (!func._fn) {
       err(ctx, "expression in go must be function call");
     }
-    const func = ctx.primaryExpr();
 
     const args = func.args();
     const fn = func._fn;
