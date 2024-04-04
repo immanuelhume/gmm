@@ -431,13 +431,13 @@ export class BlockFrameView extends NodeView {
 /**
  * Represents a function (a closure).
  *
- * ┌──────┬──┬───┐
- * │header│pc│env│
- * └──────┴──┴───┘
+ * ┌──────┬─────┬────┬───┐
+ * │header│first│last│env│
+ * └──────┴─────┴────┴───┘
  */
 export class FnView extends NodeView {
   static allocate(state: Memory): FnView {
-    const addr = allocate(state, DataType.Fn, 1, 1);
+    const addr = allocate(state, DataType.Fn, 2, 1);
     return new FnView(state.heap, addr);
   }
 
@@ -453,15 +453,25 @@ export class FnView extends NodeView {
   getPc(): Address {
     return this.getChild(0);
   }
-  setPc(pc: Address): void {
+  setPc(pc: Address): FnView {
     this.setChild(0, pc);
+    return this;
+  }
+
+  getLast(): Address {
+    return this.getChild(1);
+  }
+  setLast(pc: Address): FnView {
+    this.setChild(1, pc);
+    return this;
   }
 
   getEnv(): EnvView {
-    return new EnvView(this.heap, this.getChild(1));
+    return new EnvView(this.heap, this.getChild(2));
   }
-  setEnv(env: EnvView) {
-    this.setChild(1, env.addr);
+  setEnv(env: EnvView): FnView {
+    this.setChild(2, env.addr);
+    return this;
   }
 }
 

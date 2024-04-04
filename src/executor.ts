@@ -32,9 +32,9 @@ export class Executor {
         const opcode = instr.opcode();
         if (!quiet) {
           console.log(
-            `\x1b[33m${fmtAddress(t.pc)}\x1b[0m ${instr.toString()}`.padEnd(64, " "),
-            toHexList(t.os.toList()).padEnd(64, " "),
-            toHexList(t.rts.toList()).padEnd(64, " "),
+            `\x1b[33m${fmtAddress(t.pc)}\x1b[0m ${instr.toString()}`.padEnd(48, " "),
+            toHexList(t.os.toList()).padEnd(48, " "),
+            toHexList(t.rts.toList()).padEnd(48, " "),
           );
         }
         microcode[opcode](this.common, t);

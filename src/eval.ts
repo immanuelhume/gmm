@@ -155,10 +155,7 @@ export const microcode: Record<Opcode, EvalFn> = {
   },
   [Opcode.LoadFn]: function (state: MachineState, t: Thread): void {
     const instr = new ILoadFn(state.bytecode, t.pc);
-    const fn = FnView.allocate(state);
-
-    fn.setEnv(t.env);
-    fn.setPc(instr.pc());
+    const fn = FnView.allocate(state).setPc(instr.pc()).setLast(instr.last()).setEnv(t.env);
 
     t.os.push(fn.addr);
     t.pc += ILoadFn.size;

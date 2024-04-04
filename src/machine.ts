@@ -36,11 +36,11 @@ export interface Thread extends Registers {
 type Event = "chan-send" | "chan-read" | "mutex-lock" | "mutex-unlock" | "fin";
 
 type ThreadId = number;
-type SubFn = (t: Thread) => void;
+type OnEvent = (t: Thread) => void;
 
 interface ThreadOps {
   pub: (e: Event, eId: number) => void;
-  sub: (e: Event, eId: number, threadId: ThreadId, f: SubFn) => void;
+  sub: (e: Event, eId: number, threadId: ThreadId, f: OnEvent) => void;
   fork: (thread: Thread) => Thread;
 }
 
@@ -65,7 +65,7 @@ export class ThreadCtl implements ThreadOps {
   private liveThreads: Thread[] = [];
   private deadThreads: Thread[] = [];
 
-  private subs: Map<Event, Map<number, [ThreadId, SubFn][]>> = new Map();
+  private subs: Map<Event, Map<number, [ThreadId, OnEvent][]>> = new Map();
 
   constructor(init: Thread) {
     this.liveThreads.push(init);
@@ -143,7 +143,7 @@ export class ThreadCtl implements ThreadOps {
     es.delete(eId);
   }
 
-  sub(e: Event, eId: number, threadId: ThreadId, f: SubFn): void {
+  sub(e: Event, eId: number, threadId: ThreadId, f: OnEvent): void {
     let es = this.subs.get(e);
     if (es === undefined) {
       es = new Map();

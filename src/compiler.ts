@@ -82,6 +82,7 @@ import { assert } from "console";
 class BytecodeWriter implements Emitter {
   private _code: DataView;
   private _wc: number;
+  private _prevWc: number;
   /**
    * Map from bytecode address to source line number. Used for debugging only.
    */
@@ -91,6 +92,7 @@ class BytecodeWriter implements Emitter {
     // @todo: how do we determine the size? should we make it resizable?
     this._code = new DataView(new ArrayBuffer(codeLen));
     this._wc = 0;
+    this._prevWc = -1;
     this._srcMap = new Map();
   }
 
@@ -99,6 +101,12 @@ class BytecodeWriter implements Emitter {
   }
   wc(): number {
     return this._wc;
+  }
+  /**
+   * Returns the wc of the previous instruction.
+   */
+  prevWc(): number {
+    return this._prevWc;
   }
   srcMap(): Map<number, number> {
     return this._srcMap;
@@ -110,6 +118,7 @@ class BytecodeWriter implements Emitter {
    **/
   reserve(opcode: Opcode, size: number, ctx?: ParserRuleContext): number {
     const ret = this._wc;
+    this._prevWc = this._wc;
 
     this._code.setUint8(this._wc, opcode);
     this._wc += size;
@@ -852,8 +861,8 @@ export class Assembler extends GoVisitor<number> {
     const [frame, offset] = this.env.lookupExn("main", ctx);
     ILoadName.emit(this.bc).setFrame(frame).setOffset(offset);
     ICall.emit(this.bc).setArgc(0); // call [main]
-    this.doneAt = this.bc.wc();
     IDone.emit(this.bc); // last instruction
+    this.doneAt = this.bc.prevWc();
 
     return 0;
   };
@@ -902,6 +911,7 @@ export class Assembler extends GoVisitor<number> {
     IPush.emit(this.bc); // for now, just push some garbage @todo maybe push Nil or something?
     IReturn.emit(this.bc);
 
+    ldf.setLast(this.bc.prevWc()); // wrap it up
     goto.setWhere(this.bc.wc());
 
     // We need to explicitly handle the assignment instruction here, since our

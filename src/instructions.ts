@@ -184,8 +184,8 @@ export class IUnaryOp extends InstrView {
 }
 
 export class ILoadFn extends InstrView {
-  static size = 10;
-  readonly size = 10;
+  static size = 18;
+  readonly size = 18;
 
   static emit(w: Emitter, ctx?: ParserRuleContext): ILoadFn {
     const pc = w.reserve(Opcode.LoadFn, ILoadFn.size, ctx);
@@ -193,7 +193,7 @@ export class ILoadFn extends InstrView {
   }
 
   toString(): string {
-    return `LoadFn argc:${this.argc()} pc:${fmtAddress(this.pc())}`;
+    return `LoadFn argc:${this.argc()} pc:${fmtAddress(this.pc())} last:${fmtAddress(this.last())}`;
   }
 
   constructor(bytecode: DataView, addr: number) {
@@ -214,6 +214,14 @@ export class ILoadFn extends InstrView {
   }
   setPc(addr: number): ILoadFn {
     this.bytecode.setFloat64(this.addr + 2, addr);
+    return this;
+  }
+
+  last(): number {
+    return this.bytecode.getFloat64(this.addr + 10);
+  }
+  setLast(addr: number): ILoadFn {
+    this.bytecode.setFloat64(this.addr + 10, addr);
     return this;
   }
 }
