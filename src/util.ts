@@ -4,6 +4,11 @@ export interface Stack<T> {
   peek: () => T;
   forEach: <S>(f: (t: T) => S) => void;
   toList: () => T[];
+  /**
+   * Produces a shallow copy.
+   */
+  copy: () => Stack<T>;
+  clear: () => void;
 }
 
 export class ArrayStack<T> implements Stack<T> {
@@ -21,6 +26,12 @@ export class ArrayStack<T> implements Stack<T> {
   forEach = <S>(f: (t: T) => S) => this.xs.forEach(f);
   toString = (): string => this.xs.toString();
   toList = () => [...this.xs]; // return a shallow copy
+  copy = () => {
+    const ret = new ArrayStack<T>();
+    this.forEach((x) => ret.push(x));
+    return ret;
+  };
+  clear = () => (this.xs = []);
 }
 
 export type Address = number;

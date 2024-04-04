@@ -1,6 +1,6 @@
 import { EnvView, Global, Memory } from "./heapviews";
 import { InstrView } from "./instructions";
-import { Address, Stack, StrPool } from "./util";
+import { Address, ArrayStack, Stack, StrPool } from "./util";
 
 export interface Registers {
   pc: number;
@@ -14,10 +14,6 @@ export interface Thread extends Registers {
    * Unique ID for the thread.
    */
   id: number;
-  /**
-   * ID of its parent.
-   */
-  parId: number;
   /**
    * Whether the thread is awake. If false, that means the thread is blocked
    * on something and should not be given any time slice.
@@ -41,6 +37,9 @@ type OnEvent = (t: Thread) => void;
 interface ThreadOps {
   pub: (e: Event, eId: number) => void;
   sub: (e: Event, eId: number, threadId: ThreadId, f: OnEvent) => void;
+  /**
+   * Forks a thread. All registers are copied.
+   */
   fork: (thread: Thread) => Thread;
 }
 
@@ -124,8 +123,18 @@ export class ThreadCtl implements ThreadOps {
 
   fork(oldThread: Thread): Thread {
     // @todo: this needs to be a DEEP copy!
-    const newThread = { ...oldThread, id: this.nextThreadId++ };
+    const newThread: Thread = {
+      pc: oldThread.pc,
+      rts: new ArrayStack(), // RTS can be empty
+      os: oldThread.os.copy(), // a shallow copy
+      env: oldThread.env, // doesn't matter, will be overriden
+      id: this.nextThreadId++,
+      isLive: true,
+      isZombie: false,
+      lastPc: -1, // to be determined by caller
+    };
     this.threads.set(newThread.id, newThread);
+    this.liveThreads.push(newThread);
     this.sub("fin", oldThread.id, newThread.id, (thread) => (thread.isZombie = true));
     return newThread;
   }

@@ -42,10 +42,12 @@ import {
   ILoadStructField,
   ILoadStructFieldLoc,
   ILoadMethod,
+  IGo,
 } from "./instructions";
 import { MachineState, Thread } from "./machine";
+import { ArgContext } from "../antlr/GoParser";
 
-type EvalFn = (state: MachineState, t: Thread) => void;
+type EvalFn = (state: MachineState, t: Thread, go?: boolean) => void;
 
 export const microcode: Record<Opcode, EvalFn> = {
   [Opcode.BinaryOp]: function (state: MachineState, t: Thread): void {
@@ -63,7 +65,7 @@ export const microcode: Record<Opcode, EvalFn> = {
     execLogicalOp(state, t, instr.op());
     t.pc += ILogicalOp.size;
   },
-  [Opcode.Call]: function (state: MachineState, t: Thread): void {
+  [Opcode.Call]: function (state: MachineState, t: Thread, go?: boolean): void {
     const instr = new ICall(state.bytecode, t.pc);
     const argc = instr.argc();
 
@@ -96,6 +98,10 @@ export const microcode: Record<Opcode, EvalFn> = {
         t.env = newEnv;
         t.pc = fn.getPc();
 
+        if (go) {
+          t.lastPc = fn.getLast();
+        }
+
         break;
       }
       case DataType.Builtin:
@@ -105,6 +111,10 @@ export const microcode: Record<Opcode, EvalFn> = {
         bifn(state, t, args);
 
         t.pc += ICall.size;
+
+        if (go) {
+          t.lastPc = t.pc;
+        }
         break;
       case DataType.Method: {
         const callFrame = CallFrameView.allocate(state);
@@ -126,10 +136,36 @@ export const microcode: Record<Opcode, EvalFn> = {
         t.env = newEnv;
         t.pc = mthd.fn().getPc();
 
+        if (go) {
+          t.lastPc = mthd.fn().getLast();
+        }
+
         break;
       }
       default:
         throw new Error(`Uncallable object ${fnKind}`);
+    }
+  },
+  [Opcode.Go]: function (state: MachineState, t: Thread): void {
+    const t2 = state.fork(t);
+    t2.pc += IGo.size;
+    t.pc += IGo.size + ICall.size;
+
+    // A [Call] always follows immediately after a [Go]. We'll use the info from
+    // the [Call] to transfer the Goroutine's operands to our new thread.
+    const call = new ICall(state.bytecode, t2.pc);
+    const args = [];
+    for (let i = 0; i < call.argc(); ++i) {
+      args.push(t.os.pop());
+    }
+    const fn = t.os.pop();
+
+    t2.os.clear();
+
+    t2.os.push(fn);
+    args.reverse();
+    for (const arg of args) {
+      t2.os.push(arg);
     }
   },
   [Opcode.Return]: function (state: MachineState, t: Thread): void {

@@ -57,7 +57,6 @@ const run = (filename: string) => {
   // The initial thread.
   const init: Thread = {
     id: 0,
-    parId: -1,
     isLive: true,
     isZombie: false,
     lastPc: doneAt,
@@ -68,15 +67,23 @@ const run = (filename: string) => {
   };
 
   const tctl = new ThreadCtl(init);
+
   let state: MachineState = {
     ...mem,
     bytecode,
     srcMap,
     strPool,
     globals,
-    sub: tctl.sub,
-    pub: tctl.pub,
-    fork: tctl.fork,
+
+    sub(e, eId, threadId, f) {
+      tctl.sub(e, eId, threadId, f);
+    },
+    pub(e, eId) {
+      tctl.pub(e, eId);
+    },
+    fork(thread) {
+      return tctl.fork(thread);
+    },
   };
 
   let executor = new Executor(state, tctl);

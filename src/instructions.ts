@@ -8,6 +8,7 @@ export const enum Opcode {
   LogicalOp,
   Return,
   Call,
+  Go,
   Goto,
   LoadFn,
   LoadMethod,
@@ -398,6 +399,25 @@ export class ICall extends InstrView {
   }
 }
 
+export class IGo extends InstrView {
+  static size = 1;
+  readonly size = 1;
+
+  static emit(w: Emitter, ctx?: ParserRuleContext): IGo {
+    const pc = w.reserve(Opcode.Go, IGo.size, ctx);
+    return new IGo(w.code(), pc);
+  }
+
+  toString(): string {
+    return `Go`;
+  }
+
+  constructor(bytecode: DataView, addr: number) {
+    super(bytecode, addr);
+    assert(this.opcode() === Opcode.Go);
+  }
+}
+
 /**
  * Jump-on-false.
  *
@@ -781,6 +801,7 @@ export class IDone extends InstrView {
 const opcodeClass: Record<Opcode, { new (bytecode: DataView, addr: number): InstrView }> = {
   [Opcode.Return]: IReturn,
   [Opcode.Call]: ICall,
+  [Opcode.Go]: IGo,
   [Opcode.Goto]: IGoto,
   [Opcode.LoadFn]: ILoadFn,
   [Opcode.LoadMethod]: ILoadMethod,

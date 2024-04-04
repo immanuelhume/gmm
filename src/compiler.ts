@@ -74,6 +74,7 @@ import {
   IUnaryOp,
   UnaryOp,
   ILoadMethod,
+  IGo,
 } from "./instructions";
 import { ArrayStack, Stack, StrPool, arraysEqual } from "./util";
 import { builtinSymbols } from "./heapviews";
@@ -1152,8 +1153,24 @@ export class Assembler extends GoVisitor<number> {
   };
 
   visitGoStmt = (ctx: GoStmtContext): number => {
+    if (ctx.primaryExpr()._fn === null) {
+      err(ctx, "expression in go must be function call");
+    }
+    const func = ctx.primaryExpr();
+
+    const args = func.args();
+    const fn = func._fn;
+    const argc = args.arg_list().length;
+
+    this.visit(fn); // emit code to evaluate the callable thing
+    this.visit(args); // emit code to evaluate each arg
+
+    // Note that a [Go] is always followed immediately by [Call]. We'll need to
+    // rely on this at runtime.
+    IGo.emit(this.bc, ctx);
+    ICall.emit(this.bc, ctx).setArgc(argc);
+
     return 0;
-    // @todo
   };
 
   visitSendStmt = (ctx: SendStmtContext): number => {

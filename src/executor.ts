@@ -9,7 +9,7 @@ export class Executor {
   private common: MachineState;
   private timeSlice: number;
 
-  constructor(common: MachineState, tctl: ThreadCtl, timeSlice = 1000) {
+  constructor(common: MachineState, tctl: ThreadCtl, timeSlice = 8) {
     this.tctl = tctl;
     this.common = common;
     this.timeSlice = timeSlice;
@@ -32,6 +32,9 @@ export class Executor {
         const opcode = instr.opcode();
         if (!quiet) {
           console.log(
+            "[",
+            t.id,
+            "]",
             `\x1b[33m${fmtAddress(t.pc)}\x1b[0m ${instr.toString()}`.padEnd(48, " "),
             toHexList(t.os.toList()).padEnd(48, " "),
             toHexList(t.rts.toList()).padEnd(48, " "),
