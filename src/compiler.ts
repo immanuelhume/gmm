@@ -971,16 +971,11 @@ export class Assembler extends GoVisitor<number> {
   };
 
   visitVarDecl = (ctx: VarDeclContext): number => {
-    if (ctx.expr()) {
-      this.visit(ctx.expr()); // compile RHS
-      const name = ctx.name().getText();
-      const [frame, offset] = this.env.lookupExn(name, ctx);
-      ILoadNameLoc.emit(this.bc, ctx).setFrame(frame).setOffset(offset);
-      IAssign.emit(this.bc, ctx).setCount(1);
-    } else {
-      // @todo Think about how we can handle default initialization - maybe
-      // we don't have to do anything.
-    }
+    this.visit(ctx.expr()); // compile RHS
+    const name = ctx.name().getText();
+    const [frame, offset] = this.env.lookupExn(name, ctx);
+    ILoadNameLoc.emit(this.bc, ctx).setFrame(frame).setOffset(offset);
+    IAssign.emit(this.bc, ctx).setCount(1);
 
     // Insert type information about this variable.
     const t = this.resolveTypeExn(ctx.type_());
