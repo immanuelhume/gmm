@@ -24,6 +24,9 @@ IF : 'if' ;
 ELSE : 'else' ;
 RANGE : 'range' ;
 
+NEW : 'new' ;
+MAKE : 'make' ;
+
 PERIOD : '.' ;
 COLON : ':' ;
 

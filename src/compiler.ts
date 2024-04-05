@@ -281,11 +281,16 @@ namespace Type {
     results: T[];
   };
 
+  export type Pointer = {
+    kind: "ptr";
+    elem: T;
+  };
+
   /**
    * Checks if two types are equal.
    */
   export const equal = (lhs: T, rhs: T): boolean => {
-    // @note: we could also check if their names match
+    // @note: we could also check if their names match?
     return equalData(lhs.data, rhs.data);
   };
 
@@ -747,6 +752,12 @@ const baseTypeEnv: Map<string, Type.T> = new Map([
   ],
   [
     "dbg",
+    {
+      data: { kind: "func", params: [], results: [] },
+    },
+  ],
+  [
+    "new",
     {
       data: { kind: "func", params: [], results: [] },
     },
