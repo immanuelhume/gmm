@@ -111,7 +111,7 @@ export const wordSize = 8;
  *
  * @return Address of the newly allocated node.
  */
-const allocate = (mem: Memory, dataType: DataType, nvals: number, nrefs: number): number => {
+export const allocate = (mem: Memory, dataType: DataType, nvals: number, nrefs: number): number => {
   const addr = mem.free;
   const totalSize = 1 + nvals + nrefs;
   mem.free += wordSize * totalSize;
@@ -701,7 +701,7 @@ export class StructView extends NodeView {
 export class PointerView extends NodeView {
   // @todo
   static allocate(state: Memory): PointerView {
-    const addr = allocate(state, DataType.Pointer, 0, 1);
+    const addr = allocate(state, DataType.Pointer, 1, 0);
     return new PointerView(state.heap, addr);
   }
   constructor(heap: DataView, addr: Address) {
@@ -711,15 +711,12 @@ export class PointerView extends NodeView {
   toString(): string {
     return "";
   }
-  get(i: number): Address {
-    return this.getChild(i);
+  get(): Address {
+    return this.getChild(0);
   }
-  set(i: number, data: Address): PointerView {
-    this.setChild(i, data);
+  setValue(addr: Address): PointerView {
+    this.setChild(0, addr);
     return this;
-  }
-  dereference(i: number): Address {
-    return this.get(this.get(i));
   }
 }
 class ChannelView extends NodeView {

@@ -17,6 +17,9 @@ import {
   PointerView,
   StructView,
   MethodView,
+  Int64View,
+  StringView,
+  allocate,
 } from "./heapviews";
 import {
   IAssign,
@@ -45,6 +48,7 @@ import {
   ILoadStructFieldLoc,
   ILoadMethod,
 } from "./instructions";
+import { stat } from "fs";
 
 type EvalFn = (state: MachineState) => void;
 
@@ -603,9 +607,14 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
     throw new PanicError(); // we should never recover from this
   },
   [BuiltinId.New]: function (state: MachineState, args: number[]): void {
-    const typ = NodeView.getDataType(state.heap, args[0]);
-    // make new instance of type
-    const data = new PointerView(state.heap, args[0]);
+    const typ = args[0];
+    const nvals = args[1];
+    const nrefs = args[2];
+    const ptr = PointerView.allocate(state);
+
+    const addr = allocate(state, typ, nvals, nrefs);
+    ptr.setValue(addr);
+    state.os.push(ptr.addr);
   },
 };
 
