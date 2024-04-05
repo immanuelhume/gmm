@@ -19,6 +19,9 @@ import {
   StringView,
   allocate,
   BoolView,
+  LvalueView,
+  LvalueKind,
+  copy,
 } from "./heapviews";
 import {
   IAssign,
@@ -239,21 +242,26 @@ export const microcode: Record<Opcode, EvalFn> = {
     // we are assigning to a field of a struct?) so we assign directly to
     // an address.
 
-    if (count == 1) {
-      const lhs = t.os.pop();
-      const rhs = t.os.pop();
-      state.heap.setFloat64(lhs, rhs);
-    } else {
-      const lhss = [];
-      const rhss = [];
-      for (let i = 0; i < count; ++i) {
-        lhss.push(t.os.pop());
-      }
-      for (let i = 0; i < count; ++i) {
-        rhss.push(t.os.pop());
-      }
-      for (let i = 0; i < count; ++i) {
-        state.heap.setFloat64(lhss[i], rhss[i]);
+    const lhss = [];
+    const rhss = [];
+
+    for (let i = 0; i < count; ++i) {
+      lhss.push(t.os.pop());
+    }
+    for (let i = 0; i < count; ++i) {
+      rhss.push(t.os.pop());
+    }
+    for (let i = 0; i < count; ++i) {
+      const lvalue = new LvalueView(state.heap, lhss[i]);
+      switch (lvalue.getKind()) {
+        case LvalueKind.Variable:
+          state.heap.setFloat64(lvalue.getLoc(), rhss[i]);
+          break;
+        case LvalueKind.Deref:
+          copy(state, rhss[i], lvalue.getLoc());
+          break;
+        default:
+          throw "Unreachable";
       }
     }
 
@@ -265,7 +273,9 @@ export const microcode: Record<Opcode, EvalFn> = {
     const frame = new FrameView(state.heap, frameAddr);
     const nameLoc = frame.getVarLoc(instr.offset());
 
-    t.os.push(nameLoc);
+    const lvalue = LvalueView.allocate(state).setKind(LvalueKind.Variable).setLoc(nameLoc);
+    t.os.push(lvalue.addr);
+
     t.pc += ILoadNameLoc.size;
   },
   [Opcode.LoadName]: function (state: MachineState, t: Thread): void {
@@ -354,7 +364,8 @@ export const microcode: Record<Opcode, EvalFn> = {
   },
   [Opcode.LoadPtrSlot]: function (state: MachineState, t: Thread): void {
     const ptr = new PointerView(state.heap, t.os.pop());
-    t.os.push(ptr.getValueLoc());
+    const lvalue = LvalueView.allocate(state).setKind(LvalueKind.Deref).setLoc(ptr.getValue());
+    t.os.push(lvalue.addr);
     t.pc += ILoadPtrSlot.size;
   },
   [Opcode.PackTuple]: function (state: MachineState, t: Thread): void {
@@ -390,7 +401,9 @@ export const microcode: Record<Opcode, EvalFn> = {
     const struct = new StructView(state.heap, t.os.pop());
     const fieldLoc = struct.getFieldLoc(instr.offset());
 
-    t.os.push(fieldLoc);
+    const lvalue = LvalueView.allocate(state).setKind(LvalueKind.Variable).setLoc(fieldLoc);
+    t.os.push(lvalue.addr);
+
     t.pc += ILoadStructField.size;
   },
   [Opcode.Done]: function (state: MachineState, t: Thread): void {

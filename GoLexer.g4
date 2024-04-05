@@ -58,6 +58,7 @@ GREATER : '>' ;
 GEQ : '>=' ;
 
 STAR: '*' ;
+AMPERSAND : '&' ;
 
 WORD : LETTER (LETTER | UNICODE_DIGIT)* -> mode(NLSEMI) ;
 

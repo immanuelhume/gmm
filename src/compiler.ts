@@ -754,7 +754,7 @@ class Typer extends GoVisitor<Type.T[]> {
       // @todo: we should check that the operation and type are indeed correct? e.g. numbers, bools,
       // @todo we're assuming all binary operations take the same types?
       if (!Type.equal(lhs[0], rhs[0])) {
-        err(ctx, `invalid operation between ${lhs[0].name} and ${lhs[0].name}`);
+        err(ctx, `invalid operation between ${lhs[0].name} and ${rhs[0].name}`);
       }
       return lhs;
     } else if (ctx.logicalOp()) {
@@ -768,8 +768,23 @@ class Typer extends GoVisitor<Type.T[]> {
       }
       return [Type.Primitive.make("bool", "bool")];
     } else if (ctx.unaryOp()) {
-      // @todo better checks here?
-      return this.visit(ctx.expr(0));
+      if (ctx.unaryOp().AMPERSAND()) {
+        const inner = this.visit(ctx.expr(0));
+        if (inner.length !== 1) {
+          err(ctx, `& operator cannot be used on multiple types (${ctx.getText()})`);
+        }
+        const ptr: Type.T = { data: { kind: "ptr", elem: inner[0] } };
+        return [ptr];
+      } else if (ctx.unaryOp().STAR()) {
+        const outer = this.visit(ctx.expr(0));
+        if (outer.length !== 1 || outer[0].data.kind !== "ptr") {
+          err(ctx, `${ctx.expr(0).getText()} cannot be dereferenced`);
+          throw "Unreachable";
+        }
+        return [outer[0].data.elem];
+      } else {
+        return this.visit(ctx.expr(0));
+      }
     } else if (ctx.primaryExpr()) {
       return this.visit(ctx.primaryExpr());
     } else {
@@ -1389,14 +1404,21 @@ export class Assembler extends GoVisitor<number> {
   };
 
   visitLpointer = (ctx: LpointerContext): number => {
-    const name = ctx.lname().getText();
-    const [frame, offset] = this.env.lookupExn(name, ctx);
-    ILoadName.emit(this.bc).setFrame(frame).setOffset(offset);
+    // @todo: typecheck that the thing being derefed is a pointer?
+    if (ctx.lname()) {
+      const name = ctx.lname().getText();
+      const [frame, offset] = this.env.lookupExn(name, ctx);
+      ILoadName.emit(this.bc).setFrame(frame).setOffset(offset);
+    } else if (ctx.field()) {
+      this._visitField(ctx.field(), false);
+    } else {
+      throw "Unreachable";
+    }
     ILoadPtrSlot.emit(this.bc);
     return 1;
   };
 
-  visitField = (ctx: FieldContext): number => {
+  _visitField = (ctx: FieldContext, lvalue = true): number => {
     const baseType = new Typer(this.tstore, this.tenv).visit(ctx._base);
     if (baseType.length === 0) {
       err(ctx, `could not determine type of ${ctx._base.getText()}`);
@@ -1406,21 +1428,27 @@ export class Assembler extends GoVisitor<number> {
     const field = Type.findFieldExn(basetype, fieldname, ctx);
 
     switch (basetype.data.kind) {
-      case "struct": {
+      case "struct":
         this.visit(ctx._base); // compile the base first
-        ILoadStructFieldLoc.emit(this.bc).setOffset(field.offset);
-        return 0;
-      }
-      case "ptr": {
+        break;
+      case "ptr":
         this.visit(ctx._base); // compile base to get a pointer type on OS...
         IDeref.emit(this.bc); // ... and deref it
-        ILoadStructFieldLoc.emit(this.bc).setOffset(field.offset);
-        return 0;
-      }
+        break;
       default:
         err(ctx, `${ctx._base.getText()} does not have field ${fieldname} (type ${basetype.data.kind})`);
         throw "Unreachable";
     }
+    if (lvalue) {
+      ILoadStructFieldLoc.emit(this.bc).setOffset(field.offset);
+    } else {
+      ILoadStructField.emit(this.bc).setOffset(field.offset);
+    }
+    return 1;
+  };
+
+  visitField = (ctx: FieldContext): number => {
+    return this._visitField(ctx, true);
   };
 
   visitAssignment = (ctx: AssignmentContext): number => {
@@ -1654,6 +1682,8 @@ export class Assembler extends GoVisitor<number> {
       op.setOp(UnaryOp.Add);
     } else if (ctx.STAR()) {
       IDeref.emit(this.bc);
+    } else if (ctx.AMPERSAND()) {
+      IPackPtr.emit(this.bc);
     } else {
       err(ctx, `unexpected unary operator ${ctx.getText()}`);
     }
@@ -1789,10 +1819,9 @@ export const compileSrc = (src: string): CompileResult => {
   const tokens = new CommonTokenStream(lexer);
   const parser = new GoParser(tokens);
 
-  const parseErrHandler = new ParsingErrorHandler();
-
   parser.buildParseTrees = true;
   parser.removeErrorListeners();
+  const parseErrHandler = new ParsingErrorHandler();
   parser.addErrorListener(parseErrHandler);
 
   const tree = parser.prog(); // parse the program

@@ -627,7 +627,8 @@ export class ILoadGlobal extends InstrView {
   }
 
   toString(): string {
-    return `LoadGlobal ${this.global()}`;
+    const repr = Global[this.global()];
+    return `LoadGlobal ${repr}`;
   }
 
   global(): Global {

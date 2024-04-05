@@ -18,7 +18,7 @@
  */
 
 import assert from "assert";
-import { Address, Stack, StrPool } from "./util";
+import { Address, Stack, StrPool, fmtAddress } from "./util";
 
 export interface Memory {
   heap: DataView;
@@ -45,6 +45,7 @@ export enum DataType {
   Pointer,
   Tuple,
   Struct,
+  Lvalue,
 }
 
 /**
@@ -122,6 +123,18 @@ export const clone = (mem: Memory, addr: Address): Address => {
   return addr2;
 };
 
+/**
+ * Basically memcpy.
+ */
+export const copy = (mem: Memory, src: Address, dst: Address) => {
+  const node = NodeView.of(mem.heap, src);
+  for (let i = 0; i < node.size(); ++i) {
+    const offset = i * wordSize;
+    const data = mem.heap.getFloat64(src + offset);
+    mem.heap.setFloat64(dst + offset, data);
+  }
+};
+
 interface HeapContext {
   strPool: StrPool;
 }
@@ -159,6 +172,13 @@ export abstract class NodeView {
     return this.heap.getUint8(this.addr + 2);
   }
 
+  /**
+   * Size in words.
+   */
+  size(): number {
+    return 1 + this.nvals() + this.nrefs();
+  }
+
   protected childByteOffset(i: number): Address {
     return this.addr + (i + 1) * wordSize;
   }
@@ -168,10 +188,6 @@ export abstract class NodeView {
   setChild(i: number, val: number): void {
     return this.heap.setFloat64(this.childByteOffset(i), val);
   }
-
-  // getBoolChild(i: boolean): boolean {
-  //   return this.heap.get
-  // }
 
   checkType(type: DataType) {
     if (this.dataType() !== type) {
@@ -686,7 +702,7 @@ export class PointerView extends NodeView {
     this.checkType(DataType.Pointer);
   }
   toString(): string {
-    return "";
+    return `Pointer ${fmtAddress(this.getValue())}`;
   }
   getValue(): Address {
     return this.getChild(0);
@@ -695,14 +711,42 @@ export class PointerView extends NodeView {
     this.setChild(0, addr);
     return this;
   }
-  /**
-   * Retrieves the byte-address of where the pointer's value is stored. We need
-   * this to support deref assignment (e.g. *x = 1).
-   */
-  getValueLoc(): Address {
-    return this.childByteOffset(0);
+}
+
+export const enum LvalueKind {
+  Variable = 0x00,
+  Deref,
+}
+
+export class LvalueView extends NodeView {
+  static allocate(state: Memory): LvalueView {
+    const addr = allocate(state, DataType.Lvalue, 2, 0);
+    return new LvalueView(state.heap, addr);
+  }
+  constructor(heap: DataView, addr: Address) {
+    super(heap, addr);
+    this.checkType(DataType.Lvalue);
+  }
+  toString(): string {
+    return "Lvalue";
+  }
+
+  getKind(): LvalueKind {
+    return this.getChild(0);
+  }
+  setKind(kind: LvalueKind): LvalueView {
+    this.setChild(0, kind);
+    return this;
+  }
+  getLoc(): Address {
+    return this.getChild(1);
+  }
+  setLoc(addr: Address): LvalueView {
+    this.setChild(1, addr);
+    return this;
   }
 }
+
 class ChannelView extends NodeView {
   // @todo
   toString(): string {
@@ -726,4 +770,5 @@ const nodeClass: Record<DataType, { new (heap: DataView, addr: Address, ctx?: He
   [DataType.Pointer]: PointerView,
   [DataType.Tuple]: TupleView,
   [DataType.Struct]: StructView,
+  [DataType.Lvalue]: LvalueView,
 };

@@ -36,7 +36,7 @@ assignment : lhs=lvalueList '=' rhs=exprList ;
 
 lvalueList : lvalue (',' lvalue)* ;
 lvalue : lname | lpointer | field ;
-lpointer : '*' lname ;
+lpointer : '*' (lname | field) ;
 lname : WORD ; // a name which appears on LHS
 lnameList : lname (',' lname)* ;
 field : base=primaryExpr '.' last=WORD ;
@@ -77,7 +77,7 @@ arg : expr | type ; // functions like [make] take in types as params...
 
 block : '{' (stmt eos)* '}' ;
 
-unaryOp : '-' | '+' | '<-' | '*' ;
+unaryOp : '-' | '+' | '<-' | '*' | '&' ;
 
 logicalOp : '||' | '&&' ;
 relOp : '==' | '!=' | '<' | '<=' | '>' | '>=' ;
