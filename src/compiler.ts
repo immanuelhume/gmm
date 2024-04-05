@@ -1380,12 +1380,13 @@ export class Assembler extends GoVisitor<number> {
     const raw = ctx.getText();
     if (ctx.INT()) {
       val = parseInt(raw);
+      ILoadC.emit(this.bc).setInt(val);
     } else if (ctx.FLOAT()) {
       val = parseFloat(raw);
+      ILoadC.emit(this.bc).setFloat(val);
     } else {
       throw "Unreachable";
     }
-    ILoadC.emit(this.bc).setVal(val);
     return 1;
   };
 
