@@ -88,7 +88,7 @@ topLevelDecl : decl | funcDecl | methodDecl ;
 methodDecl : 'func' '(' receiver=param ')' name signature funcBody ;
 decl : varDecl | typeDecl ;
 typeDecl : 'type' name type ;
-varDecl : 'var' name type '=' expr ;
+varDecl : 'var' name type ('=' expr)? ;
 
 funcDecl : 'func' name signature funcBody ;
 signature : '(' params ')' funcResult ;

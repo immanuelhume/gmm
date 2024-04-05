@@ -1,6 +1,7 @@
 import assert from "assert";
 import { fmtAddress } from "./util";
 import { ParserRuleContext } from "antlr4";
+import { Global } from "./heapviews";
 
 export const enum Opcode {
   BinaryOp = 0x00,
@@ -8,6 +9,7 @@ export const enum Opcode {
   LogicalOp,
   Return,
   Call,
+  Go,
   Goto,
   LoadFn,
   LoadMethod,
@@ -19,6 +21,7 @@ export const enum Opcode {
   LoadNameLoc,
   LoadName,
   LoadC,
+  LoadGlobal,
   LoadStr,
   Push,
   PackTuple,
@@ -184,8 +187,8 @@ export class IUnaryOp extends InstrView {
 }
 
 export class ILoadFn extends InstrView {
-  static size = 10;
-  readonly size = 10;
+  static size = 18;
+  readonly size = 18;
 
   static emit(w: Emitter, ctx?: ParserRuleContext): ILoadFn {
     const pc = w.reserve(Opcode.LoadFn, ILoadFn.size, ctx);
@@ -193,7 +196,7 @@ export class ILoadFn extends InstrView {
   }
 
   toString(): string {
-    return `LoadFn argc:${this.argc()} pc:${fmtAddress(this.pc())}`;
+    return `LoadFn argc:${this.argc()} pc:${fmtAddress(this.pc())} last:${fmtAddress(this.last())}`;
   }
 
   constructor(bytecode: DataView, addr: number) {
@@ -214,6 +217,14 @@ export class ILoadFn extends InstrView {
   }
   setPc(addr: number): ILoadFn {
     this.bytecode.setFloat64(this.addr + 2, addr);
+    return this;
+  }
+
+  last(): number {
+    return this.bytecode.getFloat64(this.addr + 10);
+  }
+  setLast(addr: number): ILoadFn {
+    this.bytecode.setFloat64(this.addr + 10, addr);
     return this;
   }
 }
@@ -387,6 +398,25 @@ export class ICall extends InstrView {
   }
   setArgc(argc: number) {
     return this.bytecode.setUint8(this.addr + 1, argc);
+  }
+}
+
+export class IGo extends InstrView {
+  static size = 1;
+  readonly size = 1;
+
+  static emit(w: Emitter, ctx?: ParserRuleContext): IGo {
+    const pc = w.reserve(Opcode.Go, IGo.size, ctx);
+    return new IGo(w.code(), pc);
+  }
+
+  toString(): string {
+    return `Go`;
+  }
+
+  constructor(bytecode: DataView, addr: number) {
+    super(bytecode, addr);
+    assert(this.opcode() === Opcode.Go);
   }
 }
 
@@ -574,6 +604,33 @@ export class ILoadC extends InstrView {
   }
   setVal(val: number): ILoadC {
     this.bytecode.setFloat64(this.addr + 1, val);
+    return this;
+  }
+}
+
+export class ILoadGlobal extends InstrView {
+  static size = 2;
+  readonly size = 2;
+
+  static emit(w: Emitter, ctx?: ParserRuleContext): ILoadGlobal {
+    const pc = w.reserve(Opcode.LoadGlobal, ILoadGlobal.size, ctx);
+    return new ILoadGlobal(w.code(), pc);
+  }
+
+  constructor(bytecode: DataView, addr: number) {
+    super(bytecode, addr);
+    assert(this.opcode() === Opcode.LoadGlobal);
+  }
+
+  toString(): string {
+    return `LoadGlobal ${this.global()}`;
+  }
+
+  global(): Global {
+    return this.bytecode.getUint8(this.addr + 1);
+  }
+  setGlobal(global: Global): ILoadGlobal {
+    this.bytecode.setUint8(this.addr + 1, global);
     return this;
   }
 }
@@ -773,6 +830,7 @@ export class IDone extends InstrView {
 const opcodeClass: Record<Opcode, { new (bytecode: DataView, addr: number): InstrView }> = {
   [Opcode.Return]: IReturn,
   [Opcode.Call]: ICall,
+  [Opcode.Go]: IGo,
   [Opcode.Goto]: IGoto,
   [Opcode.LoadFn]: ILoadFn,
   [Opcode.LoadMethod]: ILoadMethod,
@@ -787,6 +845,7 @@ const opcodeClass: Record<Opcode, { new (bytecode: DataView, addr: number): Inst
   [Opcode.UnaryOp]: IUnaryOp,
   [Opcode.LogicalOp]: ILogicalOp,
   [Opcode.LoadC]: ILoadC,
+  [Opcode.LoadGlobal]: ILoadGlobal,
   [Opcode.LoadStr]: ILoadStr,
   [Opcode.Push]: IPush,
   [Opcode.PackTuple]: IPackTuple,

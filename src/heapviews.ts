@@ -20,26 +20,9 @@
 import assert from "assert";
 import { Address, Stack, StrPool } from "./util";
 
-interface Memory {
+export interface Memory {
   heap: DataView;
   free: number;
-}
-
-interface Registers {
-  pc: number;
-  rts: Stack<Address>;
-  os: Stack<Address>;
-  env: EnvView;
-}
-
-/**
- * State machine, at run time.
- */
-export interface MachineState extends Memory, Registers {
-  bytecode: DataView;
-  srcMap: Map<number, number>;
-  strPool: StrPool;
-  globals: Record<Global, Address>;
 }
 
 /**
@@ -79,22 +62,17 @@ export const globalSymbols: Record<Global, string> = {
   [Global.Nil]: "nil",
 };
 
-export const enum BuiltinId {
-  Debug = 0x00,
-  Panic,
-  New,
+export enum BuiltinId {
+  "dbg" = 0x00,
+  "panic",
+  "new",
+  "Mutex::Lock",
+  "Mutex::Unlock",
 }
-export const builtinSymbols = ["dbg", "panic", "new"]; // need a list for deterministic order
-export const builtinName2Id: Record<string, BuiltinId> = {
-  dbg: BuiltinId.Debug,
-  panic: BuiltinId.Panic,
-  new: BuiltinId.New,
-};
-export const builtinId2Name: Record<BuiltinId, string> = {
-  [BuiltinId.Debug]: "dbg",
-  [BuiltinId.Panic]: "panic",
-  [BuiltinId.New]: "new",
-};
+export const builtinSymbols: string[] = Object.keys(BuiltinId).filter((key) => isNaN(Number(key)));
+export const builtinIds: number[] = Object.keys(BuiltinId)
+  .map((key) => Number(key))
+  .filter((key) => !isNaN(key));
 
 /* Each word is a Float64. So 8 bytes. */
 export const wordSize = 8;
@@ -451,13 +429,13 @@ export class BlockFrameView extends NodeView {
 /**
  * Represents a function (a closure).
  *
- * ┌──────┬──┬───┐
- * │header│pc│env│
- * └──────┴──┴───┘
+ * ┌──────┬─────┬────┬───┐
+ * │header│first│last│env│
+ * └──────┴─────┴────┴───┘
  */
 export class FnView extends NodeView {
   static allocate(state: Memory): FnView {
-    const addr = allocate(state, DataType.Fn, 1, 1);
+    const addr = allocate(state, DataType.Fn, 2, 1);
     return new FnView(state.heap, addr);
   }
 
@@ -473,15 +451,25 @@ export class FnView extends NodeView {
   getPc(): Address {
     return this.getChild(0);
   }
-  setPc(pc: Address): void {
+  setPc(pc: Address): FnView {
     this.setChild(0, pc);
+    return this;
+  }
+
+  getLast(): Address {
+    return this.getChild(1);
+  }
+  setLast(pc: Address): FnView {
+    this.setChild(1, pc);
+    return this;
   }
 
   getEnv(): EnvView {
-    return new EnvView(this.heap, this.getChild(1));
+    return new EnvView(this.heap, this.getChild(2));
   }
-  setEnv(env: EnvView) {
-    this.setChild(1, env.addr);
+  setEnv(env: EnvView): FnView {
+    this.setChild(2, env.addr);
+    return this;
   }
 }
 
@@ -504,7 +492,7 @@ export class BuiltinView extends NodeView {
   }
 
   toString(): string {
-    const name = builtinId2Name[this.getId()];
+    const name = BuiltinId[this.getId()];
     return `Builtin { ${name} }`;
   }
 
@@ -551,12 +539,14 @@ export class MethodView extends NodeView {
     return this;
   }
 
-  fn(): FnView {
-    return new FnView(this.heap, this.getChild(1));
+  /**
+   * Address of the function node.
+   */
+  fn(): Address {
+    return this.getChild(1);
   }
-
-  setFn(func: FnView): MethodView {
-    this.setChild(1, func.addr);
+  setFn(func: Address): MethodView {
+    this.setChild(1, func);
     return this;
   }
 }

@@ -1,4 +1,12 @@
-import { ParserRuleContext, CharStream, CommonTokenStream } from "antlr4";
+import {
+  ParserRuleContext,
+  CharStream,
+  CommonTokenStream,
+  ErrorListener,
+  RecognitionException,
+  Recognizer,
+  Token,
+} from "antlr4";
 import GoLexer from "../antlr/GoLexer";
 import GoParser, {
   ExprListContext,
@@ -13,6 +21,7 @@ import GoParser, {
   MethodDeclContext,
   MulOpContext,
   AddOpContext,
+  LitBoolContext,
 } from "../antlr/GoParser";
 import {
   AssignmentContext,
@@ -66,14 +75,17 @@ import {
   IUnaryOp,
   UnaryOp,
   ILoadMethod,
+  IGo,
+  ILoadGlobal,
 } from "./instructions";
-import { ArrayStack, Stack, StrPool, allUnique, arraysEqual } from "./util";
-import { builtinSymbols } from "./heapviews";
+import { ArrayStack, Stack, StrPool, arraysEqual } from "./util";
+import { Global, builtinSymbols } from "./heapviews";
 import { assert } from "console";
 
 class BytecodeWriter implements Emitter {
   private _code: DataView;
   private _wc: number;
+  private _prevWc: number;
   /**
    * Map from bytecode address to source line number. Used for debugging only.
    */
@@ -83,6 +95,7 @@ class BytecodeWriter implements Emitter {
     // @todo: how do we determine the size? should we make it resizable?
     this._code = new DataView(new ArrayBuffer(codeLen));
     this._wc = 0;
+    this._prevWc = -1;
     this._srcMap = new Map();
   }
 
@@ -91,6 +104,12 @@ class BytecodeWriter implements Emitter {
   }
   wc(): number {
     return this._wc;
+  }
+  /**
+   * Returns the wc of the previous instruction.
+   */
+  prevWc(): number {
+    return this._prevWc;
   }
   srcMap(): Map<number, number> {
     return this._srcMap;
@@ -102,6 +121,7 @@ class BytecodeWriter implements Emitter {
    **/
   reserve(opcode: Opcode, size: number, ctx?: ParserRuleContext): number {
     const ret = this._wc;
+    this._prevWc = this._wc;
 
     this._code.setUint8(this._wc, opcode);
     this._wc += size;
@@ -239,6 +259,9 @@ namespace Type {
     fields: [string, T][];
   };
 
+  /**
+   * @todo: should this be parked under Primitive?
+   */
   export type Channel = {
     kind: "chan";
     /**
@@ -258,6 +281,9 @@ namespace Type {
     results: T[];
   };
 
+  /**
+   * Checks if two types are equal.
+   */
   export const equal = (lhs: T, rhs: T): boolean => {
     // @note: we could also check if their names match
     return equalData(lhs.data, rhs.data);
@@ -287,6 +313,10 @@ namespace Type {
     return t.data.kind === "primitive" && t.data.name === "bool";
   };
 
+  /**
+   * Tries to find a given field or method on some type t. Fields are checked
+   * first, then methods.
+   */
   export const findFieldOrMethodExn = (t: T, field: string, ctx: ParserRuleContext): T => {
     if (t.data.kind === "struct") {
       const f = t.data.fields.find(([name, _]) => name === field);
@@ -302,6 +332,9 @@ namespace Type {
   };
 
   export namespace Primitive {
+    /**
+     * Raw names of each kind of primitive.
+     */
     export type Name = "int64" | "float64" | "bool" | "string";
 
     export const make = (name: string, underlying: Name): T => {
@@ -321,6 +354,23 @@ namespace Type {
       make("string", "string"),
     ];
   }
+
+  export const mutex: T = {
+    name: "Mutex",
+    data: {
+      kind: "struct",
+      fields: [
+        ["locked", { data: { kind: "primitive", name: "bool" } }],
+        ["id", { data: { kind: "primitive", name: "int64" } }],
+      ],
+    },
+    // @note: Mutex::Lock and Mutex::Unlock must be implemented as built-in
+    // functions!
+    methods: new Map([
+      ["Lock", { kind: "func", params: [], results: [] }],
+      ["Unlock", { kind: "func", params: [], results: [] }],
+    ]),
+  };
 }
 
 /**
@@ -581,8 +631,8 @@ class TypeEnv {
 /**
  * Types a given expression.
  *
- * Otherwise, a list of types is returned. This is because expressions like
- * function calls may return multiple things.
+ * A list of types is returned. This is because expressions like function calls
+ * may return multiple things.
  */
 class Typer extends GoVisitor<Type.T[]> {
   store: TypeStore;
@@ -601,7 +651,7 @@ class Typer extends GoVisitor<Type.T[]> {
       if (lhs.length !== 1 || rhs.length !== 1) {
         err(ctx, "invalid operation"); // @todo a better err msg
       }
-      // @todo: we should check that they are, indeed, numbers?
+      // @todo: we should check that the operation and type are indeed correct? e.g. numbers, bools,
       // @todo we're assuming all binary operations take the same types?
       if (!Type.equal(lhs[0], rhs[0])) {
         err(ctx, `invalid operation between ${lhs[0].name} and ${lhs[0].name}`);
@@ -618,8 +668,8 @@ class Typer extends GoVisitor<Type.T[]> {
       }
       return [Type.Primitive.make("bool", "bool")];
     } else if (ctx.unaryOp()) {
-      // @todo
-      throw "Unimplemented";
+      // @todo better checks here?
+      return this.visit(ctx.expr(0));
     } else if (ctx.primaryExpr()) {
       return this.visit(ctx.primaryExpr());
     } else {
@@ -652,12 +702,12 @@ class Typer extends GoVisitor<Type.T[]> {
   };
 
   visitLitStruct = (ctx: LitStructContext): Type.T[] => {
+    // @todo Should we type-check the fields?
     if (ctx.typeName()) {
-      // @todo Should we type-check the fields?
       const ret = this.store.lookupExn(ctx.typeName().getText(), ctx);
       return [ret];
     } else if (ctx.structType()) {
-      // @todo: disallow this
+      // @todo maybe disallow this?
       throw "Unimplemented";
     } else {
       throw "Unreachable";
@@ -684,6 +734,36 @@ class Typer extends GoVisitor<Type.T[]> {
     return ret;
   }
 }
+
+/**
+ * Type environment for builtin stuff.
+ */
+const baseTypeEnv: Map<string, Type.T> = new Map([
+  [
+    "panic",
+    {
+      data: { kind: "func", params: [], results: [] },
+    },
+  ],
+  [
+    "dbg",
+    {
+      data: { kind: "func", params: [], results: [] },
+    },
+  ],
+  [
+    "Mutex::Lock",
+    {
+      data: { kind: "func", params: [], results: [] },
+    },
+  ],
+  [
+    "Mutex::Unlock",
+    {
+      data: { kind: "func", params: [], results: [] },
+    },
+  ],
+]);
 
 /**
  * A utility class to help set the types of function declarations into some
@@ -713,6 +793,9 @@ class FuncTypeBumper extends GoVisitor<void> {
       // @todo: disallow anonymous return types?
       .map((ty) => this.tstore.lookupExn(ty.typeName().getText(), ctx));
 
+    // Unlike functions, the type info for a method is not stored in the type
+    // environment. Instead we attach it to the type info of the type this
+    // method is declared on.
     const rcvType = this.tstore.lookupExn(ctx._receiver.typeName().getText(), ctx);
     const mthdType: Type.Func = { kind: "func", params, results };
     if (rcvType.methods === undefined) {
@@ -746,6 +829,7 @@ export class Assembler extends GoVisitor<number> {
   tstore: TypeStore;
 
   main: number | undefined; // keep track of where the main function starts
+  doneAt: number = -1; // also keep track of where [Done] is
 
   contiss: Stack<[IGoto[], number]>;
   breakss: Stack<[IGoto[], number]>;
@@ -764,8 +848,8 @@ export class Assembler extends GoVisitor<number> {
     this.tstore = new TypeStore();
 
     this.env.pushFrame(builtinSymbols);
-    this.tenv.pushFrame();
-    this.tstore.pushFrame(Type.Primitive.types);
+    this.tenv.pushFrame_(baseTypeEnv);
+    this.tstore.pushFrame(Type.Primitive.types.concat([Type.mutex]));
   }
 
   scanDecls = (ctx: ParserRuleContext): string[] => {
@@ -793,6 +877,42 @@ export class Assembler extends GoVisitor<number> {
       return ret[0];
     } else {
       throw "Unreachable";
+    }
+  };
+
+  /**
+   * Generates code for the default initialization of some type.
+   */
+  initDefault = (t: Type.T): void => {
+    switch (t.data.kind) {
+      case "struct":
+        const fieldc = t.data.fields.length;
+        // @note: we must do it in reverse!
+        for (let i = fieldc - 1; i >= 0; --i) {
+          this.initDefault(t.data.fields[i][1]);
+        }
+        IPackStruct.emit(this.bc).setFieldc(fieldc);
+        break;
+      case "primitive":
+        switch (t.data.name) {
+          case "string":
+            const id = this.strPool.add("");
+            ILoadStr.emit(this.bc).setId(id);
+            break;
+          case "int64":
+            ILoadC.emit(this.bc).setVal(0);
+            break;
+          case "float64":
+            ILoadC.emit(this.bc).setVal(0);
+            break;
+          case "bool":
+            ILoadGlobal.emit(this.bc).setGlobal(Global.False);
+            break;
+        }
+        break;
+      case "chan":
+      case "func":
+        throw "Unimplemented";
     }
   };
 
@@ -828,6 +948,7 @@ export class Assembler extends GoVisitor<number> {
     ILoadName.emit(this.bc).setFrame(frame).setOffset(offset);
     ICall.emit(this.bc).setArgc(0); // call [main]
     IDone.emit(this.bc); // last instruction
+    this.doneAt = this.bc.prevWc();
 
     return 0;
   };
@@ -873,9 +994,9 @@ export class Assembler extends GoVisitor<number> {
     // return statement(s). These instructions will not affect those functions
     // (since we'll never reach these lines). Instead these are meant for
     // functions without return statements.
-    IPush.emit(this.bc); // for now, just push some garbage @todo maybe push Nil or something?
     IReturn.emit(this.bc);
 
+    ldf.setLast(this.bc.prevWc()); // wrap it up
     goto.setWhere(this.bc.wc());
 
     // We need to explicitly handle the assignment instruction here, since our
@@ -948,26 +1069,27 @@ export class Assembler extends GoVisitor<number> {
 
   visitVarDecl = (ctx: VarDeclContext): number => {
     if (ctx.expr()) {
+      // @todo type check?
       this.visit(ctx.expr()); // compile RHS
-      const name = ctx.name().getText();
-      const [frame, offset] = this.env.lookupExn(name, ctx);
-      ILoadNameLoc.emit(this.bc, ctx).setFrame(frame).setOffset(offset);
-      IAssign.emit(this.bc, ctx).setCount(1);
     } else {
-      // @todo Think about how we can handle default initialization - maybe
-      // we don't have to do anything.
+      const ty = this.resolveTypeExn(ctx.type_());
+      this.initDefault(ty);
     }
+
+    const name = ctx.name().getText();
+    const [frame, offset] = this.env.lookupExn(name, ctx);
+    ILoadNameLoc.emit(this.bc, ctx).setFrame(frame).setOffset(offset);
+    IAssign.emit(this.bc, ctx).setCount(1);
 
     // Insert type information about this variable.
     const t = this.resolveTypeExn(ctx.type_());
     this.tenv.set(ctx.name().getText(), t);
 
-    // Declarations, even if there is an initializing expression, should leave
-    // nothing on the stack.
+    // Declarations, should leave nothing on the stack.
     return 0;
   };
 
-  visitTypeDecl = (ctx: TypeDeclContext): number => {
+  visitTypeDecl = (_: TypeDeclContext): number => {
     // @todo: is there anything to do for type declarations?
     return 0;
   };
@@ -1121,8 +1243,24 @@ export class Assembler extends GoVisitor<number> {
   };
 
   visitGoStmt = (ctx: GoStmtContext): number => {
+    const func = ctx.primaryExpr();
+    if (!func._fn) {
+      err(ctx, "expression in go must be function call");
+    }
+
+    const args = func.args();
+    const fn = func._fn;
+    const argc = args.arg_list().length;
+
+    this.visit(fn); // emit code to evaluate the callable thing
+    this.visit(args); // emit code to evaluate each arg
+
+    // Note that a [Go] is always followed immediately by [Call]. We'll need to
+    // rely on this at runtime.
+    IGo.emit(this.bc, ctx);
+    ICall.emit(this.bc, ctx).setArgc(argc);
+
     return 0;
-    // @todo
   };
 
   visitSendStmt = (ctx: SendStmtContext): number => {
@@ -1213,25 +1351,41 @@ export class Assembler extends GoVisitor<number> {
       this.visit(ctx.expr(0));
       this.visit(ctx.unaryOp());
     } else {
-      this.visit(ctx.primaryExpr());
+      return this.visit(ctx.primaryExpr());
     }
-    return 1; // resolves to exactly one item on the stack
+    // Most expressions evaluate to 1 item. However, function calls may evaluate
+    // to multiple!
+    return 1;
   };
 
   visitPrimaryExpr = (ctx: PrimaryExprContext): number => {
     if (ctx.name()) {
-      this.visit(ctx.name());
+      return this.visit(ctx.name());
     } else if (ctx.lit()) {
-      this.visit(ctx.lit());
+      return this.visit(ctx.lit());
     } else if (ctx._fn) {
       const args = ctx.args();
       const fn = ctx._fn;
       const argc = args.arg_list().length;
 
+      const typer = new Typer(this.tstore, this.tenv);
+      const _fnType = typer.visit(fn);
+      if (_fnType.length !== 1 || _fnType[0].data.kind !== "func") {
+        err(ctx, `cannot call non-function ${fn.getText()}`);
+      }
+
       this.visit(fn); // emit code to evaluate the callable thing
       this.visit(args); // emit code to evaluate each arg
 
       ICall.emit(this.bc, ctx).setArgc(argc);
+
+      const fnType = _fnType[0].data;
+      switch (fnType.kind) {
+        case "func":
+          return fnType.results.length;
+        default:
+          throw "Unreachable";
+      }
     } else if (ctx._base) {
       const baseType = new Typer(this.tstore, this.tenv).visit(ctx._base);
       if (baseType.length === 0) {
@@ -1280,12 +1434,11 @@ export class Assembler extends GoVisitor<number> {
    * If there is more than 1 expression, we pack it into a tuple.
    */
   visitExprList = (ctx: ExprListContext): number => {
-    const len = ctx.expr_list().length;
+    // @bug: we can't naively pack stuff into a tuple. See 09. FIXME
+    const typer = new Typer(this.tstore, this.tenv);
+    const len = ctx.expr_list().flatMap((expr) => typer.visit(expr)).length;
     this.visitChildren(ctx);
-    if (len > 1) {
-      IPackTuple.emit(this.bc).setLen(len);
-    }
-    return 1;
+    return len;
   };
 
   visitMulOp = (ctx: MulOpContext): number => {
@@ -1367,6 +1520,18 @@ export class Assembler extends GoVisitor<number> {
     return 1;
   };
 
+  visitLitBool = (ctx: LitBoolContext): number => {
+    const raw = ctx.getText();
+    if (raw === "true") {
+      ILoadGlobal.emit(this.bc).setGlobal(Global.True);
+    } else if (raw === "false") {
+      ILoadGlobal.emit(this.bc).setGlobal(Global.False);
+    } else {
+      err(ctx, `unexpected boolean literal ${raw}`);
+    }
+    return 1;
+  };
+
   visitLitStr = (ctx: LitStrContext): number => {
     const raw = ctx.getText();
     const val = raw.slice(1, raw.length - 1); // remove the ""
@@ -1412,6 +1577,7 @@ export class Assembler extends GoVisitor<number> {
       const repr = this.tstore.lookupExn(ty, ctx);
       switch (repr.data.kind) {
         case "struct":
+          // @todo: are we gonna type check the fields?
           const fieldc = repr.data.fields.length;
           const given = ctx
             .keyedElems()
@@ -1440,6 +1606,7 @@ export class Assembler extends GoVisitor<number> {
 }
 
 class CompileError extends Error {}
+class ParseError extends Error {}
 
 /**
  * Throws a compile time error.
@@ -1455,6 +1622,10 @@ interface CompileResult {
   bytecode: DataView;
   srcMap: Map<number, number>;
   strPool: StrPool;
+  /**
+   * Address of the done instruction.
+   */
+  doneAt: number;
 }
 
 /**
@@ -1465,7 +1636,21 @@ export const compileSrc = (src: string): CompileResult => {
   const lexer = new GoLexer(chars);
   const tokens = new CommonTokenStream(lexer);
   const parser = new GoParser(tokens);
-  const tree = parser.prog();
+
+  const parseErrHandler = new ParsingErrorHandler();
+
+  parser.buildParseTrees = true;
+  parser.removeErrorListeners();
+  parser.addErrorListener(parseErrHandler);
+
+  const tree = parser.prog(); // parse the program
+
+  if (parseErrHandler.errs.length > 0) {
+    for (const err of parseErrHandler.errs) {
+      console.error(err);
+    }
+    throw new ParseError(`encountered ${parseErrHandler.errs.length} errors`);
+  }
 
   const ass = new Assembler();
   ass.visit(tree);
@@ -1473,6 +1658,22 @@ export const compileSrc = (src: string): CompileResult => {
   const bytecode = ass.bc.code();
   const srcMap = ass.bc.srcMap();
   const strPool = ass.strPool;
+  const doneAt = ass.doneAt;
 
-  return { bytecode, srcMap, strPool };
+  return { bytecode, srcMap, strPool, doneAt };
 };
+
+class ParsingErrorHandler extends ErrorListener<Token> {
+  errs: string[] = [];
+  syntaxError(
+    _recognizer: Recognizer<Token>,
+    _offendingSymbol: Token,
+    line: number,
+    column: number,
+    msg: string,
+    _e: RecognitionException | undefined,
+  ): void {
+    const err = `line ${line}:${column} ${msg}`;
+    this.errs.push(err);
+  }
+}
