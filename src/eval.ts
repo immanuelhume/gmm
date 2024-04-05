@@ -613,6 +613,35 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
       ],
     ]),
   ],
+  [
+    DataType.Pointer,
+    new Map([
+      [
+        BinaryOp.Eq,
+        (state, lhsAddr, rhsAddr) => {
+          const lhs = new PointerView(state.heap, lhsAddr).getValue();
+          const rhs = new PointerView(state.heap, rhsAddr).getValue();
+          if (lhs === rhs) {
+            return state.globals[Global["true"]];
+          } else {
+            return state.globals[Global["false"]];
+          }
+        },
+      ],
+      [
+        BinaryOp.Neq,
+        (state, lhsAddr, rhsAddr) => {
+          const lhs = new PointerView(state.heap, lhsAddr).getValue();
+          const rhs = new PointerView(state.heap, rhsAddr).getValue();
+          if (lhs !== rhs) {
+            return state.globals[Global["true"]];
+          } else {
+            return state.globals[Global["false"]];
+          }
+        },
+      ],
+    ]),
+  ],
 ]);
 
 const execLogicalOp = (state: MachineState, t: Thread, op: LogicalOp): void => {
