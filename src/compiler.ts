@@ -22,6 +22,7 @@ import GoParser, {
   MulOpContext,
   AddOpContext,
   LitBoolContext,
+  LitNilContext,
 } from "../antlr/GoParser";
 import {
   AssignmentContext,
@@ -471,7 +472,7 @@ namespace Type {
 namespace _Type {
   type T = { name?: string; data: Data; ctx: ParserRuleContext };
 
-  type Data = Struct | Channel | Func | Alias;
+  type Data = Struct | Channel | Func | Pointer | Alias;
 
   type Struct = {
     kind: "struct";
@@ -487,6 +488,11 @@ namespace _Type {
     kind: "func";
     params: string[];
     results: string[];
+  };
+
+  type Pointer = {
+    kind: "ptr";
+    elem: Alias;
   };
 
   type Alias = {
@@ -539,6 +545,9 @@ namespace _Type {
       } else if (lit.channelType()) {
         // @todo
         throw "Channel types are not supported yet";
+      } else if (lit.pointerType()) {
+        const alias = lit.pointerType().typeName().getText();
+        return { kind: "ptr", elem: { kind: "alias", alias } };
       } else {
         throw "Unreachable";
       }
@@ -619,6 +628,10 @@ namespace _Type {
           const results = ty.data.results.map((tyname) => aux(tyname, ty.ctx));
           state[i] = 1;
           return (ret[i] = { name: ty.name, data: { kind: "func", params, results } });
+        case "ptr":
+          const ptrelem = aux(ty.data.elem.alias, ty.ctx);
+          state[i] = 1;
+          return (ret[i] = { data: { kind: "ptr", elem: ptrelem } });
         case "alias":
           const alias = aux(ty.data.alias, ty.ctx);
           state[i] = 1;
@@ -1002,8 +1015,12 @@ export class Assembler extends GoVisitor<number> {
             break;
         }
         break;
+      case "ptr":
+        ILoadGlobal.emit(this.bc).setGlobal(Global.Nil);
+        break;
       case "chan":
       case "func":
+      case "method":
         throw "Unimplemented";
     }
   };
@@ -1668,6 +1685,11 @@ export class Assembler extends GoVisitor<number> {
       throw "Unreachable";
     }
     ILoadC.emit(this.bc).setVal(val);
+    return 1;
+  };
+
+  visitLitNil = (_ctx: LitNilContext): number => {
+    ILoadGlobal.emit(this.bc).setGlobal(Global.Nil);
     return 1;
   };
 

@@ -55,6 +55,7 @@ export enum Global {
   False,
   Nil,
 }
+// @todo: perhaps we should allocate Nil as a pointer with a rubbish address value?
 
 export const globalSymbols: Record<Global, string> = {
   [Global.True]: "true",

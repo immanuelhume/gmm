@@ -51,6 +51,7 @@ import { ParamContext } from "./GoParser";
 import { TypeContext } from "./GoParser";
 import { TypeNameContext } from "./GoParser";
 import { TypeLitContext } from "./GoParser";
+import { PointerTypeContext } from "./GoParser";
 import { ChannelTypeContext } from "./GoParser";
 import { ElementTypeContext } from "./GoParser";
 import { StructTypeContext } from "./GoParser";
@@ -369,6 +370,12 @@ export default class GoParserVisitor<Result> extends ParseTreeVisitor<Result> {
    * @return the visitor result
    */
   visitTypeLit?: (ctx: TypeLitContext) => Result;
+  /**
+   * Visit a parse tree produced by `GoParser.pointerType`.
+   * @param ctx the parse tree
+   * @return the visitor result
+   */
+  visitPointerType?: (ctx: PointerTypeContext) => Result;
   /**
    * Visit a parse tree produced by `GoParser.channelType`.
    * @param ctx the parse tree

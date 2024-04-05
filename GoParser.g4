@@ -103,8 +103,9 @@ param : name type ;
 
 type : typeName | typeLit ;
 typeName : WORD ;
-typeLit : structType | channelType ; // exclude pointer types for now - we probably won't need them
+typeLit : structType | channelType | pointerType ;
 
+pointerType : '*' typeName ;
 channelType : 'chan' elementType ;
 elementType : type ;
 
