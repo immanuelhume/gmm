@@ -1,6 +1,7 @@
 import assert from "assert";
 import { fmtAddress } from "./util";
 import { ParserRuleContext } from "antlr4";
+import { DataType, NodeView } from "./heapviews";
 
 export const enum Opcode {
   BinaryOp = 0x00,
@@ -552,8 +553,8 @@ export class IPop extends InstrView {
 export class ILoadC extends InstrView {
   // @todo: we'll need to support all kinds of constants, e.g. numbers (of various types),
   // true, false, strings
-  static size = 9;
-  readonly size = 9;
+  static size = 10;
+  readonly size = 10;
 
   static emit(w: Emitter, ctx?: ParserRuleContext): ILoadC {
     const pc = w.reserve(Opcode.LoadC, ILoadC.size, ctx);
@@ -569,11 +570,30 @@ export class ILoadC extends InstrView {
     return `LoadC ${this.val()}`;
   }
 
-  val(): number {
-    return this.bytecode.getFloat64(this.addr + 1);
+  getDataType(): DataType {
+    return NodeView.getDataType(this.bytecode, this.addr + 9);
   }
-  setVal(val: number): ILoadC {
+
+  setDataType(typ: DataType): void {
+    this.bytecode.setUint8(this.addr + 9, typ);
+  }
+
+  val(): number {
+    const typ = this.getDataType();
+    if (typ == DataType.Float64) {
+      return this.bytecode.getFloat64(this.addr + 1);
+    } else {
+      return this.bytecode.getInt16(this.addr + 1);
+    }
+  }
+
+  setFloat(val: number): ILoadC {
     this.bytecode.setFloat64(this.addr + 1, val);
+    return this;
+  }
+
+  setInt(val: number): ILoadC {
+    this.bytecode.setInt16(this.addr + 1, val);
     return this;
   }
 }

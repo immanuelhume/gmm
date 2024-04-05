@@ -16,6 +16,7 @@ import {
   TupleView,
   StructView,
   MethodView,
+  Int64View,
 } from "./heapviews";
 import {
   IAssign,
@@ -256,9 +257,20 @@ export const microcode: Record<Opcode, EvalFn> = {
   [Opcode.LoadC]: function (state: MachineState): void {
     // @todo: make general, as and when ILoadC is updated - for now we just load numbers...
     const instr = new ILoadC(state.bytecode, state.pc);
-    const val = Float64View.allocate(state).setValue(instr.val());
-
-    state.os.push(val.addr);
+    const typ = instr.getDataType();
+    let val;
+    switch (typ) {
+      case DataType.Float64:
+        val = Float64View.allocate(state).setValue(instr.val());
+        state.os.push(val.addr);
+        break;
+      case DataType.Int64:
+        val = Int64View.allocate(state).setValue(instr.val());
+        state.os.push(val.addr);
+        break;
+      default:
+        throw new Error("unknown datatype");
+    }
     state.pc += ILoadC.size;
   },
   [Opcode.LoadStr]: function (state: MachineState): void {

@@ -261,8 +261,9 @@ export class Int64View extends NodeView {
   getValue(): number {
     return this.getChild(0);
   }
-  setValue(value: number): void {
+  setValue(value: number): Int64View {
     this.setChild(0, value);
+    return this;
   }
 }
 
