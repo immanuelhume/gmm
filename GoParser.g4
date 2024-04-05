@@ -35,7 +35,8 @@ goStmt : 'go' primaryExpr ; // [primaryExpr] has to be a function call
 assignment : lhs=lvalueList '=' rhs=exprList ;
 
 lvalueList : lvalue (',' lvalue)* ;
-lvalue : lname | field; // we'll define this properly in the future
+lvalue : lname | lpointer | field ;
+lpointer : '*' lname ;
 lname : WORD ; // a name which appears on LHS
 lnameList : lname (',' lname)* ;
 field : base=primaryExpr '.' last=WORD ;
@@ -76,7 +77,7 @@ arg : expr | type ; // functions like [make] take in types as params...
 
 block : '{' (stmt eos)* '}' ;
 
-unaryOp : '-' | '+' | '<-' ;
+unaryOp : '-' | '+' | '<-' | '*' ;
 
 logicalOp : '||' | '&&' ;
 relOp : '==' | '!=' | '<' | '<=' | '>' | '>=' ;

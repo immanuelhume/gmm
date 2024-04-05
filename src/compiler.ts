@@ -23,6 +23,7 @@ import GoParser, {
   AddOpContext,
   LitBoolContext,
   LitNilContext,
+  LpointerContext,
 } from "../antlr/GoParser";
 import {
   AssignmentContext,
@@ -81,6 +82,7 @@ import {
   IAlloc,
   IPackPtr,
   IDeref,
+  ILoadPtrSlot,
 } from "./instructions";
 import { ArrayStack, Stack, StrPool, arraysEqual } from "./util";
 import { DataType, Global, builtinSymbols } from "./heapviews";
@@ -1386,6 +1388,14 @@ export class Assembler extends GoVisitor<number> {
     return 1;
   };
 
+  visitLpointer = (ctx: LpointerContext): number => {
+    const name = ctx.lname().getText();
+    const [frame, offset] = this.env.lookupExn(name, ctx);
+    ILoadName.emit(this.bc).setFrame(frame).setOffset(offset);
+    ILoadPtrSlot.emit(this.bc);
+    return 1;
+  };
+
   visitField = (ctx: FieldContext): number => {
     const baseType = new Typer(this.tstore, this.tenv).visit(ctx._base);
     if (baseType.length === 0) {
@@ -1636,11 +1646,14 @@ export class Assembler extends GoVisitor<number> {
   };
 
   visitUnaryOp = (ctx: UnaryOpContext): number => {
-    const op = IUnaryOp.emit(this.bc);
     if (ctx.MINUS()) {
+      const op = IUnaryOp.emit(this.bc);
       op.setOp(UnaryOp.Sub);
     } else if (ctx.PLUS()) {
+      const op = IUnaryOp.emit(this.bc);
       op.setOp(UnaryOp.Add);
+    } else if (ctx.STAR()) {
+      IDeref.emit(this.bc);
     } else {
       err(ctx, `unexpected unary operator ${ctx.getText()}`);
     }

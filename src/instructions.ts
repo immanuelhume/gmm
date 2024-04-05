@@ -27,6 +27,7 @@ export const enum Opcode {
   Alloc,
   PackPtr,
   Deref,
+  LoadPtrSlot,
   PackTuple,
   PackStruct,
   LoadStructField,
@@ -778,6 +779,25 @@ export class IDeref extends InstrView {
   }
 }
 
+export class ILoadPtrSlot extends InstrView {
+  static size = 1;
+  readonly size = 1;
+
+  static emit(w: Emitter, ctx?: ParserRuleContext): ILoadPtrSlot {
+    const pc = w.reserve(Opcode.LoadPtrSlot, ILoadPtrSlot.size, ctx);
+    return new ILoadPtrSlot(w.code(), pc);
+  }
+
+  constructor(bytecode: DataView, addr: number) {
+    super(bytecode, addr);
+    assert(this.opcode() === Opcode.LoadPtrSlot);
+  }
+
+  toString(): string {
+    return "LoadPtrSlot";
+  }
+}
+
 /**
  * Packs n items on the OS into a tuple.
  */
@@ -933,6 +953,7 @@ const opcodeClass: Record<Opcode, { new (bytecode: DataView, addr: number): Inst
   [Opcode.Alloc]: IAlloc,
   [Opcode.PackPtr]: IPackPtr,
   [Opcode.Deref]: IDeref,
+  [Opcode.LoadPtrSlot]: ILoadPtrSlot,
   [Opcode.PackTuple]: IPackTuple,
   [Opcode.PackStruct]: IPackStruct,
   [Opcode.LoadStructField]: ILoadStructField,

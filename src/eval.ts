@@ -49,6 +49,7 @@ import {
   IGo,
   ILoadGlobal,
   IPackPtr,
+  ILoadPtrSlot,
 } from "./instructions";
 import { MachineState, Thread } from "./machine";
 import { ArgContext } from "../antlr/GoParser";
@@ -355,6 +356,11 @@ export const microcode: Record<Opcode, EvalFn> = {
     const ptr = new PointerView(state.heap, t.os.pop());
     t.os.push(ptr.getValue());
     t.pc += IPackPtr.size;
+  },
+  [Opcode.LoadPtrSlot]: function (state: MachineState, t: Thread): void {
+    const ptr = new PointerView(state.heap, t.os.pop());
+    t.os.push(ptr.getValueLoc());
+    t.pc += ILoadPtrSlot.size;
   },
   [Opcode.PackTuple]: function (state: MachineState, t: Thread): void {
     const instr = new IPackTuple(state.bytecode, t.pc);

@@ -690,7 +690,6 @@ export class StructView extends NodeView {
 }
 
 export class PointerView extends NodeView {
-  // @todo
   static allocate(state: Memory): PointerView {
     const addr = allocate(state, DataType.Pointer, 1, 0);
     return new PointerView(state.heap, addr);
@@ -708,6 +707,13 @@ export class PointerView extends NodeView {
   setValue(addr: Address): PointerView {
     this.setChild(0, addr);
     return this;
+  }
+  /**
+   * Retrieves the byte-address of where the pointer's value is stored. We need
+   * this to support deref assignment (e.g. *x = 1).
+   */
+  getValueLoc(): Address {
+    return this.childByteOffset(0);
   }
 }
 class ChannelView extends NodeView {
