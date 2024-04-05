@@ -37,7 +37,7 @@ export enum DataType {
   Fn,
   Builtin,
   Method,
-  Global,
+  Bool,
   Frame,
   Env,
   CallFrame,
@@ -51,17 +51,10 @@ export enum DataType {
  * Global values, which should eventually appear as singletons in memory.
  */
 export enum Global {
-  True = 0x00,
-  False,
-  Nil,
+  "true" = 0x00,
+  "false",
+  "nil",
 }
-// @todo: perhaps we should allocate Nil as a pointer with a rubbish address value?
-
-export const globalSymbols: Record<Global, string> = {
-  [Global.True]: "true",
-  [Global.False]: "false",
-  [Global.Nil]: "nil",
-};
 
 export enum BuiltinId {
   "dbg" = 0x00,
@@ -553,39 +546,33 @@ export class MethodView extends NodeView {
 }
 
 /**
- * Represents a global.
+ * Represents a boolean.
  *
- * ┌──────┬─────────┐
- * │header│global ID│
- * └──────┴─────────┘
+ * ┌──────┬───────┐
+ * │header│0 or 1 │
+ * └──────┴───────┘
  */
-export class GlobalView extends NodeView {
-  static allocate(state: Memory): GlobalView {
-    const addr = allocate(state, DataType.Global, 1, 0);
-    return new GlobalView(state.heap, addr);
+export class BoolView extends NodeView {
+  static allocate(state: Memory): BoolView {
+    const addr = allocate(state, DataType.Bool, 1, 0);
+    return new BoolView(state.heap, addr);
   }
 
   constructor(heap: DataView, addr: Address) {
     super(heap, addr);
-    this.checkType(DataType.Global);
+    this.checkType(DataType.Bool);
   }
 
   toString(): string {
-    const repr = globalSymbols[this.getKind()];
-    return `Global { ${repr} }`;
+    return `Bool { ${this.get()} }`;
   }
 
-  getKind(): Global {
-    return this.getChild(0);
+  get(): boolean {
+    return this.getChild(0) != 0;
   }
-  setKind(kind: Global): GlobalView {
-    this.setChild(0, kind);
+  set(b: boolean): BoolView {
+    this.setChild(0, b ? 1 : 0);
     return this;
-  }
-
-  isBoolean(): boolean {
-    const kind = this.getKind();
-    return kind === Global.True || kind === Global.False;
   }
 }
 
@@ -731,7 +718,7 @@ const nodeClass: Record<DataType, { new (heap: DataView, addr: Address, ctx?: He
   [DataType.Fn]: FnView,
   [DataType.Builtin]: BuiltinView,
   [DataType.Method]: MethodView,
-  [DataType.Global]: GlobalView,
+  [DataType.Bool]: BoolView,
   [DataType.Frame]: FrameView,
   [DataType.Env]: EnvView,
   [DataType.CallFrame]: CallFrameView,

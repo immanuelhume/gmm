@@ -11,7 +11,6 @@ import {
   BuiltinId,
   BlockFrameView,
   Global,
-  GlobalView,
   TupleView,
   PointerView,
   StructView,
@@ -19,6 +18,7 @@ import {
   Int64View,
   StringView,
   allocate,
+  BoolView,
 } from "./heapviews";
 import {
   IAssign,
@@ -280,16 +280,11 @@ export const microcode: Record<Opcode, EvalFn> = {
   [Opcode.Jof]: function (state: MachineState, t: Thread): void {
     const instr = new IJof(state.bytecode, t.pc);
     const cond = t.os.pop();
-    const glob = new GlobalView(state.heap, cond);
-    switch (glob.getKind()) {
-      case Global.False:
-        t.pc = instr.where(); // we jump
-        break;
-      case Global.True:
-        t.pc += IJof.size;
-        break;
-      default:
-        throw new Error("Unexpected non-boolean value"); // @todo btr msg
+    const bool = new BoolView(state.heap, cond).get();
+    if (bool) {
+      t.pc += IJof.size;
+    } else {
+      t.pc = instr.where(); // we jump
     }
   },
   [Opcode.EnterBlock]: function (state: MachineState, t: Thread): void {
@@ -472,9 +467,9 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           const rhsValue = rhs.getValue();
 
           if (lhsValue !== rhsValue) {
-            return state.globals[Global.True];
+            return state.globals[Global["true"]];
           } else {
-            return state.globals[Global.False];
+            return state.globals[Global["false"]];
           }
         },
       ],
@@ -487,9 +482,9 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           const lhsValue = lhs.getValue();
           const rhsValue = rhs.getValue();
           if (lhsValue === rhsValue) {
-            return state.globals[Global.True];
+            return state.globals[Global["true"]];
           } else {
-            return state.globals[Global.False];
+            return state.globals[Global["false"]];
           }
         },
       ],
@@ -537,9 +532,9 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           const rhsValue = rhs.getValue();
 
           if (lhsValue <= rhsValue) {
-            return state.globals[Global.True];
+            return state.globals[Global["true"]];
           } else {
-            return state.globals[Global.False];
+            return state.globals[Global["false"]];
           }
         },
       ],
@@ -553,9 +548,9 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           const rhsValue = rhs.getValue();
 
           if (lhsValue >= rhsValue) {
-            return state.globals[Global.True];
+            return state.globals[Global["true"]];
           } else {
-            return state.globals[Global.False];
+            return state.globals[Global["false"]];
           }
         },
       ],
@@ -569,9 +564,9 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           const rhsValue = rhs.getValue();
 
           if (lhsValue < rhsValue) {
-            return state.globals[Global.True];
+            return state.globals[Global["true"]];
           } else {
-            return state.globals[Global.False];
+            return state.globals[Global["false"]];
           }
         },
       ],
@@ -585,24 +580,24 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           const rhsValue = rhs.getValue();
 
           if (lhsValue > rhsValue) {
-            return state.globals[Global.True];
+            return state.globals[Global["true"]];
           } else {
-            return state.globals[Global.False];
+            return state.globals[Global["false"]];
           }
         },
       ],
     ]),
   ],
   [
-    DataType.Global,
+    DataType.Bool,
     new Map([
       [
         BinaryOp.Eq,
         (state, lhsAddr, rhsAddr) => {
           if (lhsAddr === rhsAddr) {
-            return state.globals[Global.True];
+            return state.globals[Global["true"]];
           } else {
-            return state.globals[Global.False];
+            return state.globals[Global["false"]];
           }
         },
       ],
@@ -610,9 +605,9 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
         BinaryOp.Neq,
         (state, lhsAddr, rhsAddr) => {
           if (lhsAddr !== rhsAddr) {
-            return state.globals[Global.True];
+            return state.globals[Global["true"]];
           } else {
-            return state.globals[Global.False];
+            return state.globals[Global["false"]];
           }
         },
       ],
@@ -624,29 +619,25 @@ const execLogicalOp = (state: MachineState, t: Thread, op: LogicalOp): void => {
   const lhsAddr = t.os.pop();
   const rhsAddr = t.os.pop();
 
-  const _lhs = new GlobalView(state.heap, lhsAddr);
-  const _rhs = new GlobalView(state.heap, rhsAddr);
+  const _lhs = new BoolView(state.heap, lhsAddr);
+  const _rhs = new BoolView(state.heap, rhsAddr);
 
-  if (!_lhs.isBoolean() || !_rhs.isBoolean()) {
-    throw new Error("Can't perform logical operation on non-boolean types");
-  }
-
-  const lhs = _lhs.getKind();
-  const rhs = _rhs.getKind();
+  const lhs = _lhs.get();
+  const rhs = _rhs.get();
 
   switch (op) {
     case LogicalOp.And:
-      if (lhs === Global.True && rhs === Global.True) {
-        t.os.push(state.globals[Global.True]);
+      if (lhs && rhs) {
+        t.os.push(state.globals[Global["true"]]);
       } else {
-        t.os.push(state.globals[Global.False]);
+        t.os.push(state.globals[Global["false"]]);
       }
       break;
     case LogicalOp.Or:
-      if (lhs === Global.True || rhs === Global.True) {
-        t.os.push(state.globals[Global.True]);
+      if (lhs || rhs) {
+        t.os.push(state.globals[Global["true"]]);
       } else {
-        t.os.push(state.globals[Global.False]);
+        t.os.push(state.globals[Global["false"]]);
       }
       break;
     default:
@@ -740,25 +731,20 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
     const mu = new StructView(state.heap, _mu.getValue());
 
     // Layout of the Mutex struct is defined in compiler.ts
-    const locked = new GlobalView(state.heap, mu.getField(0));
+    const locked = new BoolView(state.heap, mu.getField(0));
     // @todo: Float64View should be Int64View
     const id = new Float64View(state.heap, mu.getField(1));
 
-    switch (locked.getKind()) {
-      case Global.True:
-        // The mutex is locked by someone else. We'll put this thread to sleep,
-        // and subscribe to when it gets unlocked.
-        //
-        // @todo: what should the subscription function do? maybe we need to adjust
-        // the program counter? since we need to try unlocking again when it wakes
-        t.isLive = false;
-        state.sub("mutex-unlock", id.getValue(), t.id, (t) => (t.isLive = true));
-        break;
-      case Global.False:
-        mu.setField(0, state.globals[Global.True]);
-        break;
-      case Global.Nil:
-        throw new Error("expected boolean but got nil");
+    if (locked.get()) {
+      // The mutex is locked by someone else. We'll put this thread to sleep,
+      // and subscribe to when it gets unlocked.
+      //
+      // @todo: what should the subscription function do? maybe we need to adjust
+      // the program counter? since we need to try unlocking again when it wakes
+      t.isLive = false;
+      state.sub("mutex-unlock", id.getValue(), t.id, (t) => (t.isLive = true));
+    } else {
+      mu.setField(0, state.globals[Global["true"]]);
     }
   },
   [BuiltinId["Mutex::Unlock"]]: function (
@@ -773,19 +759,13 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
     const _mu = new PointerView(state.heap, ctx.mthd.receiver() /* pointer to the mutex */);
     const mu = new StructView(state.heap, _mu.getValue());
 
-    const locked = new GlobalView(state.heap, mu.getField(0));
+    const locked = new BoolView(state.heap, mu.getField(0));
     // @todo: Float64View should be Int64View
     const id = new Float64View(state.heap, mu.getField(1));
 
-    switch (locked.getKind()) {
-      case Global.True:
-        mu.setField(0, state.globals[Global.False]);
-        state.pub("mutex-unlock", id.getValue());
-        break;
-      case Global.False:
-        break;
-      case Global.Nil:
-        throw new Error("expected boolean but got nil");
+    if (locked.get()) {
+      mu.setField(0, state.globals[Global["false"]]);
+      state.pub("mutex-unlock", id.getValue());
     }
   },
 };

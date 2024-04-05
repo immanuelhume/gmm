@@ -1013,12 +1013,12 @@ export class Assembler extends GoVisitor<number> {
             ILoadC.emit(this.bc).setVal(0);
             break;
           case "bool":
-            ILoadGlobal.emit(this.bc).setGlobal(Global.False);
+            ILoadGlobal.emit(this.bc).setGlobal(Global["false"]);
             break;
         }
         break;
       case "ptr":
-        ILoadGlobal.emit(this.bc).setGlobal(Global.Nil);
+        ILoadGlobal.emit(this.bc).setGlobal(Global["nil"]);
         break;
       case "chan":
       case "func":
@@ -1670,9 +1670,9 @@ export class Assembler extends GoVisitor<number> {
   visitLitBool = (ctx: LitBoolContext): number => {
     const raw = ctx.getText();
     if (raw === "true") {
-      ILoadGlobal.emit(this.bc).setGlobal(Global.True);
+      ILoadGlobal.emit(this.bc).setGlobal(Global["true"]);
     } else if (raw === "false") {
-      ILoadGlobal.emit(this.bc).setGlobal(Global.False);
+      ILoadGlobal.emit(this.bc).setGlobal(Global["false"]);
     } else {
       err(ctx, `unexpected boolean literal ${raw}`);
     }
@@ -1702,7 +1702,7 @@ export class Assembler extends GoVisitor<number> {
   };
 
   visitLitNil = (_ctx: LitNilContext): number => {
-    ILoadGlobal.emit(this.bc).setGlobal(Global.Nil);
+    ILoadGlobal.emit(this.bc).setGlobal(Global["nil"]);
     return 1;
   };
 
