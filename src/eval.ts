@@ -729,7 +729,9 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
     if (ctx?.mthd === undefined) {
       throw new Error("could not access method for Mutex::Lock");
     }
-    const mu = new StructView(state.heap, ctx.mthd.receiver() /* address of the mutex */);
+
+    const _mu = new PointerView(state.heap, ctx.mthd.receiver() /* pointer to the mutex */);
+    const mu = new StructView(state.heap, _mu.getValue());
 
     // Layout of the Mutex struct is defined in compiler.ts
     const locked = new GlobalView(state.heap, mu.getField(0));
@@ -762,7 +764,8 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
     if (ctx?.mthd === undefined) {
       throw new Error("could not access method for Mutex::Lock");
     }
-    const mu = new StructView(state.heap, ctx.mthd.receiver() /* address of the mutex */);
+    const _mu = new PointerView(state.heap, ctx.mthd.receiver() /* pointer to the mutex */);
+    const mu = new StructView(state.heap, _mu.getValue());
 
     const locked = new GlobalView(state.heap, mu.getField(0));
     // @todo: Float64View should be Int64View

@@ -86,7 +86,7 @@ addOp : '+' | '-' ;
 shortVarDecl : lhs=lnameList ':=' rhs=exprList ;
 
 topLevelDecl : decl | funcDecl | methodDecl ;
-methodDecl : 'func' '(' receiver=param ')' name signature funcBody ;
+methodDecl : 'func' '(' rcvName=name '*'? rcvType=typeName ')' methodName=name signature funcBody ;
 decl : varDecl | typeDecl ;
 typeDecl : 'type' name type ;
 varDecl : 'var' name type ('=' expr)? ;
@@ -99,7 +99,7 @@ funcResult : type? | '(' type? ')' | '(' type (',' type)* ')' ;
 litFunc : 'func' signature funcBody ;
 
 params : param (',' param)* ','? | param? ;
-param : name typeName ;
+param : name type ;
 
 type : typeName | typeLit ;
 typeName : WORD ;

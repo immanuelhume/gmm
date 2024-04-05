@@ -194,8 +194,8 @@ class DeclScanner extends GoVisitor<string[]> {
 
   visitMethodDecl = (ctx: MethodDeclContext) => {
     // @todo: pointer types?
-    const rcvType = ctx._receiver.typeName().getText();
-    const fnName = ctx.name().getText();
+    const rcvType = ctx._rcvType.getText();
+    const fnName = ctx._methodName.getText();
     return [rcvType + "::" + fnName];
   };
 
@@ -245,13 +245,14 @@ namespace Type {
   export type T = {
     name?: string;
     data: Data;
+
     /**
      * All types can have methods, even function types!
      */
-    methods?: Map<string, Func>;
+    methods?: Map<string, Method>;
   };
 
-  type Data = Struct | Channel | Primitive | Func | Pointer;
+  type Data = Struct | Channel | Primitive | Func | Method | Pointer;
 
   export type Struct = {
     kind: "struct";
@@ -282,6 +283,12 @@ namespace Type {
     kind: "func";
     params: T[];
     results: T[];
+  };
+
+  export type Method = {
+    kind: "method";
+    pointer: boolean;
+    func: Func;
   };
 
   export type Pointer = {
@@ -316,6 +323,9 @@ namespace Type {
       case "ptr":
         _rhs = rhs as Pointer;
         return equal(lhs.elem, _rhs.elem);
+      case "method":
+        _rhs = rhs as Method;
+        return lhs.pointer === _rhs.pointer && equalData(lhs.func, _rhs.func);
     }
   };
 
@@ -367,7 +377,7 @@ namespace Type {
     t: T,
     method: string,
     recurse: boolean = true,
-  ): { f: Func; fullname: string } | undefined => {
+  ): { f: Method; fullname: string } | undefined => {
     if (t.data.kind !== "ptr") {
       const f = t.methods?.get(method);
       if (f === undefined) return undefined;
@@ -429,8 +439,8 @@ namespace Type {
     // @note: Mutex::Lock and Mutex::Unlock must be implemented as built-in
     // functions!
     methods: new Map([
-      ["Lock", { kind: "func", params: [], results: [] }],
-      ["Unlock", { kind: "func", params: [], results: [] }],
+      ["Lock", { kind: "method", pointer: true, func: { kind: "func", params: [], results: [] } }],
+      ["Unlock", { kind: "method", pointer: true, func: { kind: "func", params: [], results: [] } }],
     ]),
   };
 
@@ -763,10 +773,16 @@ class Typer extends GoVisitor<Type.T[]> {
       return [{ data: { kind: "ptr", elem } }];
     } else if (ctx._fn) {
       const fnty = this.visit(ctx._fn);
-      if (fnty.length !== 1 || fnty[0].data.kind !== "func") {
-        err(ctx, `uncallable: ${ctx._fn.getText()}`);
+      if (fnty.length !== 1 || (fnty[0].data.kind !== "method" && fnty[0].data.kind !== "func")) {
+        err(ctx, `cannot call non-function ${ctx._fn.getText()}`);
+        throw "Unreachable";
       }
-      return (fnty[0].data as Type.Func).results;
+      switch (fnty[0].data.kind) {
+        case "func":
+          return fnty[0].data.results;
+        case "method":
+          return fnty[0].data.func.results;
+      }
     } else if (ctx._base) {
       const _basety = this.visit(ctx._base);
       if (_basety.length !== 1) {
@@ -866,23 +882,27 @@ class FuncTypeBumper extends GoVisitor<void> {
       .signature()
       .params()
       .param_list()
-      .map((param) => this.tstore.lookupExn(param.typeName().getText(), ctx));
+      .map((param) => Type.resolveTypeExn(param.type_(), this.tstore));
     const results = ctx
       .signature()
       .funcResult()
       .type__list()
       // @todo: disallow anonymous return types?
-      .map((ty) => this.tstore.lookupExn(ty.typeName().getText(), ctx));
+      .map((ty) => Type.resolveTypeExn(ty, this.tstore));
 
     // Unlike functions, the type info for a method is not stored in the type
     // environment. Instead we attach it to the type info of the type this
     // method is declared on.
-    const rcvType = this.tstore.lookupExn(ctx._receiver.typeName().getText(), ctx);
-    const mthdType: Type.Func = { kind: "func", params, results };
+    const rcvType = this.tstore.lookupExn(ctx._rcvType.getText(), ctx);
+    const mthdType: Type.Method = {
+      kind: "method",
+      pointer: ctx.STAR() !== null,
+      func: { kind: "func", params, results },
+    };
     if (rcvType.methods === undefined) {
       rcvType.methods = new Map();
     }
-    const fname = ctx.name().getText();
+    const fname = ctx._methodName.getText();
     rcvType.methods.set(fname, mthdType);
   };
 
@@ -892,13 +912,13 @@ class FuncTypeBumper extends GoVisitor<void> {
       .signature()
       .params()
       .param_list()
-      .map((param) => this.tstore.lookupExn(param.typeName().getText(), ctx));
+      .map((param) => Type.resolveTypeExn(param.type_(), this.tstore));
     const results = ctx
       .signature()
       .funcResult()
       .type__list()
       // @todo: disallow anonymous return types?
-      .map((ty) => this.tstore.lookupExn(ty.typeName().getText(), ctx));
+      .map((ty) => Type.resolveTypeExn(ty, this.tstore));
     this.tenv.set(fname, { data: { kind: "func", params, results } });
   };
 }
@@ -1055,7 +1075,7 @@ export class Assembler extends GoVisitor<number> {
       .param_list()
       .forEach((param) => {
         const name = param.name().getText();
-        const typ = this.tstore.lookupExn(param.typeName().getText(), param.typeName());
+        const typ = this.resolveTypeExn(param.type_());
         this.tenv.set(name, typ);
       });
     this.visit(ctx.funcBody()); // compile the body
@@ -1102,13 +1122,16 @@ export class Assembler extends GoVisitor<number> {
       .map((param) => {
         return param.name().getText();
       });
-    const rcvName = ctx._receiver.name().getText();
+    const rcvName = ctx._rcvName.getText();
     params.unshift(rcvName); // insert receiver param name
 
     const fnPc = this.bc.wc();
     ldf.setPc(fnPc).setArgc(params.length);
 
-    const rcvType = this.tstore.lookupExn(ctx._receiver.typeName().getText(), ctx._receiver);
+    let rcvType = this.tstore.lookupExn(ctx._rcvType.getText(), ctx._rcvType);
+    if (ctx.STAR()) {
+      rcvType = { data: { kind: "ptr", elem: rcvType } };
+    }
 
     this.env.pushFrame(params);
     this.tenv.pushFrame(); // push a type env frame, and then set types for the params
@@ -1119,19 +1142,18 @@ export class Assembler extends GoVisitor<number> {
       .param_list()
       .forEach((param) => {
         const name = param.name().getText();
-        const typ = this.tstore.lookupExn(param.typeName().getText(), param);
+        const typ = this.resolveTypeExn(param.type_());
         this.tenv.set(name, typ);
       });
     this.visit(ctx.funcBody()); // compile the body
     this.tenv.popFrame();
     this.env.popFrame();
 
-    IPush.emit(this.bc);
     IReturn.emit(this.bc);
 
     goto.setWhere(this.bc.wc());
 
-    const fnName = rcvType.name + "::" + ctx.name().getText();
+    const fnName = ctx._rcvType.getText() + "::" + ctx._methodName.getText();
     const [frame, offset] = this.env.lookupExn(fnName, ctx);
     ILoadNameLoc.emit(this.bc, ctx).setFrame(frame).setOffset(offset);
     IAssign.emit(this.bc, ctx).setCount(1);
@@ -1453,8 +1475,9 @@ export class Assembler extends GoVisitor<number> {
 
       const typer = new Typer(this.tstore, this.tenv);
       const _fnType = typer.visit(fn);
-      if (_fnType.length !== 1 || _fnType[0].data.kind !== "func") {
+      if (_fnType.length !== 1 || (_fnType[0].data.kind !== "method" && _fnType[0].data.kind !== "func")) {
         err(ctx, `cannot call non-function ${fn.getText()}`);
+        throw "Unreachable";
       }
 
       this.visit(fn); // emit code to evaluate the callable thing
@@ -1466,8 +1489,8 @@ export class Assembler extends GoVisitor<number> {
       switch (fnType.kind) {
         case "func":
           return fnType.results.length;
-        default:
-          throw "Unreachable";
+        case "method":
+          return fnType.func.results.length;
       }
     } else if (ctx._base) {
       const baseType = new Typer(this.tstore, this.tenv).visit(ctx._base);
@@ -1501,6 +1524,18 @@ export class Assembler extends GoVisitor<number> {
       const [frame, offset] = this.env.lookupExn(method.fullname, ctx); // @todo better error message
       ILoadName.emit(this.bc).setFrame(frame).setOffset(offset);
       this.visit(ctx._base); // evaluate base
+      switch (basetype.data.kind) {
+        case "ptr":
+          if (!method.f.pointer) {
+            IDeref.emit(this.bc);
+          }
+          break;
+        default:
+          if (method.f.pointer) {
+            IPackPtr.emit(this.bc);
+          }
+          break;
+      }
       ILoadMethod.emit(this.bc);
 
       return 1;
