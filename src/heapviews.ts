@@ -701,7 +701,7 @@ export class PointerView extends NodeView {
   toString(): string {
     return "";
   }
-  get(): Address {
+  getValue(): Address {
     return this.getChild(0);
   }
   setValue(addr: Address): PointerView {

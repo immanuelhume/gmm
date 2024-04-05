@@ -48,6 +48,7 @@ import {
   ILoadMethod,
   IGo,
   ILoadGlobal,
+  IPackPtr,
 } from "./instructions";
 import { MachineState, Thread } from "./machine";
 import { ArgContext } from "../antlr/GoParser";
@@ -341,6 +342,19 @@ export const microcode: Record<Opcode, EvalFn> = {
     const instr = new IPush(state.bytecode, t.pc);
     t.os.push(instr.val());
     t.pc += IPush.size;
+  },
+  [Opcode.Alloc]: function (state: MachineState, t: Thread): void {
+    throw "Unimplemented";
+  },
+  [Opcode.PackPtr]: function (state: MachineState, t: Thread): void {
+    const ptr = PointerView.allocate(state).setValue(t.os.pop());
+    t.os.push(ptr.addr);
+    t.pc += IPackPtr.size;
+  },
+  [Opcode.Deref]: function (state: MachineState, t: Thread): void {
+    const ptr = new PointerView(state.heap, t.os.pop());
+    t.os.push(ptr.getValue());
+    t.pc += IPackPtr.size;
   },
   [Opcode.PackTuple]: function (state: MachineState, t: Thread): void {
     const instr = new IPackTuple(state.bytecode, t.pc);

@@ -64,7 +64,7 @@ exprList : expr (',' expr)* ;
 
 primaryExpr : lit
 	| name
-	| 'new' args // this always supercedes
+	| 'new' '(' type ')' // this always supercedes function calls
 	| fn=primaryExpr args
 	| base=primaryExpr selector
 	;

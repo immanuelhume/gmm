@@ -77,9 +77,12 @@ import {
   ILoadMethod,
   IGo,
   ILoadGlobal,
+  IAlloc,
+  IPackPtr,
+  IDeref,
 } from "./instructions";
 import { ArrayStack, Stack, StrPool, arraysEqual } from "./util";
-import { Global, builtinSymbols } from "./heapviews";
+import { DataType, Global, builtinSymbols } from "./heapviews";
 import { assert } from "console";
 
 class BytecodeWriter implements Emitter {
@@ -248,7 +251,7 @@ namespace Type {
     methods?: Map<string, Func>;
   };
 
-  type Data = Struct | Channel | Primitive | Func;
+  type Data = Struct | Channel | Primitive | Func | Pointer;
 
   export type Struct = {
     kind: "struct";
@@ -310,6 +313,9 @@ namespace Type {
       case "func":
         _rhs = rhs as Func;
         return arraysEqual(lhs.params, _rhs.params, equal) && arraysEqual(lhs.results, _rhs.results, equal);
+      case "ptr":
+        _rhs = rhs as Pointer;
+        return equal(lhs.elem, _rhs.elem);
     }
   };
 
@@ -319,21 +325,72 @@ namespace Type {
   };
 
   /**
+   * Finds a field in a type. (Of course these would only exist on struct or pointer types.)
+   */
+  export const findField = (t: T, field: string, recurse: boolean = true): { offset: number; t: T } | undefined => {
+    if (t.data.kind === "struct") {
+      const offset = t.data.fields.findIndex(([name, _]) => name === field);
+      if (offset !== -1) {
+        return { offset, t: t.data.fields[offset][1] };
+      }
+      return undefined;
+    } else if (t.data.kind === "ptr" && recurse) {
+      const elem = t.data.elem;
+      return findField(elem, field, false);
+    } else {
+      return undefined;
+    }
+  };
+
+  export const findFieldExn = (
+    t: T,
+    field: string,
+    ctx: ParserRuleContext,
+    recurse: boolean = true,
+  ): { offset: number; t: T } => {
+    if (t.data.kind === "struct") {
+      const offset = t.data.fields.findIndex(([name, _]) => name === field);
+      if (offset !== -1) {
+        return { offset, t: t.data.fields[offset][1] };
+      }
+      err(ctx, `type ${t.name} has no field or method ${field}`);
+    } else if (t.data.kind === "ptr" && recurse) {
+      const elem = t.data.elem;
+      return findFieldExn(elem, field, ctx, false);
+    } else {
+      err(ctx, `type ${t.name} has no field or method ${field}`);
+    }
+    throw "Unreachable";
+  };
+
+  export const findMethod = (
+    t: T,
+    method: string,
+    recurse: boolean = true,
+  ): { f: Func; fullname: string } | undefined => {
+    if (t.data.kind !== "ptr") {
+      const f = t.methods?.get(method);
+      if (f === undefined) return undefined;
+      return { fullname: t.name + "::" + method, f };
+    } else if (recurse) {
+      const elem = t.data.elem;
+      return findMethod(elem, method, false);
+    } else {
+      return undefined;
+    }
+  };
+
+  /**
    * Tries to find a given field or method on some type t. Fields are checked
    * first, then methods.
    */
   export const findFieldOrMethodExn = (t: T, field: string, ctx: ParserRuleContext): T => {
-    if (t.data.kind === "struct") {
-      const f = t.data.fields.find(([name, _]) => name === field);
-      if (f !== undefined) {
-        return f[1];
-      }
-    }
-    const mthd = t.methods?.get(field);
-    if (mthd === undefined) {
-      err(ctx, `type ${t.name} has no field or method ${field}`);
-    }
-    return { data: mthd! };
+    const f = findField(t, field);
+    if (f !== undefined) return f.t;
+    const m = findMethod(t, field);
+    if (m !== undefined) return { data: m.f };
+    err(ctx, `type ${t.name} has no field or method ${field}`);
+    throw "Unreachable";
   };
 
   export namespace Primitive {
@@ -375,6 +432,19 @@ namespace Type {
       ["Lock", { kind: "func", params: [], results: [] }],
       ["Unlock", { kind: "func", params: [], results: [] }],
     ]),
+  };
+
+  export const resolveTypeExn = (ctx: TypeContext, tstore: TypeStore): Type.T => {
+    if (ctx.typeName()) {
+      return tstore.lookupExn(ctx.typeName().getText(), ctx);
+    } else if (ctx.typeLit()) {
+      const tydata = _Type.fromContext(ctx);
+      const ret = _Type.resolve([{ data: tydata, ctx }], tstore);
+      assert(ret.length === 1);
+      return ret[0];
+    } else {
+      throw "Unreachable";
+    }
   };
 }
 
@@ -687,6 +757,10 @@ class Typer extends GoVisitor<Type.T[]> {
       return this.visit(ctx.lit());
     } else if (ctx.name()) {
       return this.visit(ctx.name());
+    } else if (ctx.NEW()) {
+      // new always returns a pointer type enclosing the inner type
+      const elem = Type.resolveTypeExn(ctx.type_(), this.store);
+      return [{ data: { kind: "ptr", elem } }];
     } else if (ctx._fn) {
       const fnty = this.visit(ctx._fn);
       if (fnty.length !== 1 || fnty[0].data.kind !== "func") {
@@ -741,7 +815,9 @@ class Typer extends GoVisitor<Type.T[]> {
 }
 
 /**
- * Type environment for builtin stuff.
+ * Type environment for builtin stuff. Note that [new] is not placed in here,
+ * even though it should, since we are cutting corners and implementing it as
+ * as "keyword".
  */
 const baseTypeEnv: Map<string, Type.T> = new Map([
   [
@@ -752,12 +828,6 @@ const baseTypeEnv: Map<string, Type.T> = new Map([
   ],
   [
     "dbg",
-    {
-      data: { kind: "func", params: [], results: [] },
-    },
-  ],
-  [
-    "new",
     {
       data: { kind: "func", params: [], results: [] },
     },
@@ -879,16 +949,7 @@ export class Assembler extends GoVisitor<number> {
    * is already in the type store.
    */
   resolveTypeExn = (ctx: TypeContext): Type.T => {
-    if (ctx.typeName()) {
-      return this.tstore.lookupExn(ctx.typeName().getText(), ctx);
-    } else if (ctx.typeLit()) {
-      const tydata = _Type.fromContext(ctx);
-      const ret = _Type.resolve([{ data: tydata, ctx }], this.tstore);
-      assert(ret.length === 1);
-      return ret[0];
-    } else {
-      throw "Unreachable";
-    }
+    return Type.resolveTypeExn(ctx, this.tstore);
   };
 
   /**
@@ -1007,7 +1068,7 @@ export class Assembler extends GoVisitor<number> {
     // functions without return statements.
     IReturn.emit(this.bc);
 
-    ldf.setLast(this.bc.prevWc()); // wrap it up
+    ldf.setLast(this.bc.prevWc()); // goroutines need this info to know where to stop
     goto.setWhere(this.bc.wc());
 
     // We need to explicitly handle the assignment instruction here, since our
@@ -1291,19 +1352,24 @@ export class Assembler extends GoVisitor<number> {
     if (baseType.length === 0) {
       err(ctx, `could not determine type of ${ctx._base.getText()}`);
     }
-    const ty = baseType![0];
-    switch (ty.data.kind) {
-      case "struct":
-        const last = ctx._last.text;
-        const offset = ty.data.fields.findIndex(([name, _]) => name === last);
-        if (offset === -1) {
-          err(ctx, `field ${last} not found on ${ctx._base.getText()}`);
-        }
+    const basetype = baseType[0];
+    const fieldname = ctx._last.text;
+    const field = Type.findFieldExn(basetype, fieldname, ctx);
+
+    switch (basetype.data.kind) {
+      case "struct": {
         this.visit(ctx._base); // compile the base first
-        ILoadStructFieldLoc.emit(this.bc).setOffset(offset);
+        ILoadStructFieldLoc.emit(this.bc).setOffset(field.offset);
         return 0;
+      }
+      case "ptr": {
+        this.visit(ctx._base); // compile base to get a pointer type on OS...
+        IDeref.emit(this.bc); // ... and deref it
+        ILoadStructFieldLoc.emit(this.bc).setOffset(field.offset);
+        return 0;
+      }
       default:
-        err(ctx, `expected struct but got ${ty.data.kind} as type of ${ctx._base.getText()}`);
+        err(ctx, `${ctx._base.getText()} does not have field ${fieldname} (type ${basetype.data.kind})`);
         throw "Unreachable";
     }
   };
@@ -1374,6 +1440,12 @@ export class Assembler extends GoVisitor<number> {
       return this.visit(ctx.name());
     } else if (ctx.lit()) {
       return this.visit(ctx.lit());
+    } else if (ctx.NEW()) {
+      // a call to new
+      const ty = this.resolveTypeExn(ctx.type_());
+      this.initDefault(ty);
+      IPackPtr.emit(this.bc);
+      return 1;
     } else if (ctx._fn) {
       const args = ctx.args();
       const fn = ctx._fn;
@@ -1406,36 +1478,35 @@ export class Assembler extends GoVisitor<number> {
         err(ctx, `bad access on ${ctx.getText()} - multiple values on LHS`);
       }
 
-      const final = ctx.selector().name().getText();
-      const kind = baseType![0].data.kind;
+      const basetype = baseType[0];
+      const fieldname = ctx.selector().name().getText();
 
-      const searchField = () => {
-        switch (kind) {
-          case "struct":
-            const offset = baseType![0].data.fields.findIndex(([name, _]) => name === final);
-            if (offset === -1) {
-              return false;
-              // err(ctx, `field ${final} not found on ${ctx._base.getText()}`);
-            }
-            this.visit(ctx._base); // get the base onto the OS
-            ILoadStructField.emit(this.bc).setOffset(offset);
-            return true;
-          default:
-            return false;
-          // err(ctx, `expected struct but got ${kind} for type of ${ctx._base.getText()}`);
+      const field = Type.findField(basetype, fieldname);
+      if (field !== undefined) {
+        this.visit(ctx._base); // get the base onto the OS
+        if (basetype.data.kind === "ptr") {
+          IDeref.emit(this.bc);
         }
-      };
-      const fieldOk = searchField();
-      if (fieldOk) return 1;
+        ILoadStructField.emit(this.bc).setOffset(field.offset);
+        return 1;
+      }
 
-      const methodName = baseType![0].name + "::" + final;
-      const [frame, offset] = this.env.lookupExn(methodName, ctx); // @todo better error message
+      // We couldn't find a field. Try finding a method.
+      const method = Type.findMethod(basetype, fieldname);
+      if (method === undefined) {
+        err(ctx, `type ${basetype.name} has no field or method ${fieldname}`);
+        throw "Unreachable";
+      }
+
+      const [frame, offset] = this.env.lookupExn(method.fullname, ctx); // @todo better error message
       ILoadName.emit(this.bc).setFrame(frame).setOffset(offset);
       this.visit(ctx._base); // evaluate base
       ILoadMethod.emit(this.bc);
-    }
 
-    return 1;
+      return 1;
+    } else {
+      throw "Unreachable";
+    }
   };
 
   /**
