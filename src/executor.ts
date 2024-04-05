@@ -46,6 +46,9 @@ export class Executor {
           t.isZombie = true; // set itself to a zombie
           break;
         }
+        if (!t.isLive) {
+          break;
+        }
       }
     }
   }

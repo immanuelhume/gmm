@@ -15,6 +15,7 @@ import {
   TupleView,
   StructView,
   MethodView,
+  Int64View,
 } from "./heapviews";
 import {
   IAssign,
@@ -127,6 +128,7 @@ export const microcode: Record<Opcode, EvalFn> = {
         }
 
         const methodType = NodeView.getDataType(state.heap, mthd.fn());
+        // A method might be builtin, so we'll have to dispatch accordingly.
         switch (methodType) {
           case DataType.Fn:
             const callFrame = CallFrameView.allocate(state);
@@ -148,7 +150,7 @@ export const microcode: Record<Opcode, EvalFn> = {
           case DataType.Builtin:
             const builtin = new BuiltinView(state.heap, mthd.fn());
             const bifn = builtinFns[builtin.getId()];
-            bifn(state, t, args);
+            bifn(state, t, args, { mthd });
 
             if (go) {
               t.lastPc = t.pc;
@@ -665,7 +667,12 @@ const unaryBuiltins = new Map<DataType, Map<UnaryOp, UnaryOpFn>>([
   ],
 ]);
 
-type BuiltinEvalFn = (state: MachineState, t: Thread, args: Address[]) => void;
+interface BuiltinEvalContext {
+  // Address of the method, if the builtin is a method.
+  mthd?: MethodView;
+}
+
+type BuiltinEvalFn = (state: MachineState, t: Thread, args: Address[], ctx?: BuiltinEvalContext) => void;
 
 const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
   [BuiltinId["dbg"]]: function (state: MachineState, t: Thread, args: Address[]): void {
@@ -686,11 +693,64 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
     }
     throw new PanicError(reprs); // we should never recover from this
   },
-  [BuiltinId["Mutex::Lock"]]: function (state: MachineState, t: Thread, args: number[]): void {
-    console.log("Mutex::Lock called");
+  [BuiltinId["Mutex::Lock"]]: function (
+    state: MachineState,
+    t: Thread,
+    _args: number[],
+    ctx?: BuiltinEvalContext,
+  ): void {
+    if (ctx?.mthd === undefined) {
+      throw new Error("could not access method for Mutex::Lock");
+    }
+    const mu = new StructView(state.heap, ctx.mthd.receiver() /* address of the mutex */);
+
+    // Layout of the Mutex struct is defined in compiler.ts
+    const locked = new GlobalView(state.heap, mu.getField(0));
+    // @todo: Float64View should be Int64View
+    const id = new Float64View(state.heap, mu.getField(1));
+
+    switch (locked.getKind()) {
+      case Global.True:
+        // The mutex is locked by someone else. We'll put this thread to sleep,
+        // and subscribe to when it gets unlocked.
+        //
+        // @todo: what should the subscription function do? maybe we need to adjust
+        // the program counter? since we need to try unlocking again when it wakes
+        t.isLive = false;
+        state.sub("mutex-unlock", id.getValue(), t.id, (t) => (t.isLive = true));
+        break;
+      case Global.False:
+        mu.setField(0, state.globals[Global.True]);
+        break;
+      case Global.Nil:
+        throw new Error("expected boolean but got nil");
+    }
   },
-  [BuiltinId["Mutex::Unlock"]]: function (state: MachineState, t: Thread, args: number[]): void {
-    console.log("Mutex::Unlock called");
+  [BuiltinId["Mutex::Unlock"]]: function (
+    state: MachineState,
+    _t: Thread,
+    _args: number[],
+    ctx?: BuiltinEvalContext,
+  ): void {
+    if (ctx?.mthd === undefined) {
+      throw new Error("could not access method for Mutex::Lock");
+    }
+    const mu = new StructView(state.heap, ctx.mthd.receiver() /* address of the mutex */);
+
+    const locked = new GlobalView(state.heap, mu.getField(0));
+    // @todo: Float64View should be Int64View
+    const id = new Float64View(state.heap, mu.getField(1));
+
+    switch (locked.getKind()) {
+      case Global.True:
+        mu.setField(0, state.globals[Global.False]);
+        state.pub("mutex-unlock", id.getValue());
+        break;
+      case Global.False:
+        break;
+      case Global.Nil:
+        throw new Error("expected boolean but got nil");
+    }
   },
 };
 

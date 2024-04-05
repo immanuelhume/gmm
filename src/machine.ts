@@ -57,6 +57,8 @@ export interface MachineState extends Memory, ThreadOps {
   globals: Record<Global, Address>;
 }
 
+// type YoinkResult = YoinkOk | YoinkDone | Deadlock
+
 export class ThreadCtl implements ThreadOps {
   private nextThreadId;
   private threads: Map<ThreadId, Thread> = new Map();
@@ -113,7 +115,10 @@ export class ThreadCtl implements ThreadOps {
     const ret = this.liveThreads.shift();
     if (ret === undefined) {
       this.revive(); // try reviving
-      if (this.liveThreads.length === 0) return undefined;
+      if (this.liveThreads.length === 0) {
+        if (this.deadThreads.length > 0) throw new Error("deadlock!");
+        return undefined;
+      }
       return this.yoink();
     }
     // ...and push it to the back.
@@ -122,7 +127,6 @@ export class ThreadCtl implements ThreadOps {
   }
 
   fork(oldThread: Thread): Thread {
-    // @todo: this needs to be a DEEP copy!
     const newThread: Thread = {
       pc: oldThread.pc,
       rts: new ArrayStack(), // RTS can be empty
