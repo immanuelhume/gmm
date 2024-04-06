@@ -1016,9 +1016,14 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
       // @todo: currently all threads get woken up - but the first to be
       // scheduled will lock it. But the other threads are not notified of this!
       t.isLive = false;
-      state.sub("mutex-unlock", id.getValue(), t.id, (t) => {
-        t.isLive = true;
-      });
+      state.sub(
+        t.id,
+        (t, _src) => {
+          t.isLive = true;
+        },
+        "mutex-unlock",
+        id.getValue(),
+      );
       return { restore: true };
     } else {
       mu.setField(0, state.globals[Global["true"]]);
@@ -1030,7 +1035,7 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
       return {};
     }
   },
-  [BuiltinId["Mutex::Unlock"]]: function (state: MachineState, _t: Thread, _args: number[], ctx?: BuiltinEvalContext) {
+  [BuiltinId["Mutex::Unlock"]]: function (state: MachineState, t: Thread, _args: number[], ctx?: BuiltinEvalContext) {
     if (ctx?.mthd === undefined) {
       throw new Error("could not access method for Mutex::Lock");
     }
@@ -1042,7 +1047,7 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
 
     if (locked.get()) {
       mu.setField(0, state.globals[Global["false"]]);
-      state.pub("mutex-unlock", id.getValue());
+      state.pub(t.id, "mutex-unlock", id.getValue());
     }
 
     return {};
