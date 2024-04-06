@@ -79,7 +79,6 @@ import {
   ILoadMethod,
   IGo,
   ILoadGlobal,
-  IAlloc,
   IPackPtr,
   IDeref,
   ILoadPtrSlot,

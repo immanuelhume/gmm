@@ -349,9 +349,6 @@ export const microcode: Record<Opcode, EvalFn> = {
     t.os.push(instr.val());
     t.pc += IPush.size;
   },
-  [Opcode.Alloc]: function (state: MachineState, t: Thread): void {
-    throw "Unimplemented";
-  },
   [Opcode.PackPtr]: function (state: MachineState, t: Thread): void {
     const ptr = PointerView.allocate(state).setValue(t.os.pop());
     t.os.push(ptr.addr);
