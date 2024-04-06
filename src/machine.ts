@@ -63,7 +63,7 @@ export interface MachineState extends Memory, ThreadOps {
 
 export class ThreadCtl implements ThreadOps {
   private nextThreadId;
-  private nextLockId = 0;
+  private nextLockId = 1;
   private threads: Map<ThreadId, Thread> = new Map();
 
   private liveThreads: Thread[] = [];

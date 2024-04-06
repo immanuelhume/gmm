@@ -52,7 +52,6 @@ import {
   IPackPtr,
   ILoadPtrSlot,
   ConstantKind,
-  ICallGo,
 } from "./instructions";
 import { MachineState, Thread } from "./machine";
 
@@ -75,19 +74,131 @@ export const microcode: Record<Opcode, EvalFn> = {
     t.pc += ILogicalOp.size;
   },
   [Opcode.Call]: function (state: MachineState, t: Thread): void {
-    call(state, t, false);
-  },
-  [Opcode.CallGo]: function (state: MachineState, t: Thread): void {
-    call(state, t, true);
+    const instr = new ICall(state.bytecode, t.pc);
+    const argc = instr.argc();
+
+    const args: Address[] = [];
+    for (let i = 0; i < argc; ++i) {
+      // Beware that here, we are cloning the arguments! This is in line with
+      // how Golang passes arguments i.e. everything is passed by value.
+      args.push(clone(state, t.os.pop()));
+    }
+    args.reverse();
+
+    const fnAddr = t.os.pop();
+    const fnKind = NodeView.getDataType(state.heap, fnAddr);
+    switch (fnKind) {
+      case DataType.Fn: {
+        const callFrame = CallFrameView.allocate(state);
+        callFrame.setPc(t.pc + ICall.size);
+        callFrame.setEnv(t.env);
+
+        t.rts.push(callFrame.addr);
+
+        const frame = FrameView.allocate(state, argc);
+        for (let i = 0; i < argc; ++i) {
+          frame.set(i, args[i]);
+        }
+
+        const fn = new FnView(state.heap, fnAddr);
+        const newEnv = fn.getEnv().extend(state, frame.addr);
+
+        t.env = newEnv;
+        t.pc = fn.getPc();
+
+        if (instr.go()) {
+          t.lastPc = fn.getLast();
+        }
+
+        break;
+      }
+      case DataType.Builtin:
+        // We don't bother with creating a new frame, or extending any environment.
+        const builtin = new BuiltinView(state.heap, fnAddr);
+        const bifn = builtinFns[builtin.getId()];
+        const { restore } = bifn(state, t, args);
+
+        if (instr.go()) {
+          t.lastPc = t.pc;
+        }
+
+        if (restore) {
+          // What is there to restore? The args...
+          t.os.push(fnAddr);
+          for (const arg of args) {
+            t.os.push(arg);
+          }
+        } else {
+          t.pc += ICall.size;
+        }
+
+        break;
+      case DataType.Method: {
+        const mthd = new MethodView(state.heap, fnAddr);
+
+        const frame = FrameView.allocate(state, argc + 1);
+        frame.set(0, mthd.receiver()); // also set the receiver in the frame of parameters
+        for (let i = 0; i < argc; ++i) {
+          frame.set(i + 1, args[i]);
+        }
+
+        const methodType = NodeView.getDataType(state.heap, mthd.fn());
+        // A method might be builtin, so we'll have to dispatch accordingly.
+        switch (methodType) {
+          case DataType.Fn:
+            const callFrame = CallFrameView.allocate(state);
+            callFrame.setPc(t.pc + ICall.size);
+            callFrame.setEnv(t.env);
+
+            t.rts.push(callFrame.addr);
+
+            const fn = new FnView(state.heap, mthd.fn());
+            const newEnv = fn.getEnv().extend(state, frame.addr);
+
+            t.env = newEnv;
+            t.pc = fn.getPc();
+
+            if (instr.go()) {
+              t.lastPc = fn.getLast();
+            }
+            break;
+          case DataType.Builtin:
+            const builtin = new BuiltinView(state.heap, mthd.fn());
+            const bifn = builtinFns[builtin.getId()];
+            const { restore } = bifn(state, t, args, { mthd });
+
+            if (instr.go()) {
+              t.lastPc = t.pc;
+            }
+
+            if (restore) {
+              // What is there to restore? The args...
+              t.os.push(fnAddr);
+              for (const arg of args) {
+                t.os.push(arg);
+              }
+            } else {
+              t.pc += ICall.size;
+            }
+            break;
+          default:
+            throw new Error("unexpected method type");
+        }
+
+        break;
+      }
+      default:
+        throw new Error(`Uncallable object ${fnKind}`);
+    }
   },
   [Opcode.Go]: function (state: MachineState, t: Thread): void {
     const t2 = state.fork(t);
     t2.pc += IGo.size;
-    t.pc += IGo.size + ICallGo.size;
+    t.pc += IGo.size + ICall.size;
 
-    // A [CallGo] always follows immediately after a [Go]. We'll use the info
-    // from the [CallGo] to transfer the Goroutine's operands to our new thread.
-    const call = new ICallGo(state.bytecode, t2.pc);
+    // A [Call] always follows immediately after a [Go]. We'll use the info from
+    // the [Call] to transfer the Goroutine's operands to our new thread.
+    const call = new ICall(state.bytecode, t2.pc);
     const args = [];
     for (let i = 0; i < call.argc(); ++i) {
       args.push(t.os.pop());
@@ -901,6 +1012,9 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
     if (locked.get()) {
       // The mutex is locked by someone else. We'll put this thread to sleep,
       // and subscribe to when it gets unlocked.
+      //
+      // @todo: currently all threads get woken up - but the first to be
+      // scheduled will lock it. But the other threads are not notified of this!
       t.isLive = false;
       state.sub("mutex-unlock", id.getValue(), t.id, (t) => {
         t.isLive = true;
@@ -908,7 +1022,11 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
       return { restore: true };
     } else {
       mu.setField(0, state.globals[Global["true"]]);
-      id.setValue(state.getLockId());
+      if (id.getValue() === 0) {
+        // An ID of zero means the mutex has not been access before. We
+        // initialize it now by getting a unique lock ID.
+        id.setValue(state.getLockId());
+      }
       return {};
     }
   },

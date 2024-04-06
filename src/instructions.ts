@@ -9,7 +9,6 @@ export const enum Opcode {
   LogicalOp,
   Return,
   Call,
-  CallGo,
   Go,
   Goto,
   LoadFn,
@@ -374,14 +373,14 @@ export class IGoto extends InstrView {
  * Call a function. There should be [argc] arguments on the operand stack (in
  * reverse order when read from top down).
  *
- * ┌────────┬──────┐
- * │ opcode │ argc │
- * └────────┴──────┘
- *  1        1
+ * ┌────────┬──────┬───┐
+ * │ opcode │ argc │go?│
+ * └────────┴──────┴───┘
+ *  1        1      1
  */
 export class ICall extends InstrView {
-  static size = 2;
-  readonly size = 2;
+  static size = 3;
+  readonly size = 3;
 
   static emit(w: Emitter, ctx?: ParserRuleContext): ICall {
     const pc = w.reserve(Opcode.Call, ICall.size, ctx);
@@ -389,38 +388,30 @@ export class ICall extends InstrView {
   }
 
   toString(): string {
-    return `Call argc:${this.argc()}`;
+    return `Call argc:${this.argc()} go?:${this.go()}`;
   }
 
   constructor(bytecode: DataView, addr: number) {
     super(bytecode, addr);
-    // assert(this.opcode() === Opcode.Call);
+    assert(this.opcode() === Opcode.Call);
   }
 
   argc(): number {
     return this.bytecode.getUint8(this.addr + 1);
   }
-  setArgc(argc: number) {
-    return this.bytecode.setUint8(this.addr + 1, argc);
+  setArgc(argc: number): ICall {
+    this.bytecode.setUint8(this.addr + 1, argc);
+    return this;
   }
-}
-
-/**
- * Identical to [Call]. It's the instruction which should follow after every Go
- * instruction. Represents the very first instruction a Goroutine should
- * execute.
- */
-export class ICallGo extends ICall {
-  static emit(w: Emitter, ctx?: ParserRuleContext): ICall {
-    const pc = w.reserve(Opcode.CallGo, ICallGo.size, ctx);
-    return new ICallGo(w.code(), pc);
+  /**
+   * Whether this call is actually the start of a new goroutine.
+   */
+  go(): boolean {
+    return this.bytecode.getUint8(this.addr + 2) !== 0;
   }
-  toString(): string {
-    return `CallGo argc:${this.argc()}`;
-  }
-  constructor(bytecode: DataView, addr: number) {
-    super(bytecode, addr);
-    assert(this.opcode() === Opcode.CallGo);
+  setGo(go: boolean): ICall {
+    this.bytecode.setUint8(this.addr + 2, go ? 1 : 0);
+    return this;
   }
 }
 
@@ -921,7 +912,6 @@ export class IDone extends InstrView {
 const opcodeClass: Record<Opcode, { new (bytecode: DataView, addr: number): InstrView }> = {
   [Opcode.Return]: IReturn,
   [Opcode.Call]: ICall,
-  [Opcode.CallGo]: ICallGo,
   [Opcode.Go]: IGo,
   [Opcode.Goto]: IGoto,
   [Opcode.LoadFn]: ILoadFn,
