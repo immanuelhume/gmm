@@ -41,6 +41,8 @@ interface ThreadOps {
    * Forks a thread. All registers are copied.
    */
   fork: (thread: Thread) => Thread;
+
+  getLockId: () => number;
 }
 
 /**
@@ -61,6 +63,7 @@ export interface MachineState extends Memory, ThreadOps {
 
 export class ThreadCtl implements ThreadOps {
   private nextThreadId;
+  private nextLockId = 0;
   private threads: Map<ThreadId, Thread> = new Map();
 
   private liveThreads: Thread[] = [];
@@ -71,7 +74,15 @@ export class ThreadCtl implements ThreadOps {
   constructor(init: Thread) {
     this.liveThreads.push(init);
 
+    this.threads.set(init.id, init);
     this.nextThreadId = init.id + 1;
+  }
+
+  /**
+   * Retrieves a unique ID for use in some lock.
+   */
+  getLockId() {
+    return this.nextLockId++;
   }
 
   /**

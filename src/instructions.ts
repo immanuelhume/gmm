@@ -9,6 +9,7 @@ export const enum Opcode {
   LogicalOp,
   Return,
   Call,
+  CallGo,
   Go,
   Goto,
   LoadFn,
@@ -393,7 +394,7 @@ export class ICall extends InstrView {
 
   constructor(bytecode: DataView, addr: number) {
     super(bytecode, addr);
-    assert(this.opcode() === Opcode.Call);
+    // assert(this.opcode() === Opcode.Call);
   }
 
   argc(): number {
@@ -401,6 +402,25 @@ export class ICall extends InstrView {
   }
   setArgc(argc: number) {
     return this.bytecode.setUint8(this.addr + 1, argc);
+  }
+}
+
+/**
+ * Identical to [Call]. It's the instruction which should follow after every Go
+ * instruction. Represents the very first instruction a Goroutine should
+ * execute.
+ */
+export class ICallGo extends ICall {
+  static emit(w: Emitter, ctx?: ParserRuleContext): ICall {
+    const pc = w.reserve(Opcode.CallGo, ICallGo.size, ctx);
+    return new ICallGo(w.code(), pc);
+  }
+  toString(): string {
+    return `CallGo argc:${this.argc()}`;
+  }
+  constructor(bytecode: DataView, addr: number) {
+    super(bytecode, addr);
+    assert(this.opcode() === Opcode.CallGo);
   }
 }
 
@@ -901,6 +921,7 @@ export class IDone extends InstrView {
 const opcodeClass: Record<Opcode, { new (bytecode: DataView, addr: number): InstrView }> = {
   [Opcode.Return]: IReturn,
   [Opcode.Call]: ICall,
+  [Opcode.CallGo]: ICallGo,
   [Opcode.Go]: IGo,
   [Opcode.Goto]: IGoto,
   [Opcode.LoadFn]: ILoadFn,

@@ -78,6 +78,9 @@ const run = (filename: string) => {
     fork(thread) {
       return tctl.fork(thread);
     },
+    getLockId() {
+      return tctl.getLockId();
+    },
   };
 
   let executor = new Executor(state, tctl);

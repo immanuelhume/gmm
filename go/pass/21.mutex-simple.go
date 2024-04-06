@@ -1,6 +1,8 @@
 func main() {
 	var mu Mutex
 	mu.Lock()
-	mu.Unlock()
+	go func() {
+		mu.Unlock()
+	}()
 	mu.Lock()
 }
