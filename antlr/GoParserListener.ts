@@ -14,6 +14,7 @@ import { GoStmtContext } from "./GoParser";
 import { AssignmentContext } from "./GoParser";
 import { LvalueListContext } from "./GoParser";
 import { LvalueContext } from "./GoParser";
+import { LpointerContext } from "./GoParser";
 import { LnameContext } from "./GoParser";
 import { LnameListContext } from "./GoParser";
 import { FieldContext } from "./GoParser";
@@ -51,6 +52,7 @@ import { ParamContext } from "./GoParser";
 import { TypeContext } from "./GoParser";
 import { TypeNameContext } from "./GoParser";
 import { TypeLitContext } from "./GoParser";
+import { PointerTypeContext } from "./GoParser";
 import { ChannelTypeContext } from "./GoParser";
 import { ElementTypeContext } from "./GoParser";
 import { StructTypeContext } from "./GoParser";
@@ -192,6 +194,16 @@ export default class GoParserListener extends ParseTreeListener {
    * @param ctx the parse tree
    */
   exitLvalue?: (ctx: LvalueContext) => void;
+  /**
+   * Enter a parse tree produced by `GoParser.lpointer`.
+   * @param ctx the parse tree
+   */
+  enterLpointer?: (ctx: LpointerContext) => void;
+  /**
+   * Exit a parse tree produced by `GoParser.lpointer`.
+   * @param ctx the parse tree
+   */
+  exitLpointer?: (ctx: LpointerContext) => void;
   /**
    * Enter a parse tree produced by `GoParser.lname`.
    * @param ctx the parse tree
@@ -562,6 +574,16 @@ export default class GoParserListener extends ParseTreeListener {
    * @param ctx the parse tree
    */
   exitTypeLit?: (ctx: TypeLitContext) => void;
+  /**
+   * Enter a parse tree produced by `GoParser.pointerType`.
+   * @param ctx the parse tree
+   */
+  enterPointerType?: (ctx: PointerTypeContext) => void;
+  /**
+   * Exit a parse tree produced by `GoParser.pointerType`.
+   * @param ctx the parse tree
+   */
+  exitPointerType?: (ctx: PointerTypeContext) => void;
   /**
    * Enter a parse tree produced by `GoParser.channelType`.
    * @param ctx the parse tree
