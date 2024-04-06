@@ -24,6 +24,9 @@ IF : 'if' ;
 ELSE : 'else' ;
 RANGE : 'range' ;
 
+NEW : 'new' ;
+MAKE : 'make' ;
+
 PERIOD : '.' ;
 COLON : ':' ;
 
@@ -55,6 +58,7 @@ GREATER : '>' ;
 GEQ : '>=' ;
 
 STAR: '*' ;
+AMPERSAND : '&' ;
 
 WORD : LETTER (LETTER | UNICODE_DIGIT)* -> mode(NLSEMI) ;
 

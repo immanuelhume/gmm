@@ -18,7 +18,7 @@
  */
 
 import assert from "assert";
-import { Address, Stack, StrPool } from "./util";
+import { Address, Stack, StrPool, fmtAddress } from "./util";
 
 export interface Memory {
   heap: DataView;
@@ -37,7 +37,7 @@ export enum DataType {
   Fn,
   Builtin,
   Method,
-  Global,
+  Bool,
   Frame,
   Env,
   CallFrame,
@@ -45,26 +45,22 @@ export enum DataType {
   Pointer,
   Tuple,
   Struct,
+  Lvalue,
 }
 
 /**
  * Global values, which should eventually appear as singletons in memory.
  */
 export enum Global {
-  True = 0x00,
-  False,
-  Nil,
+  "true" = 0x00,
+  "false",
+  "nil",
 }
-
-export const globalSymbols: Record<Global, string> = {
-  [Global.True]: "true",
-  [Global.False]: "false",
-  [Global.Nil]: "nil",
-};
 
 export enum BuiltinId {
   "dbg" = 0x00,
   "panic",
+  "new",
   "Mutex::Lock",
   "Mutex::Unlock",
 }
@@ -88,7 +84,7 @@ export const wordSize = 8;
  *
  * @return Address of the newly allocated node.
  */
-const allocate = (mem: Memory, dataType: DataType, nvals: number, nrefs: number): number => {
+export const allocate = (mem: Memory, dataType: DataType, nvals: number, nrefs: number): number => {
   const addr = mem.free;
   const totalSize = 1 + nvals + nrefs;
   mem.free += wordSize * totalSize;
@@ -125,6 +121,18 @@ export const clone = (mem: Memory, addr: Address): Address => {
   }
 
   return addr2;
+};
+
+/**
+ * Basically memcpy.
+ */
+export const copy = (mem: Memory, src: Address, dst: Address) => {
+  const node = NodeView.of(mem.heap, src);
+  for (let i = 0; i < node.size(); ++i) {
+    const offset = i * wordSize;
+    const data = mem.heap.getFloat64(src + offset);
+    mem.heap.setFloat64(dst + offset, data);
+  }
 };
 
 interface HeapContext {
@@ -164,6 +172,13 @@ export abstract class NodeView {
     return this.heap.getUint8(this.addr + 2);
   }
 
+  /**
+   * Size in words.
+   */
+  size(): number {
+    return 1 + this.nvals() + this.nrefs();
+  }
+
   protected childByteOffset(i: number): Address {
     return this.addr + (i + 1) * wordSize;
   }
@@ -173,10 +188,6 @@ export abstract class NodeView {
   setChild(i: number, val: number): void {
     return this.heap.setFloat64(this.childByteOffset(i), val);
   }
-
-  // getBoolChild(i: boolean): boolean {
-  //   return this.heap.get
-  // }
 
   checkType(type: DataType) {
     if (this.dataType() !== type) {
@@ -551,39 +562,33 @@ export class MethodView extends NodeView {
 }
 
 /**
- * Represents a global.
+ * Represents a boolean.
  *
- * ┌──────┬─────────┐
- * │header│global ID│
- * └──────┴─────────┘
+ * ┌──────┬───────┐
+ * │header│0 or 1 │
+ * └──────┴───────┘
  */
-export class GlobalView extends NodeView {
-  static allocate(state: Memory): GlobalView {
-    const addr = allocate(state, DataType.Global, 1, 0);
-    return new GlobalView(state.heap, addr);
+export class BoolView extends NodeView {
+  static allocate(state: Memory): BoolView {
+    const addr = allocate(state, DataType.Bool, 1, 0);
+    return new BoolView(state.heap, addr);
   }
 
   constructor(heap: DataView, addr: Address) {
     super(heap, addr);
-    this.checkType(DataType.Global);
+    this.checkType(DataType.Bool);
   }
 
   toString(): string {
-    const repr = globalSymbols[this.getKind()];
-    return `Global { ${repr} }`;
+    return `Bool { ${this.get()} }`;
   }
 
-  getKind(): Global {
-    return this.getChild(0);
+  get(): boolean {
+    return this.getChild(0) != 0;
   }
-  setKind(kind: Global): GlobalView {
-    this.setChild(0, kind);
+  set(b: boolean): BoolView {
+    this.setChild(0, b ? 1 : 0);
     return this;
-  }
-
-  isBoolean(): boolean {
-    const kind = this.getKind();
-    return kind === Global.True || kind === Global.False;
   }
 }
 
@@ -687,12 +692,61 @@ export class StructView extends NodeView {
   }
 }
 
-class PointerView extends NodeView {
-  // @todo
+export class PointerView extends NodeView {
+  static allocate(state: Memory): PointerView {
+    const addr = allocate(state, DataType.Pointer, 1, 0);
+    return new PointerView(state.heap, addr);
+  }
+  constructor(heap: DataView, addr: Address) {
+    super(heap, addr);
+    this.checkType(DataType.Pointer);
+  }
   toString(): string {
-    return "";
+    return `Pointer ${fmtAddress(this.getValue())}`;
+  }
+  getValue(): Address {
+    return this.getChild(0);
+  }
+  setValue(addr: Address): PointerView {
+    this.setChild(0, addr);
+    return this;
   }
 }
+
+export const enum LvalueKind {
+  Variable = 0x00,
+  Deref,
+}
+
+export class LvalueView extends NodeView {
+  static allocate(state: Memory): LvalueView {
+    const addr = allocate(state, DataType.Lvalue, 2, 0);
+    return new LvalueView(state.heap, addr);
+  }
+  constructor(heap: DataView, addr: Address) {
+    super(heap, addr);
+    this.checkType(DataType.Lvalue);
+  }
+  toString(): string {
+    return "Lvalue";
+  }
+
+  getKind(): LvalueKind {
+    return this.getChild(0);
+  }
+  setKind(kind: LvalueKind): LvalueView {
+    this.setChild(0, kind);
+    return this;
+  }
+  getLoc(): Address {
+    return this.getChild(1);
+  }
+  setLoc(addr: Address): LvalueView {
+    this.setChild(1, addr);
+    return this;
+  }
+}
+
 class ChannelView extends NodeView {
   // @todo
   toString(): string {
@@ -708,7 +762,7 @@ const nodeClass: Record<DataType, { new (heap: DataView, addr: Address, ctx?: He
   [DataType.Fn]: FnView,
   [DataType.Builtin]: BuiltinView,
   [DataType.Method]: MethodView,
-  [DataType.Global]: GlobalView,
+  [DataType.Bool]: BoolView,
   [DataType.Frame]: FrameView,
   [DataType.Env]: EnvView,
   [DataType.CallFrame]: CallFrameView,
@@ -716,4 +770,5 @@ const nodeClass: Record<DataType, { new (heap: DataView, addr: Address, ctx?: He
   [DataType.Pointer]: PointerView,
   [DataType.Tuple]: TupleView,
   [DataType.Struct]: StructView,
+  [DataType.Lvalue]: LvalueView,
 };

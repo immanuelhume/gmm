@@ -8,12 +8,12 @@ import { readFileSync } from "fs";
 import { compileSrc } from "../src/compiler";
 import { Address, ArrayStack } from "../src/util";
 import {
-  BuiltinId,
+  BoolView,
   BuiltinView,
   EnvView,
   FrameView,
   Global,
-  GlobalView,
+  PointerView,
   StringView,
   builtinIds,
   builtinSymbols,
@@ -43,18 +43,10 @@ const run = (filename: string) => {
 
   // And the globals.
   const globals: Record<Global, Address> = {
-    [Global.True]: -1,
-    [Global.False]: -1,
-    [Global.Nil]: -1,
+    [Global["true"]]: BoolView.allocate(mem).set(true).addr,
+    [Global["false"]]: BoolView.allocate(mem).set(false).addr,
+    [Global["nil"]]: PointerView.allocate(mem).setValue(-1).addr,
   };
-  for (const glob in Global) {
-    const kind = Number(glob);
-    if (isNaN(kind)) {
-      continue;
-    }
-    const addr = GlobalView.allocate(mem).setKind(kind).addr;
-    globals[kind as Global] = addr;
-  }
 
   // The initial thread.
   const init: Thread = {

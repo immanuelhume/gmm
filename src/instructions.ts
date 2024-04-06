@@ -1,7 +1,7 @@
 import assert from "assert";
 import { fmtAddress } from "./util";
 import { ParserRuleContext } from "antlr4";
-import { Global } from "./heapviews";
+import { DataType, Global } from "./heapviews";
 
 export const enum Opcode {
   BinaryOp = 0x00,
@@ -24,6 +24,9 @@ export const enum Opcode {
   LoadGlobal,
   LoadStr,
   Push,
+  PackPtr,
+  Deref,
+  LoadPtrSlot,
   PackTuple,
   PackStruct,
   LoadStructField,
@@ -623,7 +626,8 @@ export class ILoadGlobal extends InstrView {
   }
 
   toString(): string {
-    return `LoadGlobal ${this.global()}`;
+    const repr = Global[this.global()];
+    return `LoadGlobal ${repr}`;
   }
 
   global(): Global {
@@ -693,6 +697,63 @@ export class IPush extends InstrView {
   setVal(val: number): IPush {
     this.bytecode.setFloat64(this.addr + 1, val);
     return this;
+  }
+}
+
+export class IPackPtr extends InstrView {
+  static size = 1;
+  readonly size = 1;
+
+  static emit(w: Emitter, ctx?: ParserRuleContext): IPackPtr {
+    const pc = w.reserve(Opcode.PackPtr, IPackPtr.size, ctx);
+    return new IPackPtr(w.code(), pc);
+  }
+
+  constructor(bytecode: DataView, addr: number) {
+    super(bytecode, addr);
+    assert(this.opcode() === Opcode.PackPtr);
+  }
+
+  toString(): string {
+    return "PackPtr";
+  }
+}
+
+export class IDeref extends InstrView {
+  static size = 1;
+  readonly size = 1;
+
+  static emit(w: Emitter, ctx?: ParserRuleContext): IDeref {
+    const pc = w.reserve(Opcode.Deref, IDeref.size, ctx);
+    return new IDeref(w.code(), pc);
+  }
+
+  constructor(bytecode: DataView, addr: number) {
+    super(bytecode, addr);
+    assert(this.opcode() === Opcode.Deref);
+  }
+
+  toString(): string {
+    return "Deref";
+  }
+}
+
+export class ILoadPtrSlot extends InstrView {
+  static size = 1;
+  readonly size = 1;
+
+  static emit(w: Emitter, ctx?: ParserRuleContext): ILoadPtrSlot {
+    const pc = w.reserve(Opcode.LoadPtrSlot, ILoadPtrSlot.size, ctx);
+    return new ILoadPtrSlot(w.code(), pc);
+  }
+
+  constructor(bytecode: DataView, addr: number) {
+    super(bytecode, addr);
+    assert(this.opcode() === Opcode.LoadPtrSlot);
+  }
+
+  toString(): string {
+    return "LoadPtrSlot";
   }
 }
 
@@ -848,6 +909,9 @@ const opcodeClass: Record<Opcode, { new (bytecode: DataView, addr: number): Inst
   [Opcode.LoadGlobal]: ILoadGlobal,
   [Opcode.LoadStr]: ILoadStr,
   [Opcode.Push]: IPush,
+  [Opcode.PackPtr]: IPackPtr,
+  [Opcode.Deref]: IDeref,
+  [Opcode.LoadPtrSlot]: ILoadPtrSlot,
   [Opcode.PackTuple]: IPackTuple,
   [Opcode.PackStruct]: IPackStruct,
   [Opcode.LoadStructField]: ILoadStructField,

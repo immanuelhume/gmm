@@ -11,11 +11,17 @@ import {
   BuiltinId,
   BlockFrameView,
   Global,
-  GlobalView,
   TupleView,
+  PointerView,
   StructView,
   MethodView,
   Int64View,
+  StringView,
+  allocate,
+  BoolView,
+  LvalueView,
+  LvalueKind,
+  copy,
 } from "./heapviews";
 import {
   IAssign,
@@ -45,6 +51,8 @@ import {
   ILoadMethod,
   IGo,
   ILoadGlobal,
+  IPackPtr,
+  ILoadPtrSlot,
 } from "./instructions";
 import { MachineState, Thread } from "./machine";
 import { ArgContext } from "../antlr/GoParser";
@@ -234,21 +242,26 @@ export const microcode: Record<Opcode, EvalFn> = {
     // we are assigning to a field of a struct?) so we assign directly to
     // an address.
 
-    if (count == 1) {
-      const lhs = t.os.pop();
-      const rhs = t.os.pop();
-      state.heap.setFloat64(lhs, rhs);
-    } else {
-      const lhss = [];
-      const rhss = [];
-      for (let i = 0; i < count; ++i) {
-        lhss.push(t.os.pop());
-      }
-      for (let i = 0; i < count; ++i) {
-        rhss.push(t.os.pop());
-      }
-      for (let i = 0; i < count; ++i) {
-        state.heap.setFloat64(lhss[i], rhss[i]);
+    const lhss = [];
+    const rhss = [];
+
+    for (let i = 0; i < count; ++i) {
+      lhss.push(t.os.pop());
+    }
+    for (let i = 0; i < count; ++i) {
+      rhss.push(t.os.pop());
+    }
+    for (let i = 0; i < count; ++i) {
+      const lvalue = new LvalueView(state.heap, lhss[i]);
+      switch (lvalue.getKind()) {
+        case LvalueKind.Variable:
+          state.heap.setFloat64(lvalue.getLoc(), rhss[i]);
+          break;
+        case LvalueKind.Deref:
+          copy(state, rhss[i], lvalue.getLoc());
+          break;
+        default:
+          throw "Unreachable";
       }
     }
 
@@ -260,7 +273,9 @@ export const microcode: Record<Opcode, EvalFn> = {
     const frame = new FrameView(state.heap, frameAddr);
     const nameLoc = frame.getVarLoc(instr.offset());
 
-    t.os.push(nameLoc);
+    const lvalue = LvalueView.allocate(state).setKind(LvalueKind.Variable).setLoc(nameLoc);
+    t.os.push(lvalue.addr);
+
     t.pc += ILoadNameLoc.size;
   },
   [Opcode.LoadName]: function (state: MachineState, t: Thread): void {
@@ -275,16 +290,11 @@ export const microcode: Record<Opcode, EvalFn> = {
   [Opcode.Jof]: function (state: MachineState, t: Thread): void {
     const instr = new IJof(state.bytecode, t.pc);
     const cond = t.os.pop();
-    const glob = new GlobalView(state.heap, cond);
-    switch (glob.getKind()) {
-      case Global.False:
-        t.pc = instr.where(); // we jump
-        break;
-      case Global.True:
-        t.pc += IJof.size;
-        break;
-      default:
-        throw new Error("Unexpected non-boolean value"); // @todo btr msg
+    const bool = new BoolView(state.heap, cond).get();
+    if (bool) {
+      t.pc += IJof.size;
+    } else {
+      t.pc = instr.where(); // we jump
     }
   },
   [Opcode.EnterBlock]: function (state: MachineState, t: Thread): void {
@@ -339,6 +349,22 @@ export const microcode: Record<Opcode, EvalFn> = {
     t.os.push(instr.val());
     t.pc += IPush.size;
   },
+  [Opcode.PackPtr]: function (state: MachineState, t: Thread): void {
+    const ptr = PointerView.allocate(state).setValue(t.os.pop());
+    t.os.push(ptr.addr);
+    t.pc += IPackPtr.size;
+  },
+  [Opcode.Deref]: function (state: MachineState, t: Thread): void {
+    const ptr = new PointerView(state.heap, t.os.pop());
+    t.os.push(ptr.getValue());
+    t.pc += IPackPtr.size;
+  },
+  [Opcode.LoadPtrSlot]: function (state: MachineState, t: Thread): void {
+    const ptr = new PointerView(state.heap, t.os.pop());
+    const lvalue = LvalueView.allocate(state).setKind(LvalueKind.Deref).setLoc(ptr.getValue());
+    t.os.push(lvalue.addr);
+    t.pc += ILoadPtrSlot.size;
+  },
   [Opcode.PackTuple]: function (state: MachineState, t: Thread): void {
     const instr = new IPackTuple(state.bytecode, t.pc);
     const tuple = TupleView.allocate(state, instr.len());
@@ -372,7 +398,9 @@ export const microcode: Record<Opcode, EvalFn> = {
     const struct = new StructView(state.heap, t.os.pop());
     const fieldLoc = struct.getFieldLoc(instr.offset());
 
-    t.os.push(fieldLoc);
+    const lvalue = LvalueView.allocate(state).setKind(LvalueKind.Variable).setLoc(fieldLoc);
+    t.os.push(lvalue.addr);
+
     t.pc += ILoadStructField.size;
   },
   [Opcode.Done]: function (state: MachineState, t: Thread): void {
@@ -449,9 +477,9 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           const rhsValue = rhs.getValue();
 
           if (lhsValue !== rhsValue) {
-            return state.globals[Global.True];
+            return state.globals[Global["true"]];
           } else {
-            return state.globals[Global.False];
+            return state.globals[Global["false"]];
           }
         },
       ],
@@ -464,9 +492,9 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           const lhsValue = lhs.getValue();
           const rhsValue = rhs.getValue();
           if (lhsValue === rhsValue) {
-            return state.globals[Global.True];
+            return state.globals[Global["true"]];
           } else {
-            return state.globals[Global.False];
+            return state.globals[Global["false"]];
           }
         },
       ],
@@ -514,9 +542,9 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           const rhsValue = rhs.getValue();
 
           if (lhsValue <= rhsValue) {
-            return state.globals[Global.True];
+            return state.globals[Global["true"]];
           } else {
-            return state.globals[Global.False];
+            return state.globals[Global["false"]];
           }
         },
       ],
@@ -530,9 +558,9 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           const rhsValue = rhs.getValue();
 
           if (lhsValue >= rhsValue) {
-            return state.globals[Global.True];
+            return state.globals[Global["true"]];
           } else {
-            return state.globals[Global.False];
+            return state.globals[Global["false"]];
           }
         },
       ],
@@ -546,9 +574,9 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           const rhsValue = rhs.getValue();
 
           if (lhsValue < rhsValue) {
-            return state.globals[Global.True];
+            return state.globals[Global["true"]];
           } else {
-            return state.globals[Global.False];
+            return state.globals[Global["false"]];
           }
         },
       ],
@@ -562,24 +590,24 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           const rhsValue = rhs.getValue();
 
           if (lhsValue > rhsValue) {
-            return state.globals[Global.True];
+            return state.globals[Global["true"]];
           } else {
-            return state.globals[Global.False];
+            return state.globals[Global["false"]];
           }
         },
       ],
     ]),
   ],
   [
-    DataType.Global,
+    DataType.Bool,
     new Map([
       [
         BinaryOp.Eq,
         (state, lhsAddr, rhsAddr) => {
           if (lhsAddr === rhsAddr) {
-            return state.globals[Global.True];
+            return state.globals[Global["true"]];
           } else {
-            return state.globals[Global.False];
+            return state.globals[Global["false"]];
           }
         },
       ],
@@ -587,9 +615,38 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
         BinaryOp.Neq,
         (state, lhsAddr, rhsAddr) => {
           if (lhsAddr !== rhsAddr) {
-            return state.globals[Global.True];
+            return state.globals[Global["true"]];
           } else {
-            return state.globals[Global.False];
+            return state.globals[Global["false"]];
+          }
+        },
+      ],
+    ]),
+  ],
+  [
+    DataType.Pointer,
+    new Map([
+      [
+        BinaryOp.Eq,
+        (state, lhsAddr, rhsAddr) => {
+          const lhs = new PointerView(state.heap, lhsAddr).getValue();
+          const rhs = new PointerView(state.heap, rhsAddr).getValue();
+          if (lhs === rhs) {
+            return state.globals[Global["true"]];
+          } else {
+            return state.globals[Global["false"]];
+          }
+        },
+      ],
+      [
+        BinaryOp.Neq,
+        (state, lhsAddr, rhsAddr) => {
+          const lhs = new PointerView(state.heap, lhsAddr).getValue();
+          const rhs = new PointerView(state.heap, rhsAddr).getValue();
+          if (lhs !== rhs) {
+            return state.globals[Global["true"]];
+          } else {
+            return state.globals[Global["false"]];
           }
         },
       ],
@@ -601,29 +658,25 @@ const execLogicalOp = (state: MachineState, t: Thread, op: LogicalOp): void => {
   const lhsAddr = t.os.pop();
   const rhsAddr = t.os.pop();
 
-  const _lhs = new GlobalView(state.heap, lhsAddr);
-  const _rhs = new GlobalView(state.heap, rhsAddr);
+  const _lhs = new BoolView(state.heap, lhsAddr);
+  const _rhs = new BoolView(state.heap, rhsAddr);
 
-  if (!_lhs.isBoolean() || !_rhs.isBoolean()) {
-    throw new Error("Can't perform logical operation on non-boolean types");
-  }
-
-  const lhs = _lhs.getKind();
-  const rhs = _rhs.getKind();
+  const lhs = _lhs.get();
+  const rhs = _rhs.get();
 
   switch (op) {
     case LogicalOp.And:
-      if (lhs === Global.True && rhs === Global.True) {
-        t.os.push(state.globals[Global.True]);
+      if (lhs && rhs) {
+        t.os.push(state.globals[Global["true"]]);
       } else {
-        t.os.push(state.globals[Global.False]);
+        t.os.push(state.globals[Global["false"]]);
       }
       break;
     case LogicalOp.Or:
-      if (lhs === Global.True || rhs === Global.True) {
-        t.os.push(state.globals[Global.True]);
+      if (lhs || rhs) {
+        t.os.push(state.globals[Global["true"]]);
       } else {
-        t.os.push(state.globals[Global.False]);
+        t.os.push(state.globals[Global["false"]]);
       }
       break;
     default:
@@ -693,6 +746,16 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
     }
     throw new PanicError(reprs); // we should never recover from this
   },
+  [BuiltinId["new"]]: function (state: MachineState, t: Thread, args: number[]): void {
+    const typ = args[0];
+    const nvals = args[1];
+    const nrefs = args[2];
+    const ptr = PointerView.allocate(state);
+
+    const addr = allocate(state, typ, nvals, nrefs);
+    ptr.setValue(addr);
+    t.os.push(ptr.addr);
+  },
   [BuiltinId["Mutex::Lock"]]: function (
     state: MachineState,
     t: Thread,
@@ -702,28 +765,25 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
     if (ctx?.mthd === undefined) {
       throw new Error("could not access method for Mutex::Lock");
     }
-    const mu = new StructView(state.heap, ctx.mthd.receiver() /* address of the mutex */);
+
+    const _mu = new PointerView(state.heap, ctx.mthd.receiver() /* pointer to the mutex */);
+    const mu = new StructView(state.heap, _mu.getValue());
 
     // Layout of the Mutex struct is defined in compiler.ts
-    const locked = new GlobalView(state.heap, mu.getField(0));
+    const locked = new BoolView(state.heap, mu.getField(0));
     // @todo: Float64View should be Int64View
     const id = new Float64View(state.heap, mu.getField(1));
 
-    switch (locked.getKind()) {
-      case Global.True:
-        // The mutex is locked by someone else. We'll put this thread to sleep,
-        // and subscribe to when it gets unlocked.
-        //
-        // @todo: what should the subscription function do? maybe we need to adjust
-        // the program counter? since we need to try unlocking again when it wakes
-        t.isLive = false;
-        state.sub("mutex-unlock", id.getValue(), t.id, (t) => (t.isLive = true));
-        break;
-      case Global.False:
-        mu.setField(0, state.globals[Global.True]);
-        break;
-      case Global.Nil:
-        throw new Error("expected boolean but got nil");
+    if (locked.get()) {
+      // The mutex is locked by someone else. We'll put this thread to sleep,
+      // and subscribe to when it gets unlocked.
+      //
+      // @todo: what should the subscription function do? maybe we need to adjust
+      // the program counter? since we need to try unlocking again when it wakes
+      t.isLive = false;
+      state.sub("mutex-unlock", id.getValue(), t.id, (t) => (t.isLive = true));
+    } else {
+      mu.setField(0, state.globals[Global["true"]]);
     }
   },
   [BuiltinId["Mutex::Unlock"]]: function (
@@ -735,21 +795,16 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
     if (ctx?.mthd === undefined) {
       throw new Error("could not access method for Mutex::Lock");
     }
-    const mu = new StructView(state.heap, ctx.mthd.receiver() /* address of the mutex */);
+    const _mu = new PointerView(state.heap, ctx.mthd.receiver() /* pointer to the mutex */);
+    const mu = new StructView(state.heap, _mu.getValue());
 
-    const locked = new GlobalView(state.heap, mu.getField(0));
+    const locked = new BoolView(state.heap, mu.getField(0));
     // @todo: Float64View should be Int64View
     const id = new Float64View(state.heap, mu.getField(1));
 
-    switch (locked.getKind()) {
-      case Global.True:
-        mu.setField(0, state.globals[Global.False]);
-        state.pub("mutex-unlock", id.getValue());
-        break;
-      case Global.False:
-        break;
-      case Global.Nil:
-        throw new Error("expected boolean but got nil");
+    if (locked.get()) {
+      mu.setField(0, state.globals[Global["false"]]);
+      state.pub("mutex-unlock", id.getValue());
     }
   },
 };
