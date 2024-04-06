@@ -82,6 +82,7 @@ import {
   IPackPtr,
   IDeref,
   ILoadPtrSlot,
+  ConstantKind,
 } from "./instructions";
 import { ArrayStack, Stack, StrPool, arraysEqual } from "./util";
 import { DataType, Global, builtinSymbols } from "./heapviews";
@@ -1021,10 +1022,10 @@ export class Assembler extends GoVisitor<number> {
             ILoadStr.emit(this.bc).setId(id);
             break;
           case "int64":
-            ILoadC.emit(this.bc).setVal(0);
+            ILoadC.emit(this.bc).setKind(ConstantKind.Int64).setVal(0);
             break;
           case "float64":
-            ILoadC.emit(this.bc).setVal(0);
+            ILoadC.emit(this.bc).setKind(ConstantKind.Float64).setVal(0);
             break;
           case "bool":
             ILoadGlobal.emit(this.bc).setGlobal(Global["false"]);
@@ -1721,12 +1722,13 @@ export class Assembler extends GoVisitor<number> {
     const raw = ctx.getText();
     if (ctx.INT()) {
       val = parseInt(raw);
+      ILoadC.emit(this.bc).setKind(ConstantKind.Int64).setVal(val);
     } else if (ctx.FLOAT()) {
       val = parseFloat(raw);
+      ILoadC.emit(this.bc).setKind(ConstantKind.Float64).setVal(val);
     } else {
       throw "Unreachable";
     }
-    ILoadC.emit(this.bc).setVal(val);
     return 1;
   };
 

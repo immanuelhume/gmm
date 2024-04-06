@@ -1,7 +1,7 @@
 import assert from "assert";
 import { fmtAddress } from "./util";
 import { ParserRuleContext } from "antlr4";
-import { DataType, Global } from "./heapviews";
+import { DataType, Global, NodeView } from "./heapviews";
 
 export const enum Opcode {
   BinaryOp = 0x00,
@@ -582,11 +582,14 @@ export class IPop extends InstrView {
   }
 }
 
+export enum ConstantKind {
+  Int64 = 0x00,
+  Float64,
+}
+
 export class ILoadC extends InstrView {
-  // @todo: we'll need to support all kinds of constants, e.g. numbers (of various types),
-  // true, false, strings
-  static size = 9;
-  readonly size = 9;
+  static size = 10;
+  readonly size = 10;
 
   static emit(w: Emitter, ctx?: ParserRuleContext): ILoadC {
     const pc = w.reserve(Opcode.LoadC, ILoadC.size, ctx);
@@ -599,14 +602,21 @@ export class ILoadC extends InstrView {
   }
 
   toString(): string {
-    return `LoadC ${this.val()}`;
+    return `LoadC kind:${ConstantKind[this.getKind()]} val:${this.getVal()}`;
   }
 
-  val(): number {
-    return this.bytecode.getFloat64(this.addr + 1);
+  getKind(): ConstantKind {
+    return this.bytecode.getUint8(this.addr + 1);
   }
-  setVal(val: number): ILoadC {
-    this.bytecode.setFloat64(this.addr + 1, val);
+  setKind(typ: ConstantKind): ILoadC {
+    this.bytecode.setUint8(this.addr + 1, typ);
+    return this;
+  }
+  getVal() {
+    return this.bytecode.getFloat64(this.addr + 2);
+  }
+  setVal(v: number): ILoadC {
+    this.bytecode.setFloat64(this.addr + 2, v);
     return this;
   }
 }

@@ -16,7 +16,6 @@ import {
   StructView,
   MethodView,
   Int64View,
-  StringView,
   allocate,
   BoolView,
   LvalueView,
@@ -53,9 +52,9 @@ import {
   ILoadGlobal,
   IPackPtr,
   ILoadPtrSlot,
+  ConstantKind,
 } from "./instructions";
 import { MachineState, Thread } from "./machine";
-import { ArgContext } from "../antlr/GoParser";
 
 type EvalFn = (state: MachineState, t: Thread, go?: boolean) => void;
 
@@ -320,11 +319,21 @@ export const microcode: Record<Opcode, EvalFn> = {
     t.pc += IPop.size;
   },
   [Opcode.LoadC]: function (state: MachineState, t: Thread): void {
-    // @todo: this shouldn't always be loading floats...
     const instr = new ILoadC(state.bytecode, t.pc);
-    const val = Float64View.allocate(state).setValue(instr.val());
-
-    t.os.push(val.addr);
+    const typ = instr.getKind();
+    const val = instr.getVal();
+    switch (typ) {
+      case ConstantKind.Int64:
+        const f = Int64View.allocate(state).setValue(val);
+        t.os.push(f.addr);
+        break;
+      case ConstantKind.Float64:
+        const i = Float64View.allocate(state).setValue(val);
+        t.os.push(i.addr);
+        break;
+      default:
+        throw new Error("LoadC: unknown datatype");
+    }
     t.pc += ILoadC.size;
   },
   [Opcode.LoadGlobal]: function (state: MachineState, t: Thread): void {
@@ -417,7 +426,9 @@ const execBinaryOp = (state: MachineState, t: Thread, op: BinaryOp): void => {
 
   // @todo: should we have this check?
   if (lhsType !== rhsType) {
-    throw new Error("Can't perform binary operation on different data types!");
+    throw new Error(
+      `Can't perform binary operation on different data types! (${DataType[lhsType]}, ${DataType[rhsType]})`,
+    );
   }
 
   const f = binaryBuiltins.get(lhsType)?.get(op);
@@ -430,6 +441,13 @@ const execBinaryOp = (state: MachineState, t: Thread, op: BinaryOp): void => {
 
 type BinaryOpFn = (state: MachineState, lhs: Address, rhs: Address) => Address;
 
+const extractFloat64s = (heap: DataView, ...addrs: Address[]): number[] => {
+  return addrs.map((addr) => new Float64View(heap, addr).getValue());
+};
+const extractInt64s = (heap: DataView, ...addrs: Address[]): number[] => {
+  return addrs.map((addr) => new Int64View(heap, addr).getValue());
+};
+
 // @todo add more binary builtins, and reduce the duplication
 export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
   [
@@ -438,45 +456,29 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
       [
         BinaryOp.Add,
         (state, lhsAddr, rhsAddr) => {
-          const lhs = new Float64View(state.heap, lhsAddr);
-          const rhs = new Float64View(state.heap, rhsAddr);
+          const [lhs, rhs] = extractFloat64s(state.heap, lhsAddr, rhsAddr);
 
-          const lhsValue = lhs.getValue();
-          const rhsValue = rhs.getValue();
-          const resValue = lhsValue + rhsValue;
-
-          const res = Float64View.allocate(state);
-          res.setValue(resValue);
-
-          return res.addr;
+          const res = lhs + rhs;
+          const ret = Float64View.allocate(state).setValue(res);
+          return ret.addr;
         },
       ],
       [
         BinaryOp.Sub,
         (state, lhsAddr, rhsAddr) => {
-          const lhs = new Float64View(state.heap, lhsAddr);
-          const rhs = new Float64View(state.heap, rhsAddr);
+          const [lhs, rhs] = extractFloat64s(state.heap, lhsAddr, rhsAddr);
 
-          const lhsValue = lhs.getValue();
-          const rhsValue = rhs.getValue();
-          const resValue = lhsValue - rhsValue;
-
-          const res = Float64View.allocate(state);
-          res.setValue(resValue);
-
-          return res.addr;
+          const res = lhs - rhs;
+          const ret = Float64View.allocate(state).setValue(res);
+          return ret.addr;
         },
       ],
       [
         BinaryOp.Neq,
         (state, lhsAddr, rhsAddr) => {
-          const lhs = new Float64View(state.heap, lhsAddr);
-          const rhs = new Float64View(state.heap, rhsAddr);
+          const [lhs, rhs] = extractFloat64s(state.heap, lhsAddr, rhsAddr);
 
-          const lhsValue = lhs.getValue();
-          const rhsValue = rhs.getValue();
-
-          if (lhsValue !== rhsValue) {
+          if (lhs !== rhs) {
             return state.globals[Global["true"]];
           } else {
             return state.globals[Global["false"]];
@@ -486,12 +488,9 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
       [
         BinaryOp.Eq,
         (state, lhsAddr, rhsAddr) => {
-          const lhs = new Float64View(state.heap, lhsAddr);
-          const rhs = new Float64View(state.heap, rhsAddr);
+          const [lhs, rhs] = extractFloat64s(state.heap, lhsAddr, rhsAddr);
 
-          const lhsValue = lhs.getValue();
-          const rhsValue = rhs.getValue();
-          if (lhsValue === rhsValue) {
+          if (lhs === rhs) {
             return state.globals[Global["true"]];
           } else {
             return state.globals[Global["false"]];
@@ -501,47 +500,29 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
       [
         BinaryOp.Mul,
         (state, lhsAddr, rhsAddr) => {
-          const lhs = new Float64View(state.heap, lhsAddr);
-          const rhs = new Float64View(state.heap, rhsAddr);
+          const [lhs, rhs] = extractFloat64s(state.heap, lhsAddr, rhsAddr);
 
-          const lhsValue = lhs.getValue();
-          const rhsValue = rhs.getValue();
-
-          const resValue = lhsValue * rhsValue;
-
-          const res = Float64View.allocate(state);
-          res.setValue(resValue);
-
-          return res.addr;
+          const res = lhs * rhs;
+          const ret = Float64View.allocate(state).setValue(res);
+          return ret.addr;
         },
       ],
       [
         BinaryOp.Div,
         (state, lhsAddr, rhsAddr) => {
-          const lhs = new Float64View(state.heap, lhsAddr);
-          const rhs = new Float64View(state.heap, rhsAddr);
+          const [lhs, rhs] = extractFloat64s(state.heap, lhsAddr, rhsAddr);
 
-          const lhsValue = lhs.getValue();
-          const rhsValue = rhs.getValue();
-
-          const resValue = lhsValue / rhsValue;
-
-          const res = Float64View.allocate(state);
-          res.setValue(resValue);
-
-          return res.addr;
+          const res = lhs / rhs;
+          const ret = Float64View.allocate(state).setValue(res);
+          return ret.addr;
         },
       ],
       [
         BinaryOp.Leq,
         (state, lhsAddr, rhsAddr) => {
-          const lhs = new Float64View(state.heap, lhsAddr);
-          const rhs = new Float64View(state.heap, rhsAddr);
+          const [lhs, rhs] = extractFloat64s(state.heap, lhsAddr, rhsAddr);
 
-          const lhsValue = lhs.getValue();
-          const rhsValue = rhs.getValue();
-
-          if (lhsValue <= rhsValue) {
+          if (lhs <= rhs) {
             return state.globals[Global["true"]];
           } else {
             return state.globals[Global["false"]];
@@ -551,13 +532,9 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
       [
         BinaryOp.Geq,
         (state, lhsAddr, rhsAddr) => {
-          const lhs = new Float64View(state.heap, lhsAddr);
-          const rhs = new Float64View(state.heap, rhsAddr);
+          const [lhs, rhs] = extractFloat64s(state.heap, lhsAddr, rhsAddr);
 
-          const lhsValue = lhs.getValue();
-          const rhsValue = rhs.getValue();
-
-          if (lhsValue >= rhsValue) {
+          if (lhs >= rhs) {
             return state.globals[Global["true"]];
           } else {
             return state.globals[Global["false"]];
@@ -567,13 +544,8 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
       [
         BinaryOp.L,
         (state, lhsAddr, rhsAddr) => {
-          const lhs = new Float64View(state.heap, lhsAddr);
-          const rhs = new Float64View(state.heap, rhsAddr);
-
-          const lhsValue = lhs.getValue();
-          const rhsValue = rhs.getValue();
-
-          if (lhsValue < rhsValue) {
+          const [lhs, rhs] = extractFloat64s(state.heap, lhsAddr, rhsAddr);
+          if (lhs < rhs) {
             return state.globals[Global["true"]];
           } else {
             return state.globals[Global["false"]];
@@ -583,13 +555,125 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
       [
         BinaryOp.G,
         (state, lhsAddr, rhsAddr) => {
-          const lhs = new Float64View(state.heap, lhsAddr);
-          const rhs = new Float64View(state.heap, rhsAddr);
+          const [lhs, rhs] = extractFloat64s(state.heap, lhsAddr, rhsAddr);
 
-          const lhsValue = lhs.getValue();
-          const rhsValue = rhs.getValue();
+          if (lhs > rhs) {
+            return state.globals[Global["true"]];
+          } else {
+            return state.globals[Global["false"]];
+          }
+        },
+      ],
+    ]),
+  ],
+  [
+    DataType.Int64,
+    new Map([
+      [
+        BinaryOp.Add,
+        (state, lhsAddr, rhsAddr) => {
+          const [lhs, rhs] = extractInt64s(state.heap, lhsAddr, rhsAddr);
 
-          if (lhsValue > rhsValue) {
+          const res = lhs + rhs;
+          const ret = Int64View.allocate(state).setValue(res);
+          return ret.addr;
+        },
+      ],
+      [
+        BinaryOp.Sub,
+        (state, lhsAddr, rhsAddr) => {
+          const [lhs, rhs] = extractInt64s(state.heap, lhsAddr, rhsAddr);
+
+          const res = lhs - rhs;
+          const ret = Int64View.allocate(state).setValue(res);
+          return ret.addr;
+        },
+      ],
+      [
+        BinaryOp.Neq,
+        (state, lhsAddr, rhsAddr) => {
+          const [lhs, rhs] = extractInt64s(state.heap, lhsAddr, rhsAddr);
+
+          if (lhs !== rhs) {
+            return state.globals[Global["true"]];
+          } else {
+            return state.globals[Global["false"]];
+          }
+        },
+      ],
+      [
+        BinaryOp.Eq,
+        (state, lhsAddr, rhsAddr) => {
+          const [lhs, rhs] = extractInt64s(state.heap, lhsAddr, rhsAddr);
+
+          if (lhs === rhs) {
+            return state.globals[Global["true"]];
+          } else {
+            return state.globals[Global["false"]];
+          }
+        },
+      ],
+      [
+        BinaryOp.Mul,
+        (state, lhsAddr, rhsAddr) => {
+          const [lhs, rhs] = extractInt64s(state.heap, lhsAddr, rhsAddr);
+
+          const res = lhs * rhs;
+          const ret = Int64View.allocate(state).setValue(res);
+          return ret.addr;
+        },
+      ],
+      [
+        BinaryOp.Div,
+        (state, lhsAddr, rhsAddr) => {
+          const [lhs, rhs] = extractInt64s(state.heap, lhsAddr, rhsAddr);
+
+          const res = Math.floor(lhs / rhs);
+          const ret = Int64View.allocate(state).setValue(res);
+          return ret.addr;
+        },
+      ],
+      [
+        BinaryOp.Leq,
+        (state, lhsAddr, rhsAddr) => {
+          const [lhs, rhs] = extractInt64s(state.heap, lhsAddr, rhsAddr);
+
+          if (lhs <= rhs) {
+            return state.globals[Global["true"]];
+          } else {
+            return state.globals[Global["false"]];
+          }
+        },
+      ],
+      [
+        BinaryOp.Geq,
+        (state, lhsAddr, rhsAddr) => {
+          const [lhs, rhs] = extractInt64s(state.heap, lhsAddr, rhsAddr);
+
+          if (lhs >= rhs) {
+            return state.globals[Global["true"]];
+          } else {
+            return state.globals[Global["false"]];
+          }
+        },
+      ],
+      [
+        BinaryOp.L,
+        (state, lhsAddr, rhsAddr) => {
+          const [lhs, rhs] = extractInt64s(state.heap, lhsAddr, rhsAddr);
+          if (lhs < rhs) {
+            return state.globals[Global["true"]];
+          } else {
+            return state.globals[Global["false"]];
+          }
+        },
+      ],
+      [
+        BinaryOp.G,
+        (state, lhsAddr, rhsAddr) => {
+          const [lhs, rhs] = extractInt64s(state.heap, lhsAddr, rhsAddr);
+
+          if (lhs > rhs) {
             return state.globals[Global["true"]];
           } else {
             return state.globals[Global["false"]];
@@ -604,6 +688,9 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
       [
         BinaryOp.Eq,
         (state, lhsAddr, rhsAddr) => {
+          /**
+           * Booleans are globals, so we can directly compare addresses.
+           */
           if (lhsAddr === rhsAddr) {
             return state.globals[Global["true"]];
           } else {
@@ -706,8 +793,7 @@ const unaryBuiltins = new Map<DataType, Map<UnaryOp, UnaryOpFn>>([
       [
         UnaryOp.Sub,
         (state, addr) => {
-          const num = new Float64View(state.heap, addr);
-          const val = num.getValue();
+          const val = new Float64View(state.heap, addr).getValue();
 
           const res = Float64View.allocate(state);
           res.setValue(-val);
@@ -715,7 +801,24 @@ const unaryBuiltins = new Map<DataType, Map<UnaryOp, UnaryOpFn>>([
           return res.addr;
         },
       ],
-      [UnaryOp.Add, (state, addr) => addr],
+      [UnaryOp.Add, (_state, addr) => addr],
+    ]),
+  ],
+  [
+    DataType.Int64,
+    new Map([
+      [
+        UnaryOp.Sub,
+        (state, addr) => {
+          const val = new Int64View(state.heap, addr).getValue();
+
+          const res = Int64View.allocate(state);
+          res.setValue(-val);
+
+          return res.addr;
+        },
+      ],
+      [UnaryOp.Add, (_state, addr) => addr],
     ]),
   ],
 ]);
@@ -771,8 +874,7 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
 
     // Layout of the Mutex struct is defined in compiler.ts
     const locked = new BoolView(state.heap, mu.getField(0));
-    // @todo: Float64View should be Int64View
-    const id = new Float64View(state.heap, mu.getField(1));
+    const id = new Int64View(state.heap, mu.getField(1));
 
     if (locked.get()) {
       // The mutex is locked by someone else. We'll put this thread to sleep,
@@ -799,8 +901,7 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
     const mu = new StructView(state.heap, _mu.getValue());
 
     const locked = new BoolView(state.heap, mu.getField(0));
-    // @todo: Float64View should be Int64View
-    const id = new Float64View(state.heap, mu.getField(1));
+    const id = new Int64View(state.heap, mu.getField(1));
 
     if (locked.get()) {
       mu.setField(0, state.globals[Global["false"]]);
