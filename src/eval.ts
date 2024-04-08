@@ -52,8 +52,10 @@ import {
   IPackPtr,
   ILoadPtrSlot,
   ConstantKind,
+  IChanWrite,
 } from "./instructions";
 import { MachineState, Thread } from "./machine";
+import { Channel } from "./compiler";
 
 type EvalFn = (state: MachineState, t: Thread, go?: boolean) => void;
 
@@ -429,131 +431,102 @@ export const microcode: Record<Opcode, EvalFn> = {
 
     t.pc += ILoadStructField.size;
   },
+  [Opcode.ChanRead]: function (state: MachineState, t: Thread): void {
+    const chanAddr = t.os.pop();
+    const { id, status, data } = Channel.view(state.heap, chanAddr);
+
+    // Init channel ID on first use.
+    if (id.getValue() === 0) {
+      id.setValue(state.getLockId());
+    }
+
+    switch (status.getValue()) {
+      case 1: // The channel has a pending value. Read and move on.
+        status.setValue(0);
+        state.pub(t.id, "chan-read", id.getValue());
+        t.os.push(data.getValue());
+        t.pc += IChanWrite.size;
+        break;
+      case 0: // Nothin' going on. Wait for someone to write.
+        status.setValue(-1);
+        t.isLive = false;
+        state.sub(
+          t.id,
+          (t, src) => {
+            t.isLive = true;
+          },
+          "chan-send",
+          id.getValue(),
+        );
+        t.os.push(chanAddr);
+        break;
+      case -1: // Someone else is waiting to read. We'll sleep and wait as well.
+        t.isLive = false;
+        state.sub(
+          t.id,
+          (t, src) => {
+            t.isLive = true;
+          },
+          "chan-send",
+          id.getValue(),
+        );
+        t.os.push(chanAddr);
+        break;
+      default:
+        throw new Error(`unexpected channel status ${status.getValue()}`);
+    }
+  },
+  [Opcode.ChanWrite]: function (state: MachineState, t: Thread): void {
+    const chanAddr = t.os.pop();
+    const { id, status, data } = Channel.view(state.heap, chanAddr);
+    const towrite = t.os.pop();
+
+    // Init channel ID on first use.
+    if (id.getValue() === 0) {
+      id.setValue(state.getLockId());
+    }
+
+    switch (status.getValue()) {
+      case 1: // The channel has a pending value. Go to sleep.
+        t.isLive = false;
+        state.sub(
+          t.id,
+          (t, src) => {
+            t.isLive = true;
+          },
+          "chan-read",
+          id.getValue(),
+        );
+        // Push stuff back to OS for later use.
+        t.os.push(towrite);
+        t.os.push(chanAddr);
+        break;
+      case 0: // Nothing goin on. Wait for someone to read.
+        copy(state, towrite, data.getValue());
+        status.setValue(1);
+        t.isLive = false;
+        state.sub(
+          t.id,
+          (t, src) => {
+            t.isLive = true;
+          },
+          "chan-read",
+          id.getValue(),
+        );
+        t.pc += IChanWrite.size;
+      case -1: // Someone is waiting to read.
+        copy(state, towrite, data.getValue());
+        status.setValue(1);
+        state.pub(t.id, "chan-send", id.getValue());
+        t.pc += IChanWrite.size;
+        break;
+      default:
+        throw new Error(`unexpected channel status ${status.getValue()}`);
+    }
+  },
   [Opcode.Done]: function (state: MachineState, t: Thread): void {
     throw new Error("Done not implemented.");
   },
-};
-
-/**
- * The microcode for [Call] and [CallGo].
- */
-const call = (state: MachineState, t: Thread, go: boolean) => {
-  const instr = new ICall(state.bytecode, t.pc);
-  const argc = instr.argc();
-
-  const args: Address[] = [];
-  for (let i = 0; i < argc; ++i) {
-    // Beware that here, we are cloning the arguments! This is in line with
-    // how Golang passes arguments i.e. everything is passed by value.
-    args.push(clone(state, t.os.pop()));
-  }
-  args.reverse();
-
-  const fnAddr = t.os.pop();
-  const fnKind = NodeView.getDataType(state.heap, fnAddr);
-  switch (fnKind) {
-    case DataType.Fn: {
-      const callFrame = CallFrameView.allocate(state);
-      callFrame.setPc(t.pc + ICall.size);
-      callFrame.setEnv(t.env);
-
-      t.rts.push(callFrame.addr);
-
-      const frame = FrameView.allocate(state, argc);
-      for (let i = 0; i < argc; ++i) {
-        frame.set(i, args[i]);
-      }
-
-      const fn = new FnView(state.heap, fnAddr);
-      const newEnv = fn.getEnv().extend(state, frame.addr);
-
-      t.env = newEnv;
-      t.pc = fn.getPc();
-
-      if (go) {
-        t.lastPc = fn.getLast();
-      }
-
-      break;
-    }
-    case DataType.Builtin:
-      // We don't bother with creating a new frame, or extending any environment.
-      const builtin = new BuiltinView(state.heap, fnAddr);
-      const bifn = builtinFns[builtin.getId()];
-      const { restore } = bifn(state, t, args);
-
-      if (go) {
-        t.lastPc = t.pc;
-      }
-
-      if (restore) {
-        // What is there to restore? The args...
-        t.os.push(fnAddr);
-        for (const arg of args) {
-          t.os.push(arg);
-        }
-      } else {
-        t.pc += ICall.size;
-      }
-
-      break;
-    case DataType.Method: {
-      const mthd = new MethodView(state.heap, fnAddr);
-
-      const frame = FrameView.allocate(state, argc + 1);
-      frame.set(0, mthd.receiver()); // also set the receiver in the frame of parameters
-      for (let i = 0; i < argc; ++i) {
-        frame.set(i + 1, args[i]);
-      }
-
-      const methodType = NodeView.getDataType(state.heap, mthd.fn());
-      // A method might be builtin, so we'll have to dispatch accordingly.
-      switch (methodType) {
-        case DataType.Fn:
-          const callFrame = CallFrameView.allocate(state);
-          callFrame.setPc(t.pc + ICall.size);
-          callFrame.setEnv(t.env);
-
-          t.rts.push(callFrame.addr);
-
-          const fn = new FnView(state.heap, mthd.fn());
-          const newEnv = fn.getEnv().extend(state, frame.addr);
-
-          t.env = newEnv;
-          t.pc = fn.getPc();
-
-          if (go) {
-            t.lastPc = fn.getLast();
-          }
-          break;
-        case DataType.Builtin:
-          const builtin = new BuiltinView(state.heap, mthd.fn());
-          const bifn = builtinFns[builtin.getId()];
-          const { restore } = bifn(state, t, args, { mthd });
-
-          if (go) {
-            t.lastPc = t.pc;
-          }
-
-          if (restore) {
-            // What is there to restore? The args...
-            t.os.push(fnAddr);
-            for (const arg of args) {
-              t.os.push(arg);
-            }
-          } else {
-            t.pc += ICall.size;
-          }
-          break;
-        default:
-          throw new Error("unexpected method type");
-      }
-
-      break;
-    }
-    default:
-      throw new Error(`Uncallable object ${fnKind}`);
-  }
 };
 
 const execBinaryOp = (state: MachineState, t: Thread, op: BinaryOp): void => {
@@ -877,6 +850,11 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
         },
       ],
     ]),
+  ],
+  [
+    // @todo: add string concat (+) and string eq (==)
+    DataType.String,
+    new Map([]),
   ],
 ]);
 

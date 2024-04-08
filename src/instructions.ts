@@ -31,6 +31,8 @@ export const enum Opcode {
   PackStruct,
   LoadStructField,
   LoadStructFieldLoc,
+  ChanRead,
+  ChanWrite,
   Done,
 }
 
@@ -892,6 +894,34 @@ export class ILoadStructFieldLoc extends InstrView {
   }
 }
 
+export class IChanRead extends InstrView {
+  static size = 1;
+  readonly size = 1;
+
+  static emit(w: Emitter, ctx?: ParserRuleContext): IChanRead {
+    const pc = w.reserve(Opcode.ChanRead, IChanRead.size, ctx);
+    return new IChanRead(w.code(), pc);
+  }
+
+  toString(): string {
+    return `ChanRead`;
+  }
+}
+
+export class IChanWrite extends InstrView {
+  static size = 1;
+  readonly size = 1;
+
+  static emit(w: Emitter, ctx?: ParserRuleContext): IChanWrite {
+    const pc = w.reserve(Opcode.ChanWrite, IChanWrite.size, ctx);
+    return new IChanWrite(w.code(), pc);
+  }
+
+  toString(): string {
+    return `ChanWrite`;
+  }
+}
+
 export class IDone extends InstrView {
   static size = 1;
   readonly size = 1;
@@ -937,6 +967,8 @@ const opcodeClass: Record<Opcode, { new (bytecode: DataView, addr: number): Inst
   [Opcode.PackStruct]: IPackStruct,
   [Opcode.LoadStructField]: ILoadStructField,
   [Opcode.LoadStructFieldLoc]: ILoadStructFieldLoc,
+  [Opcode.ChanRead]: IChanRead,
+  [Opcode.ChanWrite]: IChanWrite,
   [Opcode.Done]: IDone,
 };
 
