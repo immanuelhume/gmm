@@ -24,6 +24,7 @@ import GoParser, {
   LitBoolContext,
   LitNilContext,
   LpointerContext,
+  LitFuncContext,
 } from "../antlr/GoParser";
 import {
   AssignmentContext,
@@ -1072,7 +1073,7 @@ export class Assembler extends GoVisitor<number> {
 
     const [frame, offset] = this.env.lookupExn("main", ctx);
     ILoadName.emit(this.bc).setFrame(frame).setOffset(offset);
-    ICall.emit(this.bc).setArgc(0); // call [main]
+    ICall.emit(this.bc).setArgc(0).setGo(false); // call [main]
     IDone.emit(this.bc); // last instruction
     this.doneAt = this.bc.prevWc();
 
@@ -1386,7 +1387,7 @@ export class Assembler extends GoVisitor<number> {
     // Note that a [Go] is always followed immediately by [Call]. We'll need to
     // rely on this at runtime.
     IGo.emit(this.bc, ctx);
-    ICall.emit(this.bc, ctx).setArgc(argc);
+    ICall.emit(this.bc, ctx).setArgc(argc).setGo(true);
 
     return 0;
   };
@@ -1538,7 +1539,7 @@ export class Assembler extends GoVisitor<number> {
       this.visit(fn); // emit code to evaluate the callable thing
       this.visit(args); // emit code to evaluate each arg
 
-      ICall.emit(this.bc, ctx).setArgc(argc);
+      ICall.emit(this.bc, ctx).setArgc(argc).setGo(false);
 
       const fnType = _fnType[0].data;
       switch (fnType.kind) {
@@ -1734,6 +1735,49 @@ export class Assembler extends GoVisitor<number> {
 
   visitLitNil = (_ctx: LitNilContext): number => {
     ILoadGlobal.emit(this.bc).setGlobal(Global["nil"]);
+    return 1;
+  };
+
+  visitLitFunc = (ctx: LitFuncContext): number => {
+    // @todo: identical to visitFuncDecl (except the assignment) - let's put
+    // them into a common fn?
+    const ldf = ILoadFn.emit(this.bc, ctx);
+    const goto = IGoto.emit(this.bc);
+    const params = ctx
+      .signature()
+      .params()
+      .param_list()
+      .map((param) => {
+        return param.name().getText();
+      });
+
+    const fnPc = this.bc.wc();
+    ldf.setPc(fnPc).setArgc(params.length);
+
+    this.env.pushFrame(params);
+    this.tenv.pushFrame(); // push a type env frame, and then set types for the params
+    ctx
+      .signature()
+      .params()
+      .param_list()
+      .forEach((param) => {
+        const name = param.name().getText();
+        const typ = this.resolveTypeExn(param.type_());
+        this.tenv.set(name, typ);
+      });
+    this.visit(ctx.funcBody()); // compile the body
+    this.tenv.popFrame();
+    this.env.popFrame();
+
+    // Note that we *always* emit this, even if the function body has explicit
+    // return statement(s). These instructions will not affect those functions
+    // (since we'll never reach these lines). Instead these are meant for
+    // functions without return statements.
+    IReturn.emit(this.bc);
+
+    ldf.setLast(this.bc.prevWc()); // goroutines need this info to know where to stop
+    goto.setWhere(this.bc.wc());
+
     return 1;
   };
 

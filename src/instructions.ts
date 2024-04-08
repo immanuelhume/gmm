@@ -373,14 +373,14 @@ export class IGoto extends InstrView {
  * Call a function. There should be [argc] arguments on the operand stack (in
  * reverse order when read from top down).
  *
- * ┌────────┬──────┐
- * │ opcode │ argc │
- * └────────┴──────┘
- *  1        1
+ * ┌────────┬──────┬───┐
+ * │ opcode │ argc │go?│
+ * └────────┴──────┴───┘
+ *  1        1      1
  */
 export class ICall extends InstrView {
-  static size = 2;
-  readonly size = 2;
+  static size = 3;
+  readonly size = 3;
 
   static emit(w: Emitter, ctx?: ParserRuleContext): ICall {
     const pc = w.reserve(Opcode.Call, ICall.size, ctx);
@@ -388,7 +388,7 @@ export class ICall extends InstrView {
   }
 
   toString(): string {
-    return `Call argc:${this.argc()}`;
+    return `Call argc:${this.argc()} go?:${this.go()}`;
   }
 
   constructor(bytecode: DataView, addr: number) {
@@ -399,8 +399,19 @@ export class ICall extends InstrView {
   argc(): number {
     return this.bytecode.getUint8(this.addr + 1);
   }
-  setArgc(argc: number) {
-    return this.bytecode.setUint8(this.addr + 1, argc);
+  setArgc(argc: number): ICall {
+    this.bytecode.setUint8(this.addr + 1, argc);
+    return this;
+  }
+  /**
+   * Whether this call is actually the start of a new goroutine.
+   */
+  go(): boolean {
+    return this.bytecode.getUint8(this.addr + 2) !== 0;
+  }
+  setGo(go: boolean): ICall {
+    this.bytecode.setUint8(this.addr + 2, go ? 1 : 0);
+    return this;
   }
 }
 

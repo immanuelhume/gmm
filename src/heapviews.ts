@@ -60,7 +60,6 @@ export enum Global {
 export enum BuiltinId {
   "dbg" = 0x00,
   "panic",
-  "new",
   "Mutex::Lock",
   "Mutex::Unlock",
 }
@@ -84,7 +83,7 @@ export const wordSize = 8;
  *
  * @return Address of the newly allocated node.
  */
-export const allocate = (mem: Memory, dataType: DataType, nvals: number, nrefs: number): number => {
+const allocate = (mem: Memory, dataType: DataType, nvals: number, nrefs: number): number => {
   const addr = mem.free;
   const totalSize = 1 + nvals + nrefs;
   mem.free += wordSize * totalSize;

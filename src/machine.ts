@@ -32,15 +32,17 @@ export interface Thread extends Registers {
 type Event = "chan-send" | "chan-read" | "mutex-lock" | "mutex-unlock" | "fin";
 
 type ThreadId = number;
-type OnEvent = (t: Thread) => void;
+type OnEvent = (t: Thread, src: ThreadId) => void;
 
 interface ThreadOps {
-  pub: (e: Event, eId: number) => void;
-  sub: (e: Event, eId: number, threadId: ThreadId, f: OnEvent) => void;
+  pub: (src: ThreadId, e: Event, ...eId: number[]) => void;
+  sub: (threadId: ThreadId, f: OnEvent, e: Event, ...eId: number[]) => void;
   /**
    * Forks a thread. All registers are copied.
    */
   fork: (thread: Thread) => Thread;
+
+  getLockId: () => number;
 }
 
 /**
@@ -61,17 +63,26 @@ export interface MachineState extends Memory, ThreadOps {
 
 export class ThreadCtl implements ThreadOps {
   private nextThreadId;
+  private nextLockId = 1;
   private threads: Map<ThreadId, Thread> = new Map();
 
   private liveThreads: Thread[] = [];
   private deadThreads: Thread[] = [];
 
-  private subs: Map<Event, Map<number, [ThreadId, OnEvent][]>> = new Map();
+  private subs: Record<string, [ThreadId, OnEvent][]> = {};
 
   constructor(init: Thread) {
     this.liveThreads.push(init);
 
+    this.threads.set(init.id, init);
     this.nextThreadId = init.id + 1;
+  }
+
+  /**
+   * Retrieves a unique ID for use in some lock.
+   */
+  getLockId() {
+    return this.nextLockId++;
   }
 
   /**
@@ -139,34 +150,34 @@ export class ThreadCtl implements ThreadOps {
     };
     this.threads.set(newThread.id, newThread);
     this.liveThreads.push(newThread);
-    this.sub("fin", oldThread.id, newThread.id, (thread) => (thread.isZombie = true));
+    this.sub(newThread.id, (thread) => (thread.isZombie = true), "fin", oldThread.id);
     return newThread;
   }
 
-  pub(e: Event, eId: number): void {
-    const es = this.subs.get(e);
-    if (es === undefined) return;
-    const fs = es.get(eId);
+  /**
+   * @param threadId Thread ID of the thread which called this
+   * @param e        Event
+   * @param eId      Event infos
+   */
+  pub(src: ThreadId, e: Event, ...eId: number[]): void {
+    const key = JSON.stringify([e, ...eId]);
+    const fs = this.subs[key];
     if (fs === undefined) return;
     for (const [threadId, f] of fs) {
       const t = this.threads.get(threadId);
       if (t === undefined) return; // @todo is this an error?
-      f(t);
+      f(t, src);
     }
-    es.delete(eId);
+    delete this.subs[key];
   }
 
-  sub(e: Event, eId: number, threadId: ThreadId, f: OnEvent): void {
-    let es = this.subs.get(e);
-    if (es === undefined) {
-      es = new Map();
-      this.subs.set(e, es);
-    }
-    const fs = es.get(eId);
+  sub(threadId: ThreadId, f: OnEvent, e: Event, ...eId: number[]): void {
+    const key = JSON.stringify([e, ...eId]);
+    let fs = this.subs[key];
     if (fs === undefined) {
-      es.set(eId, [[threadId, f]]);
-    } else {
-      fs.push([threadId, f]);
+      fs = [];
+      this.subs[key] = fs;
     }
+    fs.push([threadId, f]);
   }
 }

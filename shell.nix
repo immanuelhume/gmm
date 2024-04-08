@@ -8,4 +8,9 @@ pkgs.mkShellNoCC {
     antlr4_12
     nodejs_21
   ];
+
+  shellHook = ''
+    npm set prefix ~/.npm-global
+	export PATH=$PATH:~/.npm-global/bin
+  '';
 }

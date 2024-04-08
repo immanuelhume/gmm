@@ -16,7 +16,6 @@ import {
   StructView,
   MethodView,
   Int64View,
-  allocate,
   BoolView,
   LvalueView,
   LvalueKind,
@@ -74,7 +73,7 @@ export const microcode: Record<Opcode, EvalFn> = {
     execLogicalOp(state, t, instr.op());
     t.pc += ILogicalOp.size;
   },
-  [Opcode.Call]: function (state: MachineState, t: Thread, go?: boolean): void {
+  [Opcode.Call]: function (state: MachineState, t: Thread): void {
     const instr = new ICall(state.bytecode, t.pc);
     const argc = instr.argc();
 
@@ -107,7 +106,7 @@ export const microcode: Record<Opcode, EvalFn> = {
         t.env = newEnv;
         t.pc = fn.getPc();
 
-        if (go) {
+        if (instr.go()) {
           t.lastPc = fn.getLast();
         }
 
@@ -117,12 +116,21 @@ export const microcode: Record<Opcode, EvalFn> = {
         // We don't bother with creating a new frame, or extending any environment.
         const builtin = new BuiltinView(state.heap, fnAddr);
         const bifn = builtinFns[builtin.getId()];
-        bifn(state, t, args);
+        const { restore } = bifn(state, t, args);
 
-        if (go) {
+        if (instr.go()) {
           t.lastPc = t.pc;
         }
-        t.pc += ICall.size;
+
+        if (restore) {
+          // What is there to restore? The args...
+          t.os.push(fnAddr);
+          for (const arg of args) {
+            t.os.push(arg);
+          }
+        } else {
+          t.pc += ICall.size;
+        }
 
         break;
       case DataType.Method: {
@@ -150,19 +158,28 @@ export const microcode: Record<Opcode, EvalFn> = {
             t.env = newEnv;
             t.pc = fn.getPc();
 
-            if (go) {
+            if (instr.go()) {
               t.lastPc = fn.getLast();
             }
             break;
           case DataType.Builtin:
             const builtin = new BuiltinView(state.heap, mthd.fn());
             const bifn = builtinFns[builtin.getId()];
-            bifn(state, t, args, { mthd });
+            const { restore } = bifn(state, t, args, { mthd });
 
-            if (go) {
+            if (instr.go()) {
               t.lastPc = t.pc;
             }
-            t.pc += ICall.size;
+
+            if (restore) {
+              // What is there to restore? The args...
+              t.os.push(fnAddr);
+              for (const arg of args) {
+                t.os.push(arg);
+              }
+            } else {
+              t.pc += ICall.size;
+            }
             break;
           default:
             throw new Error("unexpected method type");
@@ -208,7 +225,7 @@ export const microcode: Record<Opcode, EvalFn> = {
         t.pc = frame.getPc();
         break;
       case DataType.BlockFrame:
-        return microcode[Opcode.Return](state, t);
+        break; // don't do anything - we'll re-execute this instruction
       default:
         throw new Error("Unexpected data type in runtime stack!"); // @todo: format the error
     }
@@ -415,6 +432,128 @@ export const microcode: Record<Opcode, EvalFn> = {
   [Opcode.Done]: function (state: MachineState, t: Thread): void {
     throw new Error("Done not implemented.");
   },
+};
+
+/**
+ * The microcode for [Call] and [CallGo].
+ */
+const call = (state: MachineState, t: Thread, go: boolean) => {
+  const instr = new ICall(state.bytecode, t.pc);
+  const argc = instr.argc();
+
+  const args: Address[] = [];
+  for (let i = 0; i < argc; ++i) {
+    // Beware that here, we are cloning the arguments! This is in line with
+    // how Golang passes arguments i.e. everything is passed by value.
+    args.push(clone(state, t.os.pop()));
+  }
+  args.reverse();
+
+  const fnAddr = t.os.pop();
+  const fnKind = NodeView.getDataType(state.heap, fnAddr);
+  switch (fnKind) {
+    case DataType.Fn: {
+      const callFrame = CallFrameView.allocate(state);
+      callFrame.setPc(t.pc + ICall.size);
+      callFrame.setEnv(t.env);
+
+      t.rts.push(callFrame.addr);
+
+      const frame = FrameView.allocate(state, argc);
+      for (let i = 0; i < argc; ++i) {
+        frame.set(i, args[i]);
+      }
+
+      const fn = new FnView(state.heap, fnAddr);
+      const newEnv = fn.getEnv().extend(state, frame.addr);
+
+      t.env = newEnv;
+      t.pc = fn.getPc();
+
+      if (go) {
+        t.lastPc = fn.getLast();
+      }
+
+      break;
+    }
+    case DataType.Builtin:
+      // We don't bother with creating a new frame, or extending any environment.
+      const builtin = new BuiltinView(state.heap, fnAddr);
+      const bifn = builtinFns[builtin.getId()];
+      const { restore } = bifn(state, t, args);
+
+      if (go) {
+        t.lastPc = t.pc;
+      }
+
+      if (restore) {
+        // What is there to restore? The args...
+        t.os.push(fnAddr);
+        for (const arg of args) {
+          t.os.push(arg);
+        }
+      } else {
+        t.pc += ICall.size;
+      }
+
+      break;
+    case DataType.Method: {
+      const mthd = new MethodView(state.heap, fnAddr);
+
+      const frame = FrameView.allocate(state, argc + 1);
+      frame.set(0, mthd.receiver()); // also set the receiver in the frame of parameters
+      for (let i = 0; i < argc; ++i) {
+        frame.set(i + 1, args[i]);
+      }
+
+      const methodType = NodeView.getDataType(state.heap, mthd.fn());
+      // A method might be builtin, so we'll have to dispatch accordingly.
+      switch (methodType) {
+        case DataType.Fn:
+          const callFrame = CallFrameView.allocate(state);
+          callFrame.setPc(t.pc + ICall.size);
+          callFrame.setEnv(t.env);
+
+          t.rts.push(callFrame.addr);
+
+          const fn = new FnView(state.heap, mthd.fn());
+          const newEnv = fn.getEnv().extend(state, frame.addr);
+
+          t.env = newEnv;
+          t.pc = fn.getPc();
+
+          if (go) {
+            t.lastPc = fn.getLast();
+          }
+          break;
+        case DataType.Builtin:
+          const builtin = new BuiltinView(state.heap, mthd.fn());
+          const bifn = builtinFns[builtin.getId()];
+          const { restore } = bifn(state, t, args, { mthd });
+
+          if (go) {
+            t.lastPc = t.pc;
+          }
+
+          if (restore) {
+            // What is there to restore? The args...
+            t.os.push(fnAddr);
+            for (const arg of args) {
+              t.os.push(arg);
+            }
+          } else {
+            t.pc += ICall.size;
+          }
+          break;
+        default:
+          throw new Error("unexpected method type");
+      }
+
+      break;
+    }
+    default:
+      throw new Error(`Uncallable object ${fnKind}`);
+  }
 };
 
 const execBinaryOp = (state: MachineState, t: Thread, op: BinaryOp): void => {
@@ -824,14 +963,22 @@ const unaryBuiltins = new Map<DataType, Map<UnaryOp, UnaryOpFn>>([
 ]);
 
 interface BuiltinEvalContext {
-  // Address of the method, if the builtin is a method.
+  /**
+   * Address of the method, if the builtin is a method.
+   */
   mthd?: MethodView;
 }
+interface BuiltinEvalResult {
+  /**
+   * Whether to restore the thread's state.
+   */
+  restore?: boolean;
+}
 
-type BuiltinEvalFn = (state: MachineState, t: Thread, args: Address[], ctx?: BuiltinEvalContext) => void;
+type BuiltinEvalFn = (state: MachineState, t: Thread, args: Address[], ctx?: BuiltinEvalContext) => BuiltinEvalResult;
 
 const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
-  [BuiltinId["dbg"]]: function (state: MachineState, t: Thread, args: Address[]): void {
+  [BuiltinId["dbg"]]: function (state: MachineState, t: Thread, args: Address[]) {
     const reprs = args.map((arg) => NodeView.of(state.heap, arg, { strPool: state.strPool }).toString()).join(" ");
     const lineno = state.srcMap.get(t.pc);
     if (lineno !== undefined) {
@@ -839,8 +986,9 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
     } else {
       console.log(reprs);
     }
+    return {};
   },
-  [BuiltinId["panic"]]: function (state: MachineState, t: Thread, args: number[]): void {
+  [BuiltinId["panic"]]: function (state: MachineState, t: Thread, args: number[]) {
     const reprs = args.map((arg) => NodeView.of(state.heap, arg, { strPool: state.strPool }).toString()).join(" ");
     console.log("\x1b[31m", "panic:", reprs, "\x1b[0m");
     const lineno = state.srcMap.get(t.pc);
@@ -849,22 +997,7 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
     }
     throw new PanicError(reprs); // we should never recover from this
   },
-  [BuiltinId["new"]]: function (state: MachineState, t: Thread, args: number[]): void {
-    const typ = args[0];
-    const nvals = args[1];
-    const nrefs = args[2];
-    const ptr = PointerView.allocate(state);
-
-    const addr = allocate(state, typ, nvals, nrefs);
-    ptr.setValue(addr);
-    t.os.push(ptr.addr);
-  },
-  [BuiltinId["Mutex::Lock"]]: function (
-    state: MachineState,
-    t: Thread,
-    _args: number[],
-    ctx?: BuiltinEvalContext,
-  ): void {
+  [BuiltinId["Mutex::Lock"]]: function (state: MachineState, t: Thread, _args: number[], ctx?: BuiltinEvalContext) {
     if (ctx?.mthd === undefined) {
       throw new Error("could not access method for Mutex::Lock");
     }
@@ -879,34 +1012,55 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
     if (locked.get()) {
       // The mutex is locked by someone else. We'll put this thread to sleep,
       // and subscribe to when it gets unlocked.
-      //
-      // @todo: what should the subscription function do? maybe we need to adjust
-      // the program counter? since we need to try unlocking again when it wakes
       t.isLive = false;
-      state.sub("mutex-unlock", id.getValue(), t.id, (t) => (t.isLive = true));
+      state.sub(
+        t.id,
+        (t, _src) => {
+          t.isLive = true;
+        },
+        "mutex-unlock",
+        id.getValue(),
+      );
+      // @todo: check if this sub here works. The intent is to put the thread
+      // back to sleep, if someone else got to lock the mutex before it while
+      // it was waiting.
+      state.sub(
+        t.id,
+        (t, src) => {
+          if (src === t.id) return;
+          t.isLive = false;
+        },
+        "mutex-lock",
+        id.getValue(),
+      );
+      return { restore: true };
     } else {
       mu.setField(0, state.globals[Global["true"]]);
+      if (id.getValue() === 0) {
+        // An ID of zero means the mutex has not been access before. We
+        // initialize it now by getting a unique lock ID.
+        id.setValue(state.getLockId());
+      }
+      return {};
     }
   },
-  [BuiltinId["Mutex::Unlock"]]: function (
-    state: MachineState,
-    _t: Thread,
-    _args: number[],
-    ctx?: BuiltinEvalContext,
-  ): void {
+  [BuiltinId["Mutex::Unlock"]]: function (state: MachineState, t: Thread, _args: number[], ctx?: BuiltinEvalContext) {
     if (ctx?.mthd === undefined) {
       throw new Error("could not access method for Mutex::Lock");
     }
-    const _mu = new PointerView(state.heap, ctx.mthd.receiver() /* pointer to the mutex */);
+    const _mu = new PointerView(state.heap, ctx.mthd.receiver() /* address of pointer to the mutex */);
     const mu = new StructView(state.heap, _mu.getValue());
 
+    // Layout of the Mutex struct is defined in compiler.ts
     const locked = new BoolView(state.heap, mu.getField(0));
     const id = new Int64View(state.heap, mu.getField(1));
 
     if (locked.get()) {
       mu.setField(0, state.globals[Global["false"]]);
-      state.pub("mutex-unlock", id.getValue());
+      state.pub(t.id, "mutex-unlock", id.getValue());
     }
+
+    return {};
   },
 };
 
