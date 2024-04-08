@@ -1012,9 +1012,6 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
     if (locked.get()) {
       // The mutex is locked by someone else. We'll put this thread to sleep,
       // and subscribe to when it gets unlocked.
-      //
-      // @todo: currently all threads get woken up - but the first to be
-      // scheduled will lock it. But the other threads are not notified of this!
       t.isLive = false;
       state.sub(
         t.id,
@@ -1022,6 +1019,18 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
           t.isLive = true;
         },
         "mutex-unlock",
+        id.getValue(),
+      );
+      // @todo: check if this sub here works. The intent is to put the thread
+      // back to sleep, if someone else got to lock the mutex before it while
+      // it was waiting.
+      state.sub(
+        t.id,
+        (t, src) => {
+          if (src === t.id) return;
+          t.isLive = false;
+        },
+        "mutex-lock",
         id.getValue(),
       );
       return { restore: true };
@@ -1039,9 +1048,10 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
     if (ctx?.mthd === undefined) {
       throw new Error("could not access method for Mutex::Lock");
     }
-    const _mu = new PointerView(state.heap, ctx.mthd.receiver() /* pointer to the mutex */);
+    const _mu = new PointerView(state.heap, ctx.mthd.receiver() /* address of pointer to the mutex */);
     const mu = new StructView(state.heap, _mu.getValue());
 
+    // Layout of the Mutex struct is defined in compiler.ts
     const locked = new BoolView(state.heap, mu.getField(0));
     const id = new Int64View(state.heap, mu.getField(1));
 
