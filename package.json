@@ -12,7 +12,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "antlr4": "^4.13.1-patch-1"
+    "antlr4": "^4.13.1-patch-1",
+    "typescript-language-server": "^4.3.3"
   },
   "devDependencies": {
     "@types/node": "^20.11.25",
