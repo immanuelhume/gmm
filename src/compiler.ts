@@ -847,6 +847,8 @@ class Typer extends GoVisitor<Type.T[]> {
       return this.visit(ctx.lit());
     } else if (ctx.name()) {
       return this.visit(ctx.name());
+    } else if (ctx._wrapped) {
+      return this.visit(ctx._wrapped);
     } else if (ctx.NEW()) {
       // new always returns a pointer type enclosing the inner type
       const elem = Type.resolveTypeExn(ctx.type_(), this.store);
@@ -1585,6 +1587,8 @@ export class Assembler extends GoVisitor<number> {
       return this.visit(ctx.name());
     } else if (ctx.lit()) {
       return this.visit(ctx.lit());
+    } else if (ctx._wrapped) {
+      return this.visit(ctx._wrapped);
     } else if (ctx.NEW()) {
       // a call to new
       const ty = this.resolveTypeExn(ctx.type_());

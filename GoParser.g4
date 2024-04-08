@@ -65,6 +65,7 @@ exprList : expr (',' expr)* ;
 
 primaryExpr : lit
 	| name
+	| '(' wrapped=expr ')'
 	| 'new' '(' type ')'  // this always supercedes function calls
 	| 'make' '(' channelType ')' // ditto
 	| fn=primaryExpr args

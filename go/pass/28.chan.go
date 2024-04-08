@@ -16,7 +16,5 @@ type point struct {
 }
 
 func (p point) neq(rhs point) bool {
-	xok := p.x != rhs.x
-	yok := p.y != rhs.y
-	return xok || yok
+	return (p.x != rhs.x) || (p.y != rhs.y)
 }
