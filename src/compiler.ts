@@ -771,7 +771,7 @@ class Typer extends GoVisitor<Type.T[]> {
   }
 
   visitExpr = (ctx: ExprContext): Type.T[] => {
-    if (ctx.mulOp() || ctx.addOp() || ctx.relOp()) {
+    if (ctx.mulOp() || ctx.addOp()) {
       const lhs = this.visit(ctx._lhs);
       const rhs = this.visit(ctx._rhs);
       if (lhs.length !== 1 || rhs.length !== 1) {
@@ -783,6 +783,19 @@ class Typer extends GoVisitor<Type.T[]> {
         err(ctx, `invalid operation between ${lhs[0].name} and ${rhs[0].name}`);
       }
       return lhs;
+    } else if (ctx.relOp()) {
+      // @todo: very similar to the above. let's reduce the duplication.
+      const lhs = this.visit(ctx._lhs);
+      const rhs = this.visit(ctx._rhs);
+      if (lhs.length !== 1 || rhs.length !== 1) {
+        err(ctx, "invalid operation"); // @todo a better err msg
+      }
+      // @todo: we should check that the operation and type are indeed correct? e.g. numbers, bools,
+      // @todo we're assuming all binary operations take the same types?
+      if (!Type.equal(lhs[0], rhs[0])) {
+        err(ctx, `invalid operation between ${lhs[0].name} and ${rhs[0].name}`);
+      }
+      return [Type.Primitive.make("bool", "bool")];
     } else if (ctx.logicalOp()) {
       const lhs = this.visit(ctx._lhs);
       const rhs = this.visit(ctx._rhs);

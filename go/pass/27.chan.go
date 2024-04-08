@@ -1,5 +1,6 @@
 func main() {
 	ch := make(chan int)
+
 	go func(ch chan int) {
 		ch <- 3
 	}(ch)
@@ -7,6 +8,7 @@ func main() {
 	if x != 3 {
 		panic("expected 3, got", x)
 	}
+
 	go func() {
 		ch <- 7
 	}()
