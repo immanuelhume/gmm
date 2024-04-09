@@ -383,6 +383,7 @@ export const microcode: Record<Opcode, EvalFn> = {
     t.pc += IPackPtr.size;
   },
   [Opcode.Deref]: function (state: MachineState, t: Thread): void {
+    // @todo: check if we are trying to deref a nullptr
     const ptr = new PointerView(state.heap, t.os.pop());
     t.os.push(ptr.getValue());
     t.pc += IPackPtr.size;
@@ -444,7 +445,7 @@ export const microcode: Record<Opcode, EvalFn> = {
       case 1: // The channel has a pending value. Read and move on.
         status.setValue(0);
         state.pub("chan-read", id.getValue(), t.id);
-        t.os.push(data.getValue());
+        t.os.push(data.addr);
         t.pc += IChanWrite.size;
         break;
       case 0: // Nothin' going on. Wait for someone to write.
@@ -487,7 +488,7 @@ export const microcode: Record<Opcode, EvalFn> = {
         t.os.push(chanAddr);
         break;
       case 0: // Nothing goin on. Wait for someone to read.
-        copy(state, towrite, data.getValue());
+        copy(state, towrite, data.addr);
         status.setValue(1);
         t.isLive = false;
         state.sub("chan-read", id.getValue(), t.id, (t, src) => {
@@ -495,7 +496,7 @@ export const microcode: Record<Opcode, EvalFn> = {
         });
         t.pc += IChanWrite.size;
       case -1: // Someone is waiting to read.
-        copy(state, towrite, data.getValue());
+        copy(state, towrite, data.addr);
         status.setValue(1);
         state.pub("chan-send", id.getValue(), t.id);
         t.pc += IChanWrite.size;

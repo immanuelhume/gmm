@@ -25,6 +25,7 @@ import GoParser, {
   LitNilContext,
   LpointerContext,
   LitFuncContext,
+  ChannelTypeContext,
 } from "../antlr/GoParser";
 import {
   AssignmentContext,
@@ -88,7 +89,7 @@ import {
   IChanWrite,
 } from "./instructions";
 import { Address, ArrayStack, Stack, StrPool, arraysEqual } from "./util";
-import { DataType, Global, Int64View, PointerView, StructView, builtinSymbols } from "./heapviews";
+import { DataType, Global, Int64View, NodeView, PointerView, StructView, builtinSymbols } from "./heapviews";
 import { assert } from "console";
 
 class BytecodeWriter implements Emitter {
@@ -252,17 +253,27 @@ export namespace Channel {
   export interface T {
     id: Int64View;
     status: Int64View;
-    data: PointerView;
+    data: NodeView;
   }
 
+  /**
+   * Takes the address of a channel and returns its guts.
+   *
+   * A channel is a pointer to a struct with 3 fields.
+   *
+   *   0: channel's ID
+   *   1: channel's status (-1, 0, 1)
+   *   2: channel's data
+   *
+   * This function performs the required derefencing to extract the 3 fields.
+   */
   export const view = (heap: DataView, addr: Address): T => {
-    const chan = new StructView(heap, addr);
-    const _id = new PointerView(heap, chan.getField(0));
-    const _status = new PointerView(heap, chan.getField(1));
-    const data = new PointerView(heap, chan.getField(2));
+    const chanp = new PointerView(heap, addr);
+    const chan = new StructView(heap, chanp.getValue());
 
-    const id = new Int64View(heap, _id.getValue());
-    const status = new Int64View(heap, _status.getValue());
+    const id = new Int64View(heap, chan.getField(0));
+    const status = new Int64View(heap, chan.getField(1));
+    const data = NodeView.of(heap, chan.getField(2));
 
     return { id, status, data };
   };
@@ -1091,23 +1102,31 @@ export class Assembler extends GoVisitor<number> {
         ILoadGlobal.emit(this.bc).setGlobal(Global["nil"]);
         break;
       case "chan":
-        // 2. ptr
-        this.initDefault(t.data.elem);
-        IPackPtr.emit(this.bc);
-        // 1. status
-        ILoadC.emit(this.bc).setKind(ConstantKind.Int64).setVal(0);
-        IPackPtr.emit(this.bc);
-        // 0. id
-        ILoadC.emit(this.bc).setKind(ConstantKind.Int64).setVal(0);
-        IPackPtr.emit(this.bc);
-
-        IPackStruct.emit(this.bc).setFieldc(3);
-
+        // The default value of a channel is nil. (A channel is a pointer.)
+        ILoadGlobal.emit(this.bc).setGlobal(Global["nil"]);
         break;
       case "func":
       case "method":
         throw "Unimplemented";
     }
+  };
+
+  /**
+   * Generates code which initializes a channel. Note that this is different
+   * from a channel's default initialization - the default is nil.
+   */
+  initChannel = (ctx: ChannelTypeContext): void => {
+    const elem = this.resolveTypeExn(ctx.type_());
+
+    // 2. data
+    this.initDefault(elem);
+    // 1. status
+    ILoadC.emit(this.bc).setKind(ConstantKind.Int64).setVal(0);
+    // 0. id
+    ILoadC.emit(this.bc).setKind(ConstantKind.Int64).setVal(0);
+
+    IPackStruct.emit(this.bc).setFieldc(3);
+    IPackPtr.emit(this.bc);
   };
 
   visitChildren = (node: ParserRuleContext): number => {
@@ -1596,8 +1615,8 @@ export class Assembler extends GoVisitor<number> {
       IPackPtr.emit(this.bc);
       return 1;
     } else if (ctx.MAKE()) {
-      const elem = this.resolveTypeExn(ctx.channelType().type_());
-      this.initDefault({ data: { kind: "chan", elem } });
+      // We can only make channels for now.
+      this.initChannel(ctx.channelType());
       return 1;
     } else if (ctx._fn) {
       const args = ctx.args();
