@@ -69,11 +69,11 @@ const run = (filename: string) => {
     strPool,
     globals,
 
-    sub(threadId, f, e, ...eId) {
-      tctl.sub(threadId, f, e, ...eId);
+    sub(e, eId, threadId, f) {
+      tctl.sub(e, eId, threadId, f);
     },
-    pub(src, e, ...eId) {
-      tctl.pub(src, e, ...eId);
+    pub(e, eId, src) {
+      tctl.pub(e, eId, src);
     },
     fork(thread) {
       return tctl.fork(thread);

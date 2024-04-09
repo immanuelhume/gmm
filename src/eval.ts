@@ -443,34 +443,24 @@ export const microcode: Record<Opcode, EvalFn> = {
     switch (status.getValue()) {
       case 1: // The channel has a pending value. Read and move on.
         status.setValue(0);
-        state.pub(t.id, "chan-read", id.getValue());
+        state.pub("chan-read", id.getValue(), t.id);
         t.os.push(data.getValue());
         t.pc += IChanWrite.size;
         break;
       case 0: // Nothin' going on. Wait for someone to write.
         status.setValue(-1);
         t.isLive = false;
-        state.sub(
-          t.id,
-          (t, src) => {
-            t.isLive = true;
-          },
-          "chan-send",
-          id.getValue(),
-        );
-        t.os.push(chanAddr);
+        state.sub("chan-send", id.getValue(), t.id, (t, src) => {
+          t.isLive = true;
+        });
+        t.os.push(chanAddr); // push back to try again
         break;
       case -1: // Someone else is waiting to read. We'll sleep and wait as well.
         t.isLive = false;
-        state.sub(
-          t.id,
-          (t, src) => {
-            t.isLive = true;
-          },
-          "chan-send",
-          id.getValue(),
-        );
-        t.os.push(chanAddr);
+        state.sub("chan-send", id.getValue(), t.id, (t, src) => {
+          t.isLive = true;
+        });
+        t.os.push(chanAddr); // push back to try again
         break;
       default:
         throw new Error(`unexpected channel status ${status.getValue()}`);
@@ -489,14 +479,9 @@ export const microcode: Record<Opcode, EvalFn> = {
     switch (status.getValue()) {
       case 1: // The channel has a pending value. Go to sleep.
         t.isLive = false;
-        state.sub(
-          t.id,
-          (t, src) => {
-            t.isLive = true;
-          },
-          "chan-read",
-          id.getValue(),
-        );
+        state.sub("chan-read", id.getValue(), t.id, (t, src) => {
+          t.isLive = true;
+        });
         // Push stuff back to OS for later use.
         t.os.push(towrite);
         t.os.push(chanAddr);
@@ -505,19 +490,14 @@ export const microcode: Record<Opcode, EvalFn> = {
         copy(state, towrite, data.getValue());
         status.setValue(1);
         t.isLive = false;
-        state.sub(
-          t.id,
-          (t, src) => {
-            t.isLive = true;
-          },
-          "chan-read",
-          id.getValue(),
-        );
+        state.sub("chan-read", id.getValue(), t.id, (t, src) => {
+          t.isLive = true;
+        });
         t.pc += IChanWrite.size;
       case -1: // Someone is waiting to read.
         copy(state, towrite, data.getValue());
         status.setValue(1);
-        state.pub(t.id, "chan-send", id.getValue());
+        state.pub("chan-send", id.getValue(), t.id);
         t.pc += IChanWrite.size;
         break;
       default:
@@ -991,26 +971,16 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
       // The mutex is locked by someone else. We'll put this thread to sleep,
       // and subscribe to when it gets unlocked.
       t.isLive = false;
-      state.sub(
-        t.id,
-        (t, _src) => {
-          t.isLive = true;
-        },
-        "mutex-unlock",
-        id.getValue(),
-      );
+      state.sub("mutex-unlock", id.getValue(), t.id, (t, _src) => {
+        t.isLive = true;
+      });
       // @todo: check if this sub here works. The intent is to put the thread
       // back to sleep, if someone else got to lock the mutex before it while
       // it was waiting.
-      state.sub(
-        t.id,
-        (t, src) => {
-          if (src === t.id) return;
-          t.isLive = false;
-        },
-        "mutex-lock",
-        id.getValue(),
-      );
+      state.sub("mutex-lock", id.getValue(), t.id, (t, src) => {
+        if (src === t.id) return;
+        t.isLive = false;
+      });
       return { restore: true };
     } else {
       mu.setField(0, state.globals[Global["true"]]);
@@ -1035,7 +1005,7 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
 
     if (locked.get()) {
       mu.setField(0, state.globals[Global["false"]]);
-      state.pub(t.id, "mutex-unlock", id.getValue());
+      state.pub("mutex-unlock", id.getValue(), t.id);
     }
 
     return {};

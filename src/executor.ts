@@ -42,7 +42,7 @@ export class Executor {
         }
         microcode[opcode](this.common, t);
         if (t.pc === t.lastPc) {
-          this.tctl.pub(t.id, "fin", t.id);
+          this.tctl.pub("fin", t.id, t.id);
           t.isZombie = true; // set itself to a zombie
           break;
         }

@@ -35,8 +35,8 @@ type ThreadId = number;
 type OnEvent = (t: Thread, src: ThreadId) => void;
 
 interface ThreadOps {
-  pub: (src: ThreadId, e: Event, ...eId: number[]) => void;
-  sub: (threadId: ThreadId, f: OnEvent, e: Event, ...eId: number[]) => void;
+  pub: (e: Event, eId: number, src: ThreadId) => void;
+  sub: (e: Event, eId: number, threadId: ThreadId, f: OnEvent) => void;
   /**
    * Forks a thread. All registers are copied.
    */
@@ -150,17 +150,17 @@ export class ThreadCtl implements ThreadOps {
     };
     this.threads.set(newThread.id, newThread);
     this.liveThreads.push(newThread);
-    this.sub(newThread.id, (thread) => (thread.isZombie = true), "fin", oldThread.id);
+    this.sub("fin", oldThread.id, newThread.id, (thread) => (thread.isZombie = true));
     return newThread;
   }
 
   /**
-   * @param threadId Thread ID of the thread which called this
-   * @param e        Event
-   * @param eId      Event infos
+   * @param e   Event
+   * @param eId Event ID
+   * @param src Thread ID of the thread which called this
    */
-  pub(src: ThreadId, e: Event, ...eId: number[]): void {
-    const key = JSON.stringify([e, ...eId]);
+  pub(e: Event, eId: number, src: ThreadId): void {
+    const key = JSON.stringify([e, eId]);
     const fs = this.subs[key];
     if (fs === undefined) return;
     for (const [threadId, f] of fs) {
@@ -171,8 +171,8 @@ export class ThreadCtl implements ThreadOps {
     delete this.subs[key];
   }
 
-  sub(threadId: ThreadId, f: OnEvent, e: Event, ...eId: number[]): void {
-    const key = JSON.stringify([e, ...eId]);
+  sub(e: Event, eId: number, threadId: ThreadId, f: OnEvent): void {
+    const key = JSON.stringify([e, eId]);
     let fs = this.subs[key];
     if (fs === undefined) {
       fs = [];
