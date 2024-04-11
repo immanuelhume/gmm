@@ -946,9 +946,6 @@ class Typer extends GoVisitor<Type.T[]> {
     if (ctx.typeName()) {
       const ret = this.store.lookupExn(ctx.typeName().getText(), ctx);
       return [ret];
-    } else if (ctx.structType()) {
-      // @todo maybe disallow this?
-      throw "Unimplemented";
     } else {
       throw "Unreachable";
     }
@@ -1983,13 +1980,9 @@ export class Assembler extends GoVisitor<number> {
           sorted.reverse().forEach(([_, expr]) => this.visit(expr)); // compile each field's expression
           IPackStruct.emit(this.bc).setFieldc(fieldc);
           break;
-        case "chan":
-        case "primitive":
+        default:
           err(ctx, `expected struct but got ${repr.data.kind}`);
       }
-    } else if (ctx.structType()) {
-      // @todo or we just don't allow it i.e. it would be a parse error
-      throw "Unimplemented";
     } else {
       throw "Unreachable";
     }

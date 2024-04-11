@@ -22,7 +22,6 @@ BREAK : 'break' -> mode(NLSEMI) ;
 CONTINUE : 'continue' -> mode(NLSEMI) ;
 IF : 'if' ;
 ELSE : 'else' ;
-RANGE : 'range' ;
 
 NEW : 'new' ;
 MAKE : 'make' ;
