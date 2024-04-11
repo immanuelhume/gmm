@@ -3,14 +3,15 @@ type Point struct {
 	y float
 }
 
-func (p Point) dot() float {
-	return p.x*p.x + p.y*p.y
+func (lhs Point) dot(rhs Point) float {
+	return lhs.x*rhs.x + lhs.y*rhs.y
 }
 
 func main() {
-	p := Point{x: 2, y: 3}
-	d := p.dot()
-	if d != 13 {
-		panic("expected 13, got", d)
+	p1 := Point{x: 2, y: 3}
+	p2 := Point{x: 7, y: 5}
+	d := p1.dot(p2)
+	if d != 29 {
+		panic("expected 29, got", d)
 	}
 }
