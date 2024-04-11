@@ -632,6 +632,10 @@ namespace _Type {
       return undefined;
     };
     const aux = (name: string, ctx: ParserRuleContext): Type.T => {
+      if (name.startsWith("*")) {
+        const elem = aux(name.substring(1), ctx);
+        return { data: { kind: "ptr", elem } };
+      }
       const idx = checkFriends(name);
       if (idx === undefined) {
         const t = store.lookupExn(name, ctx);

@@ -16,5 +16,5 @@ func main() {
 }
 
 type foo struct {
-	x int
+	x *int
 }
