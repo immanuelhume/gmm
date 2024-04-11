@@ -69,7 +69,7 @@ class Executor {
 
 export const exec = (src: string, quiet = false): void => {
   const { bytecode, srcMap, strPool, doneAt } = compileSrc(src);
-  const heap = new DataView(new ArrayBuffer(4096));
+  const heap = new DataView(new ArrayBuffer(10_000_000));
   const mem = { heap, free: 0 };
 
   // Before initializing the rest of the machine, let's allocate all builtins.
