@@ -42,3 +42,6 @@ prints a message but then terminates the program.
             panic("expected x, y to be 2, 1 but got", x, y)
         }
     }
+
+The go/pass/ folder contains test cases which are meant to pass. The go/fail
+folder holds the opposite. Check them to see the full set of features.
