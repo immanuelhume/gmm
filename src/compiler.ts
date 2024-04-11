@@ -28,6 +28,7 @@ import GoParser, {
   ChannelTypeContext,
   FuncTypeContext,
   KeyedElemContext,
+  LvalueContext,
 } from "../antlr/GoParser";
 import {
   AssignmentContext,
@@ -1070,6 +1071,20 @@ class Typer extends GoVisitor<Type.T[]> {
     return [Type.Primitive.make("string", "string")];
   };
 
+  visitLname = (ctx: LnameContext): Type.T[] => {
+    return [this.env.lookupExn(ctx.getText(), ctx)];
+  };
+
+  visitField = (ctx: FieldContext): Type.T[] => {
+    const _basety = this.visit(ctx._base);
+    if (_basety.length !== 1) {
+      err(ctx, `bad dot access`); // @todo btr err msg
+    }
+    const basety = _basety[0];
+    const final = ctx._last.text;
+    return [Type.findFieldOrMethodExn(basety, final, ctx)];
+  };
+
   visitChildren(node: ParserRuleContext): Type.T[] {
     if (!node.children) return [];
     const ret = node.children.flatMap((child) => this.visit(child)).filter((child) => child !== undefined);
@@ -1553,11 +1568,7 @@ export class Assembler extends GoVisitor<number> {
         this.tenv.popFrame();
         this.env.popFrame();
       }
-    } else if (ctx.rangeClause()) {
-      // Golang special
-      // @todo
     } else {
-      // impossible
       throw "Unreachable";
     }
 
@@ -1657,12 +1668,25 @@ export class Assembler extends GoVisitor<number> {
 
   visitLpointer = (ctx: LpointerContext): number => {
     // @todo: typecheck that the thing being derefed is a pointer?
-    if (ctx.lname()) {
-      const name = ctx.lname().getText();
+    const ty = this.typeExpr(ctx);
+    if (ty.length !== 1) {
+      err(ctx, `todo`);
+      throw "Unreachable";
+    }
+    if (ty[0].data.kind !== "ptr") {
+      err(ctx, `${ctx.getText()} cannot be dereferenced`);
+      throw "Unreachable";
+    }
+
+    const inner = ctx.lvalue();
+    if (inner.lname()) {
+      const name = inner.lname().getText();
       const [frame, offset] = this.env.lookupExn(name, ctx);
       ILoadName.emit(this.bc).setFrame(frame).setOffset(offset);
-    } else if (ctx.field()) {
-      this._visitField(ctx.field(), false);
+    } else if (inner.field()) {
+      this._visitField(inner.field(), false);
+    } else if (inner.lpointer()) {
+      this.visit(inner.lpointer());
     } else {
       throw "Unreachable";
     }

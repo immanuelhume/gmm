@@ -21,7 +21,6 @@ import { FieldContext } from "./GoParser";
 import { ForStmtContext } from "./GoParser";
 import { ConditionContext } from "./GoParser";
 import { ForClauseContext } from "./GoParser";
-import { RangeClauseContext } from "./GoParser";
 import { ExprStmtContext } from "./GoParser";
 import { ReturnStmtContext } from "./GoParser";
 import { ExprContext } from "./GoParser";
@@ -264,16 +263,6 @@ export default class GoParserListener extends ParseTreeListener {
    * @param ctx the parse tree
    */
   exitForClause?: (ctx: ForClauseContext) => void;
-  /**
-   * Enter a parse tree produced by `GoParser.rangeClause`.
-   * @param ctx the parse tree
-   */
-  enterRangeClause?: (ctx: RangeClauseContext) => void;
-  /**
-   * Exit a parse tree produced by `GoParser.rangeClause`.
-   * @param ctx the parse tree
-   */
-  exitRangeClause?: (ctx: RangeClauseContext) => void;
   /**
    * Enter a parse tree produced by `GoParser.exprStmt`.
    * @param ctx the parse tree

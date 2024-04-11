@@ -1,6 +1,6 @@
 func main() {
 	ch := make(chan point)
-	p := point{ x: 1.0, y: 3.0 }
+	p := point{x: 1.0, y: 3.0}
 	go func() {
 		ch <- p
 	}()
