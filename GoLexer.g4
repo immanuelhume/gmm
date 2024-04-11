@@ -45,6 +45,7 @@ MINUS : '-' ;
 PLUS : '+' ;
 DIV : '/' ;
 
+BANG : '!' ;
 RCV : '<-' ;
 
 LOGICAL_OR : '||' ;

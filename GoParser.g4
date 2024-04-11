@@ -79,7 +79,7 @@ arg : expr | type ; // functions like [make] take in types as params...
 
 block : '{' (stmt eos)* '}' ;
 
-unaryOp : '-' | '+' | '<-' | '*' | '&' | '<-' ;
+unaryOp : '-' | '+' | '<-' | '*' | '&' | '<-' | '!' ;
 
 logicalOp : '||' | '&&' ;
 relOp : '==' | '!=' | '<' | '<=' | '>' | '>=' ;

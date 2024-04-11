@@ -87,6 +87,7 @@ export abstract class InstrView {
 export const enum UnaryOp {
   Add = 0x00,
   Sub,
+  Not,
 }
 
 export const enum BinaryOp {
@@ -978,6 +979,7 @@ const opcodeClass: Record<Opcode, { new (bytecode: DataView, addr: number): Inst
 const unaryOpSyms: Record<UnaryOp, string> = {
   [UnaryOp.Add]: "+",
   [UnaryOp.Sub]: "-",
+  [UnaryOp.Not]: "!",
 };
 
 /**

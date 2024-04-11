@@ -923,6 +923,15 @@ class Typer extends GoVisitor<Type.T[]> {
     return [this.env.lookupExn(ctx.getText(), ctx)];
   };
 
+  visitLitNil = (ctx: LitNilContext): Type.T[] => {
+    err(ctx, "nil literals cannot be type checked at the moment");
+    throw "Unreachable";
+  };
+
+  visitLitBool = (ctx: LitBoolContext): Type.T[] => {
+    return [Type.Primitive.make("bool", "bool")];
+  };
+
   visitChildren(node: ParserRuleContext): Type.T[] {
     if (!node.children) return [];
     const ret = node.children.flatMap((child) => this.visit(child)).filter((child) => child !== undefined);
@@ -1771,17 +1780,17 @@ export class Assembler extends GoVisitor<number> {
 
   visitUnaryOp = (ctx: UnaryOpContext): number => {
     if (ctx.MINUS()) {
-      const op = IUnaryOp.emit(this.bc);
-      op.setOp(UnaryOp.Sub);
+      IUnaryOp.emit(this.bc).setOp(UnaryOp.Sub);
     } else if (ctx.PLUS()) {
-      const op = IUnaryOp.emit(this.bc);
-      op.setOp(UnaryOp.Add);
+      IUnaryOp.emit(this.bc).setOp(UnaryOp.Add);
     } else if (ctx.STAR()) {
       IDeref.emit(this.bc);
     } else if (ctx.AMPERSAND()) {
       IPackPtr.emit(this.bc);
     } else if (ctx.RCV()) {
       IChanRead.emit(this.bc);
+    } else if (ctx.BANG()) {
+      IUnaryOp.emit(this.bc).setOp(UnaryOp.Not);
     } else {
       err(ctx, `unexpected unary operator ${ctx.getText()}`);
     }

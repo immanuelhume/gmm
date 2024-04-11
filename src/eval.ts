@@ -919,6 +919,23 @@ const unaryBuiltins = new Map<DataType, Map<UnaryOp, UnaryOpFn>>([
       [UnaryOp.Add, (_state, addr) => addr],
     ]),
   ],
+  [
+    DataType.Bool,
+    new Map([
+      [
+        UnaryOp.Not,
+        (state, addr) => {
+          const val = new BoolView(state.heap, addr).get();
+          if (val) {
+            return state.globals[Global.false];
+          } else {
+            return state.globals[Global.true];
+          }
+        },
+      ],
+      [UnaryOp.Add, (_state, addr) => addr],
+    ]),
+  ],
 ]);
 
 interface BuiltinEvalContext {

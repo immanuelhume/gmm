@@ -65,22 +65,23 @@ export default class GoParser extends Parser {
   public static readonly MINUS = 32;
   public static readonly PLUS = 33;
   public static readonly DIV = 34;
-  public static readonly RCV = 35;
-  public static readonly LOGICAL_OR = 36;
-  public static readonly LOGICAL_AND = 37;
-  public static readonly EQ = 38;
-  public static readonly NEQ = 39;
-  public static readonly LESS = 40;
-  public static readonly LEQ = 41;
-  public static readonly GREATER = 42;
-  public static readonly GEQ = 43;
-  public static readonly STAR = 44;
-  public static readonly AMPERSAND = 45;
-  public static readonly WORD = 46;
-  public static readonly WS = 47;
-  public static readonly NLSEMI_WS = 48;
-  public static readonly EOS = 49;
-  public static readonly OTHER = 50;
+  public static readonly BANG = 35;
+  public static readonly RCV = 36;
+  public static readonly LOGICAL_OR = 37;
+  public static readonly LOGICAL_AND = 38;
+  public static readonly EQ = 39;
+  public static readonly NEQ = 40;
+  public static readonly LESS = 41;
+  public static readonly LEQ = 42;
+  public static readonly GREATER = 43;
+  public static readonly GEQ = 44;
+  public static readonly STAR = 45;
+  public static readonly AMPERSAND = 46;
+  public static readonly WORD = 47;
+  public static readonly WS = 48;
+  public static readonly NLSEMI_WS = 49;
+  public static readonly EOS = 50;
+  public static readonly OTHER = 51;
   public static readonly EOF = Token.EOF;
   public static readonly RULE_prog = 0;
   public static readonly RULE_stmt = 1;
@@ -183,6 +184,7 @@ export default class GoParser extends Parser {
     "'-'",
     "'+'",
     "'/'",
+    "'!'",
     "'<-'",
     "'||'",
     "'&&'",
@@ -231,6 +233,7 @@ export default class GoParser extends Parser {
     "MINUS",
     "PLUS",
     "DIV",
+    "BANG",
     "RCV",
     "LOGICAL_OR",
     "LOGICAL_AND",
@@ -1010,7 +1013,7 @@ export default class GoParser extends Parser {
         _la = this._input.LA(1);
         if (
           ((_la & ~0x1f) === 0 && ((1 << _la) & 70264126) !== 0) ||
-          (((_la - 32) & ~0x1f) === 0 && ((1 << (_la - 32)) & 28683) !== 0)
+          (((_la - 32) & ~0x1f) === 0 && ((1 << (_la - 32)) & 57371) !== 0)
         ) {
           {
             this.state = 223;
@@ -1025,7 +1028,7 @@ export default class GoParser extends Parser {
         _la = this._input.LA(1);
         if (
           ((_la & ~0x1f) === 0 && ((1 << _la) & 70264126) !== 0) ||
-          (((_la - 32) & ~0x1f) === 0 && ((1 << (_la - 32)) & 28683) !== 0)
+          (((_la - 32) & ~0x1f) === 0 && ((1 << (_la - 32)) & 57371) !== 0)
         ) {
           {
             this.state = 227;
@@ -1040,7 +1043,7 @@ export default class GoParser extends Parser {
         _la = this._input.LA(1);
         if (
           ((_la & ~0x1f) === 0 && ((1 << _la) & 70264126) !== 0) ||
-          (((_la - 32) & ~0x1f) === 0 && ((1 << (_la - 32)) & 28683) !== 0)
+          (((_la - 32) & ~0x1f) === 0 && ((1 << (_la - 32)) & 57371) !== 0)
         ) {
           {
             this.state = 231;
@@ -1144,7 +1147,7 @@ export default class GoParser extends Parser {
         _la = this._input.LA(1);
         if (
           ((_la & ~0x1f) === 0 && ((1 << _la) & 70264126) !== 0) ||
-          (((_la - 32) & ~0x1f) === 0 && ((1 << (_la - 32)) & 28683) !== 0)
+          (((_la - 32) & ~0x1f) === 0 && ((1 << (_la - 32)) & 57371) !== 0)
         ) {
           {
             this.state = 248;
@@ -1198,7 +1201,7 @@ export default class GoParser extends Parser {
           case 20:
           case 21:
           case 26:
-          case 46:
+          case 47:
             {
               this.state = 252;
               this.primaryExpr(0);
@@ -1207,8 +1210,9 @@ export default class GoParser extends Parser {
           case 32:
           case 33:
           case 35:
-          case 44:
+          case 36:
           case 45:
+          case 46:
             {
               this.state = 253;
               this.unaryOp();
@@ -1554,7 +1558,7 @@ export default class GoParser extends Parser {
               _la = this._input.LA(1);
               if (
                 ((_la & ~0x1f) === 0 && ((1 << _la) & 70268222) !== 0) ||
-                (((_la - 32) & ~0x1f) === 0 && ((1 << (_la - 32)) & 28683) !== 0)
+                (((_la - 32) & ~0x1f) === 0 && ((1 << (_la - 32)) & 57371) !== 0)
               ) {
                 {
                   this.state = 327;
@@ -1641,7 +1645,7 @@ export default class GoParser extends Parser {
         _la = this._input.LA(1);
         while (
           ((_la & ~0x1f) === 0 && ((1 << _la) & 87289854) !== 0) ||
-          (((_la - 32) & ~0x1f) === 0 && ((1 << (_la - 32)) & 28683) !== 0)
+          (((_la - 32) & ~0x1f) === 0 && ((1 << (_la - 32)) & 57371) !== 0)
         ) {
           {
             {
@@ -1681,7 +1685,7 @@ export default class GoParser extends Parser {
       {
         this.state = 352;
         _la = this._input.LA(1);
-        if (!(((_la - 32) & ~0x1f) === 0 && ((1 << (_la - 32)) & 12299) !== 0)) {
+        if (!(((_la - 32) & ~0x1f) === 0 && ((1 << (_la - 32)) & 24603) !== 0)) {
           this._errHandler.recoverInline(this);
         } else {
           this._errHandler.reportMatch(this);
@@ -1711,7 +1715,7 @@ export default class GoParser extends Parser {
       {
         this.state = 354;
         _la = this._input.LA(1);
-        if (!(_la === 36 || _la === 37)) {
+        if (!(_la === 37 || _la === 38)) {
           this._errHandler.recoverInline(this);
         } else {
           this._errHandler.reportMatch(this);
@@ -1741,7 +1745,7 @@ export default class GoParser extends Parser {
       {
         this.state = 356;
         _la = this._input.LA(1);
-        if (!(((_la - 38) & ~0x1f) === 0 && ((1 << (_la - 38)) & 63) !== 0)) {
+        if (!(((_la - 39) & ~0x1f) === 0 && ((1 << (_la - 39)) & 63) !== 0)) {
           this._errHandler.recoverInline(this);
         } else {
           this._errHandler.reportMatch(this);
@@ -1771,7 +1775,7 @@ export default class GoParser extends Parser {
       {
         this.state = 358;
         _la = this._input.LA(1);
-        if (!(_la === 34 || _la === 44)) {
+        if (!(_la === 34 || _la === 45)) {
           this._errHandler.recoverInline(this);
         } else {
           this._errHandler.reportMatch(this);
@@ -1908,7 +1912,7 @@ export default class GoParser extends Parser {
         this.state = 375;
         this._errHandler.sync(this);
         _la = this._input.LA(1);
-        if (_la === 44) {
+        if (_la === 45) {
           {
             this.state = 374;
             this.match(GoParser.STAR);
@@ -2139,7 +2143,7 @@ export default class GoParser extends Parser {
             this.state = 411;
             this._errHandler.sync(this);
             _la = this._input.LA(1);
-            if (_la === 10 || _la === 12 || _la === 44 || _la === 46) {
+            if (_la === 10 || _la === 12 || _la === 45 || _la === 47) {
               {
                 this.state = 410;
                 this.type_();
@@ -2155,7 +2159,7 @@ export default class GoParser extends Parser {
             this.state = 415;
             this._errHandler.sync(this);
             _la = this._input.LA(1);
-            if (_la === 10 || _la === 12 || _la === 44 || _la === 46) {
+            if (_la === 10 || _la === 12 || _la === 45 || _la === 47) {
               {
                 this.state = 414;
                 this.type_();
@@ -2284,7 +2288,7 @@ export default class GoParser extends Parser {
             this.state = 447;
             this._errHandler.sync(this);
             _la = this._input.LA(1);
-            if (_la === 46) {
+            if (_la === 47) {
               {
                 this.state = 446;
                 this.param();
@@ -2339,7 +2343,7 @@ export default class GoParser extends Parser {
       this.state = 456;
       this._errHandler.sync(this);
       switch (this._input.LA(1)) {
-        case 46:
+        case 47:
           this.enterOuterAlt(localctx, 1);
           {
             this.state = 454;
@@ -2348,7 +2352,7 @@ export default class GoParser extends Parser {
           break;
         case 10:
         case 12:
-        case 44:
+        case 45:
           this.enterOuterAlt(localctx, 2);
           {
             this.state = 455;
@@ -2416,7 +2420,7 @@ export default class GoParser extends Parser {
             this.channelType();
           }
           break;
-        case 44:
+        case 45:
           this.enterOuterAlt(localctx, 3);
           {
             this.state = 462;
@@ -2504,7 +2508,7 @@ export default class GoParser extends Parser {
         this.state = 478;
         this._errHandler.sync(this);
         _la = this._input.LA(1);
-        while (_la === 46) {
+        while (_la === 47) {
           {
             {
               this.state = 473;
@@ -2667,7 +2671,7 @@ export default class GoParser extends Parser {
           }
           break;
         case 10:
-        case 46:
+        case 47:
           this.enterOuterAlt(localctx, 6);
           {
             this.state = 501;
@@ -2782,7 +2786,7 @@ export default class GoParser extends Parser {
               this.structType();
             }
             break;
-          case 46:
+          case 47:
             {
               this.state = 511;
               this.typeName();
@@ -2930,7 +2934,7 @@ export default class GoParser extends Parser {
       {
         this.state = 535;
         _la = this._input.LA(1);
-        if (!(_la === -1 || _la === 49)) {
+        if (!(_la === -1 || _la === 50)) {
           this._errHandler.recoverInline(this);
         } else {
           this._errHandler.reportMatch(this);
@@ -2984,7 +2988,7 @@ export default class GoParser extends Parser {
   }
 
   public static readonly _serializedATN: number[] = [
-    4, 1, 50, 538, 2, 0, 7, 0, 2, 1, 7, 1, 2, 2, 7, 2, 2, 3, 7, 3, 2, 4, 7, 4, 2, 5, 7, 5, 2, 6, 7, 6, 2, 7, 7, 7, 2, 8,
+    4, 1, 51, 538, 2, 0, 7, 0, 2, 1, 7, 1, 2, 2, 7, 2, 2, 3, 7, 3, 2, 4, 7, 4, 2, 5, 7, 5, 2, 6, 7, 6, 2, 7, 7, 7, 2, 8,
     7, 8, 2, 9, 7, 9, 2, 10, 7, 10, 2, 11, 7, 11, 2, 12, 7, 12, 2, 13, 7, 13, 2, 14, 7, 14, 2, 15, 7, 15, 2, 16, 7, 16,
     2, 17, 7, 17, 2, 18, 7, 18, 2, 19, 7, 19, 2, 20, 7, 20, 2, 21, 7, 21, 2, 22, 7, 22, 2, 23, 7, 23, 2, 24, 7, 24, 2,
     25, 7, 25, 2, 26, 7, 26, 2, 27, 7, 27, 2, 28, 7, 28, 2, 29, 7, 29, 2, 30, 7, 30, 2, 31, 7, 31, 2, 32, 7, 32, 2, 33,
@@ -3021,8 +3025,8 @@ export default class GoParser extends Parser {
     1, 61, 3, 61, 528, 8, 61, 1, 62, 1, 62, 1, 62, 1, 62, 1, 63, 1, 63, 1, 64, 1, 64, 1, 64, 0, 2, 44, 48, 65, 0, 2, 4,
     6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52, 54, 56, 58, 60, 62,
     64, 66, 68, 70, 72, 74, 76, 78, 80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100, 102, 104, 106, 108, 110, 112, 114, 116,
-    118, 120, 122, 124, 126, 128, 0, 8, 3, 0, 32, 33, 35, 35, 44, 45, 1, 0, 36, 37, 1, 0, 38, 43, 2, 0, 34, 34, 44, 44,
-    1, 0, 32, 33, 1, 0, 4, 5, 1, 0, 1, 2, 1, 1, 49, 49, 543, 0, 135, 1, 0, 0, 0, 2, 148, 1, 0, 0, 0, 4, 153, 1, 0, 0, 0,
+    118, 120, 122, 124, 126, 128, 0, 8, 3, 0, 32, 33, 35, 36, 45, 46, 1, 0, 37, 38, 1, 0, 39, 44, 2, 0, 34, 34, 45, 45,
+    1, 0, 32, 33, 1, 0, 4, 5, 1, 0, 1, 2, 1, 1, 50, 50, 543, 0, 135, 1, 0, 0, 0, 2, 148, 1, 0, 0, 0, 4, 153, 1, 0, 0, 0,
     6, 155, 1, 0, 0, 0, 8, 164, 1, 0, 0, 0, 10, 166, 1, 0, 0, 0, 12, 170, 1, 0, 0, 0, 14, 172, 1, 0, 0, 0, 16, 174, 1,
     0, 0, 0, 18, 177, 1, 0, 0, 0, 20, 181, 1, 0, 0, 0, 22, 192, 1, 0, 0, 0, 24, 194, 1, 0, 0, 0, 26, 199, 1, 0, 0, 0,
     28, 201, 1, 0, 0, 0, 30, 209, 1, 0, 0, 0, 32, 213, 1, 0, 0, 0, 34, 221, 1, 0, 0, 0, 36, 224, 1, 0, 0, 0, 38, 240, 1,
@@ -3044,17 +3048,17 @@ export default class GoParser extends Parser {
     0, 153, 151, 1, 0, 0, 0, 153, 152, 1, 0, 0, 0, 154, 5, 1, 0, 0, 0, 155, 156, 5, 17, 0, 0, 156, 157, 3, 44, 22, 0,
     157, 160, 3, 56, 28, 0, 158, 159, 5, 18, 0, 0, 159, 161, 3, 8, 4, 0, 160, 158, 1, 0, 0, 0, 160, 161, 1, 0, 0, 0,
     161, 7, 1, 0, 0, 0, 162, 165, 3, 6, 3, 0, 163, 165, 3, 56, 28, 0, 164, 162, 1, 0, 0, 0, 164, 163, 1, 0, 0, 0, 165,
-    9, 1, 0, 0, 0, 166, 167, 3, 44, 22, 0, 167, 168, 5, 35, 0, 0, 168, 169, 3, 44, 22, 0, 169, 11, 1, 0, 0, 0, 170, 171,
+    9, 1, 0, 0, 0, 166, 167, 3, 44, 22, 0, 167, 168, 5, 36, 0, 0, 168, 169, 3, 44, 22, 0, 169, 11, 1, 0, 0, 0, 170, 171,
     5, 15, 0, 0, 171, 13, 1, 0, 0, 0, 172, 173, 5, 16, 0, 0, 173, 15, 1, 0, 0, 0, 174, 175, 5, 14, 0, 0, 175, 176, 3,
     48, 24, 0, 176, 17, 1, 0, 0, 0, 177, 178, 3, 20, 10, 0, 178, 179, 5, 30, 0, 0, 179, 180, 3, 46, 23, 0, 180, 19, 1,
     0, 0, 0, 181, 186, 3, 22, 11, 0, 182, 183, 5, 28, 0, 0, 183, 185, 3, 22, 11, 0, 184, 182, 1, 0, 0, 0, 185, 188, 1,
     0, 0, 0, 186, 184, 1, 0, 0, 0, 186, 187, 1, 0, 0, 0, 187, 21, 1, 0, 0, 0, 188, 186, 1, 0, 0, 0, 189, 193, 3, 26, 13,
     0, 190, 193, 3, 24, 12, 0, 191, 193, 3, 30, 15, 0, 192, 189, 1, 0, 0, 0, 192, 190, 1, 0, 0, 0, 192, 191, 1, 0, 0, 0,
-    193, 23, 1, 0, 0, 0, 194, 197, 5, 44, 0, 0, 195, 198, 3, 26, 13, 0, 196, 198, 3, 30, 15, 0, 197, 195, 1, 0, 0, 0,
-    197, 196, 1, 0, 0, 0, 198, 25, 1, 0, 0, 0, 199, 200, 5, 46, 0, 0, 200, 27, 1, 0, 0, 0, 201, 206, 3, 26, 13, 0, 202,
+    193, 23, 1, 0, 0, 0, 194, 197, 5, 45, 0, 0, 195, 198, 3, 26, 13, 0, 196, 198, 3, 30, 15, 0, 197, 195, 1, 0, 0, 0,
+    197, 196, 1, 0, 0, 0, 198, 25, 1, 0, 0, 0, 199, 200, 5, 47, 0, 0, 200, 27, 1, 0, 0, 0, 201, 206, 3, 26, 13, 0, 202,
     203, 5, 28, 0, 0, 203, 205, 3, 26, 13, 0, 204, 202, 1, 0, 0, 0, 205, 208, 1, 0, 0, 0, 206, 204, 1, 0, 0, 0, 206,
     207, 1, 0, 0, 0, 207, 29, 1, 0, 0, 0, 208, 206, 1, 0, 0, 0, 209, 210, 3, 48, 24, 0, 210, 211, 5, 22, 0, 0, 211, 212,
-    5, 46, 0, 0, 212, 31, 1, 0, 0, 0, 213, 217, 5, 11, 0, 0, 214, 218, 3, 34, 17, 0, 215, 218, 3, 36, 18, 0, 216, 218,
+    5, 47, 0, 0, 212, 31, 1, 0, 0, 0, 213, 217, 5, 11, 0, 0, 214, 218, 3, 34, 17, 0, 215, 218, 3, 36, 18, 0, 216, 218,
     3, 38, 19, 0, 217, 214, 1, 0, 0, 0, 217, 215, 1, 0, 0, 0, 217, 216, 1, 0, 0, 0, 218, 219, 1, 0, 0, 0, 219, 220, 3,
     56, 28, 0, 220, 33, 1, 0, 0, 0, 221, 222, 3, 44, 22, 0, 222, 35, 1, 0, 0, 0, 223, 225, 3, 4, 2, 0, 224, 223, 1, 0,
     0, 0, 224, 225, 1, 0, 0, 0, 225, 226, 1, 0, 0, 0, 226, 228, 5, 29, 0, 0, 227, 229, 3, 34, 17, 0, 228, 227, 1, 0, 0,
@@ -3091,7 +3095,7 @@ export default class GoParser extends Parser {
     4, 0, 0, 361, 67, 1, 0, 0, 0, 362, 363, 3, 28, 14, 0, 363, 364, 5, 31, 0, 0, 364, 365, 3, 46, 23, 0, 365, 69, 1, 0,
     0, 0, 366, 370, 3, 74, 37, 0, 367, 370, 3, 80, 40, 0, 368, 370, 3, 72, 36, 0, 369, 366, 1, 0, 0, 0, 369, 367, 1, 0,
     0, 0, 369, 368, 1, 0, 0, 0, 370, 71, 1, 0, 0, 0, 371, 372, 5, 8, 0, 0, 372, 373, 5, 26, 0, 0, 373, 375, 3, 108, 54,
-    0, 374, 376, 5, 44, 0, 0, 375, 374, 1, 0, 0, 0, 375, 376, 1, 0, 0, 0, 376, 377, 1, 0, 0, 0, 377, 378, 3, 96, 48, 0,
+    0, 374, 376, 5, 45, 0, 0, 375, 374, 1, 0, 0, 0, 375, 376, 1, 0, 0, 0, 376, 377, 1, 0, 0, 0, 377, 378, 3, 96, 48, 0,
     378, 379, 5, 27, 0, 0, 379, 380, 3, 108, 54, 0, 380, 381, 3, 82, 41, 0, 381, 382, 3, 84, 42, 0, 382, 73, 1, 0, 0, 0,
     383, 386, 3, 78, 39, 0, 384, 386, 3, 76, 38, 0, 385, 383, 1, 0, 0, 0, 385, 384, 1, 0, 0, 0, 386, 75, 1, 0, 0, 0,
     387, 388, 5, 9, 0, 0, 388, 389, 3, 108, 54, 0, 389, 390, 3, 94, 47, 0, 390, 77, 1, 0, 0, 0, 391, 392, 5, 6, 0, 0,
@@ -3110,13 +3114,13 @@ export default class GoParser extends Parser {
     445, 450, 1, 0, 0, 0, 446, 448, 3, 92, 46, 0, 447, 446, 1, 0, 0, 0, 447, 448, 1, 0, 0, 0, 448, 450, 1, 0, 0, 0, 449,
     435, 1, 0, 0, 0, 449, 447, 1, 0, 0, 0, 450, 91, 1, 0, 0, 0, 451, 452, 3, 108, 54, 0, 452, 453, 3, 94, 47, 0, 453,
     93, 1, 0, 0, 0, 454, 457, 3, 96, 48, 0, 455, 457, 3, 98, 49, 0, 456, 454, 1, 0, 0, 0, 456, 455, 1, 0, 0, 0, 457, 95,
-    1, 0, 0, 0, 458, 459, 5, 46, 0, 0, 459, 97, 1, 0, 0, 0, 460, 464, 3, 104, 52, 0, 461, 464, 3, 102, 51, 0, 462, 464,
+    1, 0, 0, 0, 458, 459, 5, 47, 0, 0, 459, 97, 1, 0, 0, 0, 460, 464, 3, 104, 52, 0, 461, 464, 3, 102, 51, 0, 462, 464,
     3, 100, 50, 0, 463, 460, 1, 0, 0, 0, 463, 461, 1, 0, 0, 0, 463, 462, 1, 0, 0, 0, 464, 99, 1, 0, 0, 0, 465, 466, 5,
-    44, 0, 0, 466, 467, 3, 96, 48, 0, 467, 101, 1, 0, 0, 0, 468, 469, 5, 12, 0, 0, 469, 470, 3, 94, 47, 0, 470, 103, 1,
+    45, 0, 0, 466, 467, 3, 96, 48, 0, 467, 101, 1, 0, 0, 0, 468, 469, 5, 12, 0, 0, 469, 470, 3, 94, 47, 0, 470, 103, 1,
     0, 0, 0, 471, 472, 5, 10, 0, 0, 472, 478, 5, 24, 0, 0, 473, 474, 3, 106, 53, 0, 474, 475, 3, 128, 64, 0, 475, 477,
     1, 0, 0, 0, 476, 473, 1, 0, 0, 0, 477, 480, 1, 0, 0, 0, 478, 476, 1, 0, 0, 0, 478, 479, 1, 0, 0, 0, 479, 481, 1, 0,
     0, 0, 480, 478, 1, 0, 0, 0, 481, 482, 5, 25, 0, 0, 482, 105, 1, 0, 0, 0, 483, 484, 3, 108, 54, 0, 484, 485, 3, 94,
-    47, 0, 485, 107, 1, 0, 0, 0, 486, 487, 5, 46, 0, 0, 487, 109, 1, 0, 0, 0, 488, 493, 3, 108, 54, 0, 489, 490, 5, 28,
+    47, 0, 485, 107, 1, 0, 0, 0, 486, 487, 5, 47, 0, 0, 487, 109, 1, 0, 0, 0, 488, 493, 3, 108, 54, 0, 489, 490, 5, 28,
     0, 0, 490, 492, 3, 108, 54, 0, 491, 489, 1, 0, 0, 0, 492, 495, 1, 0, 0, 0, 493, 491, 1, 0, 0, 0, 493, 494, 1, 0, 0,
     0, 494, 111, 1, 0, 0, 0, 495, 493, 1, 0, 0, 0, 496, 503, 3, 126, 63, 0, 497, 503, 3, 116, 58, 0, 498, 503, 3, 114,
     57, 0, 499, 503, 3, 118, 59, 0, 500, 503, 3, 88, 44, 0, 501, 503, 3, 120, 60, 0, 502, 496, 1, 0, 0, 0, 502, 497, 1,
@@ -4328,6 +4332,9 @@ export class UnaryOpContext extends ParserRuleContext {
   }
   public AMPERSAND(): TerminalNode {
     return this.getToken(GoParser.AMPERSAND, 0);
+  }
+  public BANG(): TerminalNode {
+    return this.getToken(GoParser.BANG, 0);
   }
   public get ruleIndex(): number {
     return GoParser.RULE_unaryOp;

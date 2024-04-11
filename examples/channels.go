@@ -5,7 +5,7 @@ func main() {
 		ch <- p
 	}()
 	got := <-ch
-	if got.neq(p) {
+	if !got.eq(p) {
 		panic("expected (1.0, 3.0), got", got)
 	}
 }
@@ -15,6 +15,6 @@ type point struct {
 	y float
 }
 
-func (p point) neq(rhs point) bool {
-	return (p.x != rhs.x) || (p.y != rhs.y)
+func (p point) eq(rhs point) bool {
+	return (p.x == rhs.x) && (p.y == rhs.y)
 }
