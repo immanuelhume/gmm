@@ -1016,7 +1016,7 @@ class Typer extends GoVisitor<Type.T[]> {
   };
 
   visitLitStruct = (ctx: LitStructContext): Type.T[] => {
-    // @todo Should we type-check the fields?
+    // @todo Should we type-check the fields? NO - we do it when emitting bytecode
     if (ctx.typeName()) {
       const ret = this.store.lookupExn(ctx.typeName().getText(), ctx);
       ctx.keyedElems().keyedElem_list();
@@ -1134,7 +1134,6 @@ class FuncTypeBumper extends GoVisitor<void> {
       .signature()
       .funcResult()
       .type__list()
-      // @todo: disallow anonymous return types?
       .map((ty) => Type.resolveTypeExn(ty, this.tstore));
 
     // Unlike functions, the type info for a method is not stored in the type
@@ -1164,7 +1163,6 @@ class FuncTypeBumper extends GoVisitor<void> {
       .signature()
       .funcResult()
       .type__list()
-      // @todo: disallow anonymous return types?
       .map((ty) => Type.resolveTypeExn(ty, this.tstore));
     this.tenv.set(fname, { data: { kind: "func", params, results } });
   };
@@ -1217,6 +1215,10 @@ export class Assembler extends GoVisitor<number> {
    */
   resolveTypeExn = (ctx: TypeContext): Type.T => {
     return Type.resolveTypeExn(ctx, this.tstore);
+  };
+
+  typeExpr = (ctx: ParserRuleContext): Type.T[] => {
+    return new Typer(this.tstore, this.tenv).visit(ctx);
   };
 
   /**
@@ -1435,7 +1437,17 @@ export class Assembler extends GoVisitor<number> {
 
   visitVarDecl = (ctx: VarDeclContext): number => {
     if (ctx.expr()) {
-      // @todo type check?
+      const expectedType = this.resolveTypeExn(ctx.type_());
+      const givenType = this.typeExpr(ctx.expr());
+      if (givenType.length !== 1) {
+        err(ctx, `unexpected multiple values on RHS`);
+        throw "Unreachable";
+      }
+      if (!Type.equal(expectedType, givenType[0])) {
+        err(ctx, `expected ${expectedType.name}, got ${givenType[0].name}`);
+        throw "Unreachable";
+      }
+
       this.visit(ctx.expr()); // compile RHS
     } else {
       const ty = this.resolveTypeExn(ctx.type_());
