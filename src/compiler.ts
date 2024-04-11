@@ -26,6 +26,7 @@ import GoParser, {
   LpointerContext,
   LitFuncContext,
   ChannelTypeContext,
+  FuncTypeContext,
 } from "../antlr/GoParser";
 import {
   AssignmentContext,
@@ -101,8 +102,8 @@ class BytecodeWriter implements Emitter {
    */
   private _srcMap: Map<number, number>;
 
-  constructor(codeLen: number = 1028) {
-    // @todo: how do we determine the size? should we make it resizable?
+  // @note: we can't dynamically resize (copy) the bytecode array around due to limitations in the compiler
+  constructor(codeLen: number = 5_000_000) {
     this._code = new DataView(new ArrayBuffer(codeLen));
     this._wc = 0;
     this._prevWc = -1;
@@ -516,18 +517,18 @@ namespace _Type {
 
   type Struct = {
     kind: "struct";
-    fields: [string, string][];
+    fields: [string, Data][];
   };
 
   type Channel = {
     kind: "chan";
-    elem: string;
+    elem: Data;
   };
 
   type Func = {
     kind: "func";
-    params: string[];
-    results: string[];
+    params: Data[];
+    results: Data[];
   };
 
   type Pointer = {
@@ -583,10 +584,12 @@ namespace _Type {
       if (lit.structType()) {
         return fromStructContext(lit.structType());
       } else if (lit.channelType()) {
-        return { kind: "chan", elem: lit.channelType().type_().getText() };
+        return { kind: "chan", elem: fromContext(lit.channelType().type_()) };
       } else if (lit.pointerType()) {
         const alias = lit.pointerType().typeName().getText();
         return { kind: "ptr", elem: { kind: "alias", alias } };
+      } else if (lit.funcType()) {
+        return fromFuncTypeContext(lit.funcType());
       } else {
         throw "Unreachable";
       }
@@ -595,11 +598,25 @@ namespace _Type {
     }
   };
 
+  const fromFuncTypeContext = (ctx: FuncTypeContext): Func => {
+    const params = ctx
+      .signature()
+      .params()
+      .param_list()
+      .map((param) => fromContext(param.type_()));
+    const results = ctx
+      .signature()
+      .funcResult()
+      .type__list()
+      .map((typ) => fromContext(typ));
+    return { kind: "func", params, results };
+  };
+
   const fromStructContext = (ctx: StructTypeContext): Struct => {
     const fs = ctx.fieldDecl_list();
-    const fields: [string, string][] = fs.map((field) => {
+    const fields: [string, Data][] = fs.map((field) => {
       const name = field.name().getText();
-      const ty = field.type_().getText();
+      const ty = fromContext(field.type_());
       return [name, ty];
     });
     const fnames = fields.map(([name, _]) => name);
@@ -615,7 +632,7 @@ namespace _Type {
 
   /**
    * An unreasonably complex function. Resolves full type information for a
-   * new frame of types.
+   * new frame of types. (I have lost track of how it works.)
    *
    * @param ts    A "frame" of types to resolve
    * @param store The current type store, from previous frames
@@ -631,18 +648,46 @@ namespace _Type {
       }
       return undefined;
     };
-    const aux = (name: string, ctx: ParserRuleContext): Type.T => {
-      if (name.startsWith("*")) {
-        const elem = aux(name.substring(1), ctx);
-        return { data: { kind: "ptr", elem } };
-      }
-      const idx = checkFriends(name);
-      if (idx === undefined) {
-        const t = store.lookupExn(name, ctx);
-        return t;
-      } else {
-        const t = dfs(idx);
-        return t;
+    // const aux = (name: string, ctx: ParserRuleContext): Type.T => {
+    //   if (name.startsWith("*")) {
+    //     const elem = aux(name.substring(1), ctx);
+    //     return { data: { kind: "ptr", elem } };
+    //   }
+    //   const idx = checkFriends(name);
+    //   if (idx === undefined) {
+    //     const t = store.lookupExn(name, ctx);
+    //     return t;
+    //   } else {
+    //     const t = dfs(idx);
+    //     return t;
+    //   }
+    // };
+    const aux = (ty: Data, ctx: ParserRuleContext): Type.T => {
+      switch (ty.kind) {
+        case "struct":
+          const fields = ty.fields.map((field) => [field[0], aux(field[1], ctx)] as [string, Type.T]);
+          return { data: { kind: "struct", fields } };
+        case "chan": {
+          const elem = aux(ty.elem, ctx);
+          return { data: { kind: "chan", elem } };
+        }
+        case "func":
+          const params = ty.params.map((param) => aux(param, ctx));
+          const results = ty.results.map((param) => aux(param, ctx));
+          return { data: { kind: "func", params, results } };
+        case "ptr": {
+          const elem = aux(ty.elem, ctx);
+          return { data: { kind: "ptr", elem } };
+        }
+        case "alias":
+          const idx = checkFriends(ty.alias);
+          if (idx === undefined) {
+            const t = store.lookupExn(ty.alias, ctx);
+            return t;
+          } else {
+            const t = dfs(idx);
+            return t;
+          }
       }
     };
     const dfs = (i: number): Type.T => {
@@ -672,11 +717,11 @@ namespace _Type {
           state[i] = 1;
           return (ret[i] = { name: ty.name, data: { kind: "func", params, results } });
         case "ptr":
-          const ptrelem = aux(ty.data.elem.alias, ty.ctx);
+          const ptrelem = aux(ty.data.elem, ty.ctx);
           state[i] = 1;
-          return (ret[i] = { data: { kind: "ptr", elem: ptrelem } });
+          return (ret[i] = { name: ty.name, data: { kind: "ptr", elem: ptrelem } });
         case "alias":
-          const alias = aux(ty.data.alias, ty.ctx);
+          const alias = aux(ty.data, ty.ctx);
           state[i] = 1;
           return (ret[i] = alias);
       }
@@ -795,7 +840,7 @@ class Typer extends GoVisitor<Type.T[]> {
       // @todo: we should check that the operation and type are indeed correct? e.g. numbers, bools,
       // @todo we're assuming all binary operations take the same types?
       if (!Type.equal(lhs[0], rhs[0])) {
-        err(ctx, `invalid operation between ${lhs[0].name} and ${rhs[0].name}`);
+        err(ctx, `invalid operation ${ctx.getText()} between ${lhs[0].name} and ${rhs[0].name}`);
       }
       return lhs;
     } else if (ctx.relOp()) {
@@ -928,8 +973,22 @@ class Typer extends GoVisitor<Type.T[]> {
     throw "Unreachable";
   };
 
-  visitLitBool = (ctx: LitBoolContext): Type.T[] => {
+  visitLitBool = (_ctx: LitBoolContext): Type.T[] => {
     return [Type.Primitive.make("bool", "bool")];
+  };
+
+  visitLitFunc = (ctx: LitFuncContext): Type.T[] => {
+    const params = ctx
+      .signature()
+      .params()
+      .param_list()
+      .map((param) => Type.resolveTypeExn(param.type_(), this.store));
+    const results = ctx
+      .signature()
+      .funcResult()
+      .type__list()
+      .map((typ) => Type.resolveTypeExn(typ, this.store));
+    return [{ data: { kind: "func", params, results } }];
   };
 
   visitChildren(node: ParserRuleContext): Type.T[] {
@@ -1572,7 +1631,7 @@ export class Assembler extends GoVisitor<number> {
 
     const rhsTypes = ctx._rhs.expr_list().flatMap((expr) => new Typer(this.tstore, this.tenv).visit(expr));
     if (rhsTypes.length !== nnames) {
-      err(ctx, `${nnames} on LHS but ${rhsTypes.length} on RHS`);
+      err(ctx, `${nnames} on LHS but ${rhsTypes.length} on RHS for ${ctx.getText()}`);
     }
     for (let i = 0; i < nnames; ++i) {
       const lhs = ctx._lhs.lname_list()[i].getText();

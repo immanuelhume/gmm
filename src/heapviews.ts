@@ -264,7 +264,7 @@ export class Int64View extends NodeView {
  */
 export class FrameView extends NodeView {
   static allocate(mem: Memory, numVars: number): FrameView {
-    const addr = allocate(mem, DataType.Frame, 0, numVars);
+    const addr = allocate(mem, DataType.Frame, numVars, 0);
     return new FrameView(mem.heap, addr);
   }
 
@@ -293,7 +293,7 @@ ${varStrs}
   }
 
   numVars(): number {
-    return this.nrefs();
+    return this.nvals();
   }
 
   varList(): Address[] {
@@ -314,7 +314,7 @@ ${varStrs}
  */
 export class EnvView extends NodeView {
   static allocate(mem: Memory, numFrames: number): EnvView {
-    const addr = allocate(mem, DataType.Env, 0, numFrames);
+    const addr = allocate(mem, DataType.Env, numFrames, 0);
     return new EnvView(mem.heap, addr);
   }
 
@@ -349,7 +349,7 @@ export class EnvView extends NodeView {
   }
 
   numFrames(): number {
-    return this.nrefs();
+    return this.nvals();
   }
 
   frameList(): Address[] {
@@ -371,9 +371,7 @@ export class EnvView extends NodeView {
  */
 export class CallFrameView extends NodeView {
   static allocate(state: Memory): CallFrameView {
-    // The PC is a literal value (it's an offset of the bytecode) but the env
-    // is a child (it's a pointer to an environment node).
-    const addr = allocate(state, DataType.CallFrame, 1, 1);
+    const addr = allocate(state, DataType.CallFrame, 2, 0);
     return new CallFrameView(state.heap, addr);
   }
 
@@ -410,9 +408,7 @@ export class CallFrameView extends NodeView {
  */
 export class BlockFrameView extends NodeView {
   static allocate(state: Memory): BlockFrameView {
-    // The PC is a literal value (it's an offset of the bytecode) but the env
-    // is a child (it's a pointer to an environment node).
-    const addr = allocate(state, DataType.BlockFrame, 0, 1);
+    const addr = allocate(state, DataType.BlockFrame, 1, 0);
     return new BlockFrameView(state.heap, addr);
   }
 
@@ -443,7 +439,7 @@ export class BlockFrameView extends NodeView {
  */
 export class FnView extends NodeView {
   static allocate(state: Memory): FnView {
-    const addr = allocate(state, DataType.Fn, 2, 1);
+    const addr = allocate(state, DataType.Fn, 3, 0);
     return new FnView(state.heap, addr);
   }
 

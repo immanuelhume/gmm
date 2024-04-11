@@ -54,6 +54,7 @@ import { TypeNameContext } from "./GoParser";
 import { TypeLitContext } from "./GoParser";
 import { PointerTypeContext } from "./GoParser";
 import { ChannelTypeContext } from "./GoParser";
+import { FuncTypeContext } from "./GoParser";
 import { StructTypeContext } from "./GoParser";
 import { FieldDeclContext } from "./GoParser";
 import { NameContext } from "./GoParser";
@@ -593,6 +594,16 @@ export default class GoParserListener extends ParseTreeListener {
    * @param ctx the parse tree
    */
   exitChannelType?: (ctx: ChannelTypeContext) => void;
+  /**
+   * Enter a parse tree produced by `GoParser.funcType`.
+   * @param ctx the parse tree
+   */
+  enterFuncType?: (ctx: FuncTypeContext) => void;
+  /**
+   * Exit a parse tree produced by `GoParser.funcType`.
+   * @param ctx the parse tree
+   */
+  exitFuncType?: (ctx: FuncTypeContext) => void;
   /**
    * Enter a parse tree produced by `GoParser.structType`.
    * @param ctx the parse tree

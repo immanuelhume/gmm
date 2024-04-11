@@ -106,10 +106,11 @@ param : name type ;
 
 type : typeName | typeLit ;
 typeName : WORD ;
-typeLit : structType | channelType | pointerType ;
+typeLit : structType | channelType | pointerType | funcType ;
 
 pointerType : '*' typeName ;
 channelType : 'chan' type ;
+funcType : 'func' signature ;
 
 structType : 'struct' '{' (fieldDecl eos)* '}' ;
 fieldDecl : name type ;
