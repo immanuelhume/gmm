@@ -32,7 +32,6 @@ export interface Memory {
 export enum DataType {
   Float64 = 0x00,
   Int64,
-  Channel,
   String,
   Fn,
   Builtin,
@@ -747,17 +746,9 @@ export class LvalueView extends NodeView {
   }
 }
 
-class ChannelView extends NodeView {
-  // @todo
-  toString(): string {
-    return "";
-  }
-}
-
 const nodeClass: Record<DataType, { new (heap: DataView, addr: Address, ctx?: HeapContext): NodeView }> = {
   [DataType.Float64]: Float64View,
   [DataType.Int64]: Int64View,
-  [DataType.Channel]: ChannelView,
   [DataType.String]: StringView,
   [DataType.Fn]: FnView,
   [DataType.Builtin]: BuiltinView,

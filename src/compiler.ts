@@ -25,6 +25,7 @@ import GoParser, {
   LitNilContext,
   LpointerContext,
   LitFuncContext,
+  ChannelTypeContext,
 } from "../antlr/GoParser";
 import {
   AssignmentContext,
@@ -84,9 +85,11 @@ import {
   IDeref,
   ILoadPtrSlot,
   ConstantKind,
+  IChanRead,
+  IChanWrite,
 } from "./instructions";
-import { ArrayStack, Stack, StrPool, arraysEqual } from "./util";
-import { DataType, Global, builtinSymbols } from "./heapviews";
+import { Address, ArrayStack, Stack, StrPool, arraysEqual } from "./util";
+import { DataType, Global, Int64View, NodeView, PointerView, StructView, builtinSymbols } from "./heapviews";
 import { assert } from "console";
 
 class BytecodeWriter implements Emitter {
@@ -240,6 +243,40 @@ class DeclScanner extends GoVisitor<string[]> {
     if (!node.children) return [];
     return node.children.flatMap((child) => this.visit(child)).filter((name) => name !== undefined);
   }
+}
+
+export namespace Channel {
+  /**
+   * A friendly interface for use. Although the channel's underlying fields
+   * are all pointers, that is inconvenient to use.
+   */
+  export interface T {
+    id: Int64View;
+    status: Int64View;
+    data: NodeView;
+  }
+
+  /**
+   * Takes the address of a channel and returns its guts.
+   *
+   * A channel is a pointer to a struct with 3 fields.
+   *
+   *   0: channel's ID
+   *   1: channel's status (-1, 0, 1)
+   *   2: channel's data
+   *
+   * This function performs the required derefencing to extract the 3 fields.
+   */
+  export const view = (heap: DataView, addr: Address): T => {
+    const chanp = new PointerView(heap, addr);
+    const chan = new StructView(heap, chanp.getValue());
+
+    const id = new Int64View(heap, chan.getField(0));
+    const status = new Int64View(heap, chan.getField(1));
+    const data = NodeView.of(heap, chan.getField(2));
+
+    return { id, status, data };
+  };
 }
 
 /**
@@ -546,8 +583,7 @@ namespace _Type {
       if (lit.structType()) {
         return fromStructContext(lit.structType());
       } else if (lit.channelType()) {
-        // @todo
-        throw "Channel types are not supported yet";
+        return { kind: "chan", elem: lit.channelType().type_().getText() };
       } else if (lit.pointerType()) {
         const alias = lit.pointerType().typeName().getText();
         return { kind: "ptr", elem: { kind: "alias", alias } };
@@ -746,7 +782,7 @@ class Typer extends GoVisitor<Type.T[]> {
   }
 
   visitExpr = (ctx: ExprContext): Type.T[] => {
-    if (ctx.mulOp() || ctx.addOp() || ctx.relOp()) {
+    if (ctx.mulOp() || ctx.addOp()) {
       const lhs = this.visit(ctx._lhs);
       const rhs = this.visit(ctx._rhs);
       if (lhs.length !== 1 || rhs.length !== 1) {
@@ -758,6 +794,19 @@ class Typer extends GoVisitor<Type.T[]> {
         err(ctx, `invalid operation between ${lhs[0].name} and ${rhs[0].name}`);
       }
       return lhs;
+    } else if (ctx.relOp()) {
+      // @todo: very similar to the above. let's reduce the duplication.
+      const lhs = this.visit(ctx._lhs);
+      const rhs = this.visit(ctx._rhs);
+      if (lhs.length !== 1 || rhs.length !== 1) {
+        err(ctx, "invalid operation"); // @todo a better err msg
+      }
+      // @todo: we should check that the operation and type are indeed correct? e.g. numbers, bools,
+      // @todo we're assuming all binary operations take the same types?
+      if (!Type.equal(lhs[0], rhs[0])) {
+        err(ctx, `invalid operation between ${lhs[0].name} and ${rhs[0].name}`);
+      }
+      return [Type.Primitive.make("bool", "bool")];
     } else if (ctx.logicalOp()) {
       const lhs = this.visit(ctx._lhs);
       const rhs = this.visit(ctx._rhs);
@@ -783,6 +832,17 @@ class Typer extends GoVisitor<Type.T[]> {
           throw "Unreachable";
         }
         return [outer[0].data.elem];
+      } else if (ctx.unaryOp().RCV()) {
+        const chanTy = this.visit(ctx.expr(0));
+        if (chanTy.length != 1) {
+          err(ctx, `cannot receive from ${ctx.expr(0).getText()}`);
+          throw "Unreachable";
+        }
+        if (chanTy[0].data.kind !== "chan") {
+          err(ctx, `${ctx.expr(0).getText()} is not a channel`);
+          throw "Unreachable";
+        }
+        return [chanTy[0].data.elem];
       } else {
         return this.visit(ctx.expr(0));
       }
@@ -798,10 +858,15 @@ class Typer extends GoVisitor<Type.T[]> {
       return this.visit(ctx.lit());
     } else if (ctx.name()) {
       return this.visit(ctx.name());
+    } else if (ctx._wrapped) {
+      return this.visit(ctx._wrapped);
     } else if (ctx.NEW()) {
       // new always returns a pointer type enclosing the inner type
       const elem = Type.resolveTypeExn(ctx.type_(), this.store);
       return [{ data: { kind: "ptr", elem } }];
+    } else if (ctx.MAKE()) {
+      const elem = Type.resolveTypeExn(ctx.channelType().type_(), this.store);
+      return [{ data: { kind: "chan", elem } }];
     } else if (ctx._fn) {
       const fnty = this.visit(ctx._fn);
       if (fnty.length !== 1 || (fnty[0].data.kind !== "method" && fnty[0].data.kind !== "func")) {
@@ -1037,10 +1102,31 @@ export class Assembler extends GoVisitor<number> {
         ILoadGlobal.emit(this.bc).setGlobal(Global["nil"]);
         break;
       case "chan":
+        // The default value of a channel is nil. (A channel is a pointer.)
+        ILoadGlobal.emit(this.bc).setGlobal(Global["nil"]);
+        break;
       case "func":
       case "method":
         throw "Unimplemented";
     }
+  };
+
+  /**
+   * Generates code which initializes a channel. Note that this is different
+   * from a channel's default initialization - the default is nil.
+   */
+  initChannel = (ctx: ChannelTypeContext): void => {
+    const elem = this.resolveTypeExn(ctx.type_());
+
+    // 2. data
+    this.initDefault(elem);
+    // 1. status
+    ILoadC.emit(this.bc).setKind(ConstantKind.Int64).setVal(0);
+    // 0. id
+    ILoadC.emit(this.bc).setKind(ConstantKind.Int64).setVal(0);
+
+    IPackStruct.emit(this.bc).setFieldc(3);
+    IPackPtr.emit(this.bc);
   };
 
   visitChildren = (node: ParserRuleContext): number => {
@@ -1393,8 +1479,10 @@ export class Assembler extends GoVisitor<number> {
   };
 
   visitSendStmt = (ctx: SendStmtContext): number => {
+    this.visit(ctx._rhs);
+    this.visit(ctx._channel);
+    IChanWrite.emit(this.bc);
     return 0;
-    // @todo
   };
 
   visitLname = (ctx: LnameContext): number => {
@@ -1518,11 +1606,17 @@ export class Assembler extends GoVisitor<number> {
       return this.visit(ctx.name());
     } else if (ctx.lit()) {
       return this.visit(ctx.lit());
+    } else if (ctx._wrapped) {
+      return this.visit(ctx._wrapped);
     } else if (ctx.NEW()) {
       // a call to new
       const ty = this.resolveTypeExn(ctx.type_());
       this.initDefault(ty);
       IPackPtr.emit(this.bc);
+      return 1;
+    } else if (ctx.MAKE()) {
+      // We can only make channels for now.
+      this.initChannel(ctx.channelType());
       return 1;
     } else if (ctx._fn) {
       const args = ctx.args();
@@ -1603,11 +1697,8 @@ export class Assembler extends GoVisitor<number> {
   /**
    * Compiles an expression list. Expression lists should only appear on the RHS of
    * assignments (short var decls and assignments).
-   *
-   * If there is more than 1 expression, we pack it into a tuple.
    */
   visitExprList = (ctx: ExprListContext): number => {
-    // @bug: we can't naively pack stuff into a tuple. See 09. FIXME
     const typer = new Typer(this.tstore, this.tenv);
     const len = ctx.expr_list().flatMap((expr) => typer.visit(expr)).length;
     this.visitChildren(ctx);
@@ -1685,6 +1776,8 @@ export class Assembler extends GoVisitor<number> {
       IDeref.emit(this.bc);
     } else if (ctx.AMPERSAND()) {
       IPackPtr.emit(this.bc);
+    } else if (ctx.RCV()) {
+      IChanRead.emit(this.bc);
     } else {
       err(ctx, `unexpected unary operator ${ctx.getText()}`);
     }

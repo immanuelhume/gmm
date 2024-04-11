@@ -65,7 +65,9 @@ exprList : expr (',' expr)* ;
 
 primaryExpr : lit
 	| name
-	| 'new' '(' type ')' // this always supercedes function calls
+	| '(' wrapped=expr ')'
+	| 'new' '(' type ')'  // this always supercedes function calls
+	| 'make' '(' channelType ')' // ditto
 	| fn=primaryExpr args
 	| base=primaryExpr selector
 	;
@@ -77,7 +79,7 @@ arg : expr | type ; // functions like [make] take in types as params...
 
 block : '{' (stmt eos)* '}' ;
 
-unaryOp : '-' | '+' | '<-' | '*' | '&' ;
+unaryOp : '-' | '+' | '<-' | '*' | '&' | '<-' ;
 
 logicalOp : '||' | '&&' ;
 relOp : '==' | '!=' | '<' | '<=' | '>' | '>=' ;
@@ -107,8 +109,7 @@ typeName : WORD ;
 typeLit : structType | channelType | pointerType ;
 
 pointerType : '*' typeName ;
-channelType : 'chan' elementType ;
-elementType : type ;
+channelType : 'chan' type ;
 
 structType : 'struct' '{' (fieldDecl eos)* '}' ;
 fieldDecl : name type ;
