@@ -27,6 +27,7 @@ import GoParser, {
   LitFuncContext,
   ChannelTypeContext,
   FuncTypeContext,
+  KeyedElemContext,
 } from "../antlr/GoParser";
 import {
   AssignmentContext,
@@ -663,7 +664,8 @@ namespace _Type {
           const fields: [string, Type.T][] = ty.fields.map(([fieldname, fieldty]) => {
             const typ = aux(fieldty, ctx, false);
             if (typeof typ === "number") {
-              throw "todo";
+              err(ctx, `could not resolve field's type: ${ctx.getText()}`);
+              throw "Unreachable";
             } else {
               return [fieldname, typ];
             }
@@ -682,7 +684,8 @@ namespace _Type {
             .map((param) => aux(param, ctx, false))
             .map((param) => {
               if (typeof param === "number") {
-                throw "todo";
+                err(ctx, `could not resolve function's parameter type: ${ctx.getText()}`);
+                throw "Unreachable";
               }
               return param;
             });
@@ -690,7 +693,8 @@ namespace _Type {
             .map((res) => aux(res, ctx, false))
             .map((res) => {
               if (typeof res === "number") {
-                throw "todo";
+                err(ctx, `could not resolve function's result type: ${ctx.getText()}`);
+                throw "Unreachable";
               }
               return res;
             });
@@ -730,27 +734,42 @@ namespace _Type {
       switch (ty.data.kind) {
         case "struct":
           const structtype = aux(ty.data, ty.ctx, false);
-          if (typeof structtype === "number") throw "todo";
+          if (typeof structtype === "number") {
+            err(ty.ctx, `could not resolve struct type: ${ty.ctx.getText()}`);
+            throw "Unreachable";
+          }
           state[i] = 1;
           return (ret[i] = { ...structtype, name: ty.name });
         case "chan":
           const chantype = aux(ty.data, ty.ctx, false);
-          if (typeof chantype === "number") throw "todo";
+          if (typeof chantype === "number") {
+            err(ty.ctx, `could not resolve channel type: ${ty.ctx.getText()}`);
+            throw "Unreachable";
+          }
           state[i] = 1;
           return (ret[i] = { ...chantype, name: ty.name });
         case "func":
           const functype = aux(ty.data, ty.ctx, false);
-          if (typeof functype === "number") throw "todo";
+          if (typeof functype === "number") {
+            err(ty.ctx, `could not resolve function type: ${ty.ctx.getText()}`);
+            throw "Unreachable";
+          }
           state[i] = 1;
           return (ret[i] = { ...functype, name: ty.name });
         case "ptr":
           const ptrtype = aux(ty.data, ty.ctx, false);
-          if (typeof ptrtype === "number") throw "todo"; // ? really
+          if (typeof ptrtype === "number") {
+            err(ty.ctx, `could not resolve pointer type: ${ty.ctx.getText()}`);
+            throw "Unreachable";
+          }
           state[i] = 1;
           return (ret[i] = { ...ptrtype, name: ty.name });
         case "alias":
           const alias = aux(ty.data, ty.ctx, false);
-          if (typeof alias === "number") throw "todo"; // ? really
+          if (typeof alias === "number") {
+            err(ty.ctx, `could not resolve alias type: ${ty.ctx.getText()}`);
+            throw "Unreachable";
+          }
           state[i] = 1;
           return (ret[i] = alias);
       }
@@ -1000,6 +1019,7 @@ class Typer extends GoVisitor<Type.T[]> {
     // @todo Should we type-check the fields?
     if (ctx.typeName()) {
       const ret = this.store.lookupExn(ctx.typeName().getText(), ctx);
+      ctx.keyedElems().keyedElem_list();
       return [ret];
     } else if (ctx.structType()) {
       const ret = Type.resolveStructTypeExn(ctx.structType(), this.store);
@@ -1044,6 +1064,10 @@ class Typer extends GoVisitor<Type.T[]> {
       .type__list()
       .map((typ) => Type.resolveTypeExn(typ, this.store));
     return [{ data: { kind: "func", params, results } }];
+  };
+
+  visitLitStr = (_ctx: LitStrContext): Type.T[] => {
+    return [Type.Primitive.make("string", "string")];
   };
 
   visitChildren(node: ParserRuleContext): Type.T[] {
@@ -2045,6 +2069,21 @@ export class Assembler extends GoVisitor<number> {
         if (sorted.length !== fieldc) {
           err(ctx, `in struct literal - expected ${fieldc} fields, but got ${sorted.length}`);
         }
+
+        const typer = new Typer(this.tstore, this.tenv);
+        for (let i = 0; i < fieldc; ++i) {
+          const rhs = typer.visit(given[i][1]);
+          if (rhs.length != 1) {
+            err(ctx, `multiple values assigned to one field at ${given[i][1].getText()}`);
+            throw "Unreachable";
+          }
+          const lhs = ty.data.fields[i][1];
+          if (!Type.equal(lhs, rhs[0])) {
+            err(ctx, `field type mismatch - expected ${lhs.name} but got ${rhs[0].name}`);
+            throw "Unreachable";
+          }
+        }
+
         sorted.reverse().forEach(([_, expr]) => this.visit(expr)); // compile each field's expression
         IPackStruct.emit(this.bc).setFieldc(fieldc);
         break;
