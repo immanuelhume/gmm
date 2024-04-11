@@ -6,6 +6,10 @@
 
 Go minus minus. A stack-based virtual machine for a small subset of Go.
 
++------------------+
+|BUILDING THIS REPO|
++------------------+
+
 This project was built with NodeJS 21.7 and Antlr 4.12. To run locally,
 
     git clone git@github.com:immanuelhume/gmm
@@ -21,6 +25,10 @@ To run individual files, use
 
 A live editor is available at https://immanuelhume.github.io/gmm. It is able to
 load the examples in the examples/ folder.
+
++------------+
+|INTRODUCTION|
++------------+
 
 To do anything meaningful we'll have to print things to the console. The hello
 world example looks like this:
@@ -50,6 +58,17 @@ Gmm has three primitive data types: int, float, and string. Ints and floats are
 64 bit. These three types (along with pointers) are the only primitive types
 in gmm. Other "primitives" like channels and mutexes are data structures
 implemented on top of these types.
+
++-------+
+|GOTCHAS|
++-------+
+
+Integer and float literals are strict. For instance, the literal 42 will always
+be interpreted as an int, and 42.0 is always a float. These will lead to
+compile errors:
+
+    var x float = 42
+    var y int   = 42.0
 
 Note: the parser is not very sophisticated, and certain one-liners are invalid.
 This is a purely cosmetic issue and does not affect runtime. These, although
