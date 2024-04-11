@@ -1,4 +1,0 @@
-- How to represent struct types?
-- How to parse and eval '.' access?
-- Builtins? e.g. make, new, panic
-- A test runner for Go code?
