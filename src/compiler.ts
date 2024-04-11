@@ -367,7 +367,7 @@ namespace Type {
         return arraysEqual(lhs.params, _rhs.params, equal) && arraysEqual(lhs.results, _rhs.results, equal);
       case "ptr":
         _rhs = rhs as Pointer;
-        return equal(lhs.elem, _rhs.elem);
+        return lhs.elem.name === _rhs.elem.name; // copium
       case "method":
         _rhs = rhs as Method;
         return lhs.pointer === _rhs.pointer && equalData(lhs.func, _rhs.func);
@@ -1071,6 +1071,16 @@ class Typer extends GoVisitor<Type.T[]> {
     return [Type.Primitive.make("string", "string")];
   };
 
+  visitLpointer = (ctx: LpointerContext): Type.T[] => {
+    const inner = this.visit(ctx.lvalue());
+    if (inner.length !== 1 || inner[0].data.kind !== "ptr") {
+      err(ctx, `${ctx.getText()} cannot be dereferenced`);
+      throw "Unreachable";
+    }
+    // we "deref" the type
+    return [inner[0].data.elem];
+  };
+
   visitLname = (ctx: LnameContext): Type.T[] => {
     return [this.env.lookupExn(ctx.getText(), ctx)];
   };
@@ -1232,7 +1242,7 @@ export class Assembler extends GoVisitor<number> {
     return Type.resolveTypeExn(ctx, this.tstore);
   };
 
-  typeExpr = (ctx: ParserRuleContext): Type.T[] => {
+  typeComp = (ctx: ParserRuleContext): Type.T[] => {
     return new Typer(this.tstore, this.tenv).visit(ctx);
   };
 
@@ -1453,7 +1463,7 @@ export class Assembler extends GoVisitor<number> {
   visitVarDecl = (ctx: VarDeclContext): number => {
     if (ctx.expr()) {
       const expectedType = this.resolveTypeExn(ctx.type_());
-      const givenType = this.typeExpr(ctx.expr());
+      const givenType = this.typeComp(ctx.expr());
       if (givenType.length !== 1) {
         err(ctx, `unexpected multiple values on RHS`);
         throw "Unreachable";
@@ -1667,16 +1677,7 @@ export class Assembler extends GoVisitor<number> {
   };
 
   visitLpointer = (ctx: LpointerContext): number => {
-    // @todo: typecheck that the thing being derefed is a pointer?
-    const ty = this.typeExpr(ctx);
-    if (ty.length !== 1) {
-      err(ctx, `todo`);
-      throw "Unreachable";
-    }
-    if (ty[0].data.kind !== "ptr") {
-      err(ctx, `${ctx.getText()} cannot be dereferenced`);
-      throw "Unreachable";
-    }
+    this.typeComp(ctx); // implicit type checkin
 
     const inner = ctx.lvalue();
     if (inner.lname()) {
@@ -1695,8 +1696,8 @@ export class Assembler extends GoVisitor<number> {
   };
 
   _visitField = (ctx: FieldContext, lvalue = true): number => {
-    const baseType = new Typer(this.tstore, this.tenv).visit(ctx._base);
-    if (baseType.length === 0) {
+    const baseType = this.typeComp(ctx._base);
+    if (baseType.length !== 1) {
       err(ctx, `could not determine type of ${ctx._base.getText()}`);
     }
     const basetype = baseType[0];
@@ -1728,7 +1729,17 @@ export class Assembler extends GoVisitor<number> {
   };
 
   visitAssignment = (ctx: AssignmentContext): number => {
-    // @todo type checking?
+    const rhsTypes = ctx._rhs.expr_list().flatMap((expr) => this.typeComp(expr));
+    const lhsTypes = ctx._lhs.lvalue_list().flatMap((lvalue) => this.typeComp(lvalue));
+    if (rhsTypes.length !== lhsTypes.length) {
+      err(ctx, `${lhsTypes.length} on LHS but ${rhsTypes.length} on RHS for ${ctx.getText()}`);
+    }
+    for (let i = 0; i < lhsTypes.length; ++i) {
+      if (!Type.equal(lhsTypes[i], rhsTypes[i])) {
+        err(ctx, `expected ${lhsTypes[i].name} but got ${rhsTypes[i].name}`);
+      }
+    }
+
     const nnames = ctx._lhs.lvalue_list().length;
     this.visit(ctx._rhs);
     this.visit(ctx._lhs);
@@ -1737,8 +1748,7 @@ export class Assembler extends GoVisitor<number> {
   };
 
   visitShortVarDecl = (ctx: ShortVarDeclContext): number => {
-    // @todo type checking?
-    // Identical to [visitAssignment]
+    // Identical to [visitAssignment]?
     //
     // @todo make them into a common function
     const nnames = ctx._lhs.lname_list().length;
@@ -1746,7 +1756,7 @@ export class Assembler extends GoVisitor<number> {
     this.visit(ctx._lhs);
     IAssign.emit(this.bc).setCount(nnames);
 
-    const rhsTypes = ctx._rhs.expr_list().flatMap((expr) => new Typer(this.tstore, this.tenv).visit(expr));
+    const rhsTypes = ctx._rhs.expr_list().flatMap((expr) => this.typeComp(expr));
     if (rhsTypes.length !== nnames) {
       err(ctx, `${nnames} on LHS but ${rhsTypes.length} on RHS for ${ctx.getText()}`);
     }
@@ -1812,8 +1822,7 @@ export class Assembler extends GoVisitor<number> {
       const fn = ctx._fn;
       const argc = args.arg_list().length;
 
-      const typer = new Typer(this.tstore, this.tenv);
-      const _fnType = typer.visit(fn);
+      const _fnType = this.typeComp(fn);
       if (_fnType.length !== 1 || (_fnType[0].data.kind !== "method" && _fnType[0].data.kind !== "func")) {
         err(ctx, `cannot call non-function ${fn.getText()}`);
         throw "Unreachable";
@@ -1832,7 +1841,7 @@ export class Assembler extends GoVisitor<number> {
           return fnType.func.results.length;
       }
     } else if (ctx._base) {
-      const baseType = new Typer(this.tstore, this.tenv).visit(ctx._base);
+      const baseType = this.typeComp(ctx._base);
       if (baseType.length === 0) {
         err(ctx, `could not find type for ${ctx.getText()}`);
       }
@@ -1888,8 +1897,7 @@ export class Assembler extends GoVisitor<number> {
    * assignments (short var decls and assignments).
    */
   visitExprList = (ctx: ExprListContext): number => {
-    const typer = new Typer(this.tstore, this.tenv);
-    const len = ctx.expr_list().flatMap((expr) => typer.visit(expr)).length;
+    const len = ctx.expr_list().flatMap((expr) => this.typeComp(expr)).length;
     this.visitChildren(ctx);
     return len;
   };
@@ -2106,9 +2114,8 @@ export class Assembler extends GoVisitor<number> {
           err(ctx, `in struct literal - expected ${fieldc} fields, but got ${sorted.length}`);
         }
 
-        const typer = new Typer(this.tstore, this.tenv);
         for (let i = 0; i < fieldc; ++i) {
-          const rhs = typer.visit(given[i][1]);
+          const rhs = this.typeComp(given[i][1]);
           if (rhs.length != 1) {
             err(ctx, `multiple values assigned to one field at ${given[i][1].getText()}`);
             throw "Unreachable";
