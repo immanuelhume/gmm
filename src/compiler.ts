@@ -2102,7 +2102,6 @@ export class Assembler extends GoVisitor<number> {
 
     switch (ty.data.kind) {
       case "struct":
-        // @todo: are we gonna type check the fields?
         const fieldc = ty.data.fields.length;
         const given = ctx
           .keyedElems()
