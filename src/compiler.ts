@@ -498,6 +498,13 @@ namespace Type {
       throw "Unreachable";
     }
   };
+
+  export const resolveStructTypeExn = (ctx: StructTypeContext, tstore: TypeStore): Type.T => {
+    const tydata = _Type.fromStructContext(ctx);
+    const ty = _Type.resolve([{ data: tydata, ctx }], tstore);
+    assert(ty.length === 1);
+    return ty[0];
+  };
 }
 
 /**
@@ -612,7 +619,7 @@ namespace _Type {
     return { kind: "func", params, results };
   };
 
-  const fromStructContext = (ctx: StructTypeContext): Struct => {
+  export const fromStructContext = (ctx: StructTypeContext): Struct => {
     const fs = ctx.fieldDecl_list();
     const fields: [string, Data][] = fs.map((field) => {
       const name = field.name().getText();
@@ -945,6 +952,9 @@ class Typer extends GoVisitor<Type.T[]> {
     // @todo Should we type-check the fields?
     if (ctx.typeName()) {
       const ret = this.store.lookupExn(ctx.typeName().getText(), ctx);
+      return [ret];
+    } else if (ctx.structType()) {
+      const ret = Type.resolveStructTypeExn(ctx.structType(), this.store);
       return [ret];
     } else {
       throw "Unreachable";
@@ -1961,31 +1971,37 @@ export class Assembler extends GoVisitor<number> {
       return ret;
     };
 
+    let ty: Type.T;
+
     if (ctx.typeName()) {
-      const ty = ctx.typeName().getText();
-      const repr = this.tstore.lookupExn(ty, ctx);
-      switch (repr.data.kind) {
-        case "struct":
-          // @todo: are we gonna type check the fields?
-          const fieldc = repr.data.fields.length;
-          const given = ctx
-            .keyedElems()
-            .keyedElem_list()
-            .map((elem) => [elem.lname().getText(), elem.expr()] as [string, ExprContext]);
-          const expected = repr.data.fields.map(([name, _]) => name);
-          const sorted = sortFields(given, expected);
-          if (sorted.length !== fieldc) {
-            err(ctx, `in struct literal of ${ty} - expected ${fieldc} fields, but got ${sorted.length}`);
-          }
-          sorted.reverse().forEach(([_, expr]) => this.visit(expr)); // compile each field's expression
-          IPackStruct.emit(this.bc).setFieldc(fieldc);
-          break;
-        default:
-          err(ctx, `expected struct but got ${repr.data.kind}`);
-      }
+      const tyname = ctx.typeName().getText();
+      ty = this.tstore.lookupExn(tyname, ctx);
+    } else if (ctx.structType()) {
+      ty = Type.resolveStructTypeExn(ctx.structType(), this.tstore);
     } else {
       throw "Unreachable";
     }
+
+    switch (ty.data.kind) {
+      case "struct":
+        // @todo: are we gonna type check the fields?
+        const fieldc = ty.data.fields.length;
+        const given = ctx
+          .keyedElems()
+          .keyedElem_list()
+          .map((elem) => [elem.lname().getText(), elem.expr()] as [string, ExprContext]);
+        const expected = ty.data.fields.map(([name, _]) => name);
+        const sorted = sortFields(given, expected);
+        if (sorted.length !== fieldc) {
+          err(ctx, `in struct literal - expected ${fieldc} fields, but got ${sorted.length}`);
+        }
+        sorted.reverse().forEach(([_, expr]) => this.visit(expr)); // compile each field's expression
+        IPackStruct.emit(this.bc).setFieldc(fieldc);
+        break;
+      default:
+        err(ctx, `expected struct but got ${ty.data.kind}`);
+    }
+
     return 1;
   };
 }

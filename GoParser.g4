@@ -122,7 +122,7 @@ litNil : NIL ;
 litStr : LIT_STR ;
 litBool : TRUE | FALSE ;
 
-litStruct : typeName '{' keyedElems '}' ;
+litStruct : (structType | typeName) '{' keyedElems '}' ;
 keyedElems : keyedElem (',' keyedElem)* ','? ;
 keyedElem : lname ':' expr ;
 
