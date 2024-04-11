@@ -201,7 +201,6 @@ class DeclScanner extends GoVisitor<string[]> {
   };
 
   visitMethodDecl = (ctx: MethodDeclContext) => {
-    // @todo: pointer types?
     const rcvType = ctx._rcvType.getText();
     const fnName = ctx._methodName.getText();
     return [rcvType + "::" + fnName];
@@ -305,9 +304,6 @@ namespace Type {
     fields: [string, T][];
   };
 
-  /**
-   * @todo: should this be parked under Primitive?
-   */
   export type Channel = {
     kind: "chan";
     /**
@@ -336,6 +332,11 @@ namespace Type {
   export type Pointer = {
     kind: "ptr";
     elem: T;
+
+    /**
+     * Only used when resolving types.
+     */
+    unresolved?: number;
   };
 
   /**
@@ -655,36 +656,52 @@ namespace _Type {
       }
       return undefined;
     };
-    // const aux = (name: string, ctx: ParserRuleContext): Type.T => {
-    //   if (name.startsWith("*")) {
-    //     const elem = aux(name.substring(1), ctx);
-    //     return { data: { kind: "ptr", elem } };
-    //   }
-    //   const idx = checkFriends(name);
-    //   if (idx === undefined) {
-    //     const t = store.lookupExn(name, ctx);
-    //     return t;
-    //   } else {
-    //     const t = dfs(idx);
-    //     return t;
-    //   }
-    // };
-    const aux = (ty: Data, ctx: ParserRuleContext): Type.T => {
+    const dummyType: Type.T = { data: { kind: "struct", fields: [] } };
+    const aux = (ty: Data, ctx: ParserRuleContext, inPtr: boolean): Type.T | number => {
       switch (ty.kind) {
         case "struct":
-          const fields = ty.fields.map((field) => [field[0], aux(field[1], ctx)] as [string, Type.T]);
+          const fields: [string, Type.T][] = ty.fields.map(([fieldname, fieldty]) => {
+            const typ = aux(fieldty, ctx, false);
+            if (typeof typ === "number") {
+              throw "todo";
+            } else {
+              return [fieldname, typ];
+            }
+          });
           return { data: { kind: "struct", fields } };
         case "chan": {
-          const elem = aux(ty.elem, ctx);
+          const elem = aux(ty.elem, ctx, false);
+          if (typeof elem === "number") {
+            err(ctx, `could not resolve channel's type: ${ctx.getText()}`);
+            throw "Unreachable";
+          }
           return { data: { kind: "chan", elem } };
         }
         case "func":
-          const params = ty.params.map((param) => aux(param, ctx));
-          const results = ty.results.map((param) => aux(param, ctx));
+          const params = ty.params
+            .map((param) => aux(param, ctx, false))
+            .map((param) => {
+              if (typeof param === "number") {
+                throw "todo";
+              }
+              return param;
+            });
+          const results = ty.results
+            .map((res) => aux(res, ctx, false))
+            .map((res) => {
+              if (typeof res === "number") {
+                throw "todo";
+              }
+              return res;
+            });
           return { data: { kind: "func", params, results } };
         case "ptr": {
-          const elem = aux(ty.elem, ctx);
-          return { data: { kind: "ptr", elem } };
+          const elem = aux(ty.elem, ctx, true);
+          if (typeof elem === "number") {
+            return { data: { kind: "ptr", elem: dummyType, unresolved: elem } };
+          } else {
+            return { data: { kind: "ptr", elem } };
+          }
         }
         case "alias":
           const idx = checkFriends(ty.alias);
@@ -692,43 +709,48 @@ namespace _Type {
             const t = store.lookupExn(ty.alias, ctx);
             return t;
           } else {
-            const t = dfs(idx);
+            const t = dfs(idx, inPtr);
             return t;
           }
       }
     };
-    const dfs = (i: number): Type.T => {
-      if (state[i] == 0) {
-        // @todo recursive pointer types should be allowed - think about how to do this
-        err(ts[i].ctx, `found recursive type: ${ts[i].name}`);
-      } else if (state[i] == 1) {
+    const dfs = (i: number, inPtr: boolean): Type.T | number => {
+      if (state[i] === 0) {
+        if (!inPtr) {
+          err(ts[i].ctx, `found recursive type: ${ts[i].name}`);
+        } else {
+          // resolve in second pass
+          return i;
+        }
+      } else if (state[i] === 1) {
         return ret[i];
       }
       state[i] = 0;
       const ty = ts[i];
       switch (ty.data.kind) {
         case "struct":
-          const fields = ty.data.fields.map(([name, tyname]) => {
-            const typ = aux(tyname, ty.ctx);
-            return [name, typ] as [string, Type.T];
-          });
+          const structtype = aux(ty.data, ty.ctx, false);
+          if (typeof structtype === "number") throw "todo";
           state[i] = 1;
-          return (ret[i] = { name: ty.name, data: { kind: "struct", fields } });
+          return (ret[i] = { ...structtype, name: ty.name });
         case "chan":
-          const elem = aux(ty.data.elem, ty.ctx);
+          const chantype = aux(ty.data, ty.ctx, false);
+          if (typeof chantype === "number") throw "todo";
           state[i] = 1;
-          return (ret[i] = { name: ty.name, data: { kind: "chan", elem } });
+          return (ret[i] = { ...chantype, name: ty.name });
         case "func":
-          const params = ty.data.params.map((tyname) => aux(tyname, ty.ctx));
-          const results = ty.data.results.map((tyname) => aux(tyname, ty.ctx));
+          const functype = aux(ty.data, ty.ctx, false);
+          if (typeof functype === "number") throw "todo";
           state[i] = 1;
-          return (ret[i] = { name: ty.name, data: { kind: "func", params, results } });
+          return (ret[i] = { ...functype, name: ty.name });
         case "ptr":
-          const ptrelem = aux(ty.data.elem, ty.ctx);
+          const ptrtype = aux(ty.data, ty.ctx, false);
+          if (typeof ptrtype === "number") throw "todo"; // ? really
           state[i] = 1;
-          return (ret[i] = { name: ty.name, data: { kind: "ptr", elem: ptrelem } });
+          return (ret[i] = { ...ptrtype, name: ty.name });
         case "alias":
-          const alias = aux(ty.data, ty.ctx);
+          const alias = aux(ty.data, ty.ctx, false);
+          if (typeof alias === "number") throw "todo"; // ? really
           state[i] = 1;
           return (ret[i] = alias);
       }
@@ -738,7 +760,33 @@ namespace _Type {
       if (state[i] === 0) {
         throw "Unreachable";
       }
-      dfs(i);
+      dfs(i, false);
+    }
+    const resolveCycles = (t: Type.T) => {
+      switch (t.data.kind) {
+        case "struct":
+          t.data.fields.forEach(([_, fieldtype]) => resolveCycles(fieldtype));
+          break;
+        case "chan":
+          resolveCycles(t.data.elem);
+          break;
+        case "primitive":
+          break;
+        case "func":
+          t.data.params.forEach((param) => resolveCycles(param));
+          t.data.results.forEach((res) => resolveCycles(res));
+          break;
+        case "method":
+          // ?
+          break;
+        case "ptr":
+          if (t.data.unresolved === undefined) return;
+          t.data.elem = ret[t.data.unresolved]; // resolve it
+          break;
+      }
+    };
+    for (const t of ret) {
+      resolveCycles(t);
     }
     return ret;
   };
@@ -1620,6 +1668,7 @@ export class Assembler extends GoVisitor<number> {
   };
 
   visitAssignment = (ctx: AssignmentContext): number => {
+    // @todo type checking?
     const nnames = ctx._lhs.lvalue_list().length;
     this.visit(ctx._rhs);
     this.visit(ctx._lhs);
@@ -1628,6 +1677,7 @@ export class Assembler extends GoVisitor<number> {
   };
 
   visitShortVarDecl = (ctx: ShortVarDeclContext): number => {
+    // @todo type checking?
     // Identical to [visitAssignment]
     //
     // @todo make them into a common function

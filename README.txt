@@ -51,12 +51,13 @@ Gmm has three primitive data types: int, float, and string. Ints and floats are
 in gmm. Other "primitives" like channels and mutexes are data structures
 implemented on top of these types.
 
-Note: due to limitations with the parser, certain one-liners are invalid. This
-is a purely cosmetic issue and does not affect runtime. These will not parse:
+Note: the parser is not very sophisticated, and certain one-liners are invalid.
+This is a purely cosmetic issue and does not affect runtime. These, although
+valid in actual Go, will not parse here:
 
     func main() { dbg("hello world") }
 
-    type point struct { x float; y float }
+    type node struct { val int; left *node; right *node }
 
 Instead, please place things things between braces in their own lines, like so:
 
@@ -64,8 +65,9 @@ Instead, please place things things between braces in their own lines, like so:
         dbg("hello world")
     }
 
-    type point struct {
-        x float
-        y float
+    type node struct {
+        val   int
+        left  *node
+        right *node
     }
 
