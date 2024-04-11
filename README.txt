@@ -70,9 +70,9 @@ compile errors:
     var x float = 42
     var y int   = 42.0
 
-Note: the parser is not very sophisticated, and certain one-liners are invalid.
-This is a purely cosmetic issue and does not affect runtime. These, although
-valid in actual Go, will not parse here:
+The parser is not very sophisticated, and certain one-liners are invalid. This
+is a purely cosmetic issue and does not affect runtime. These, although valid
+in actual Go, will not parse here:
 
     func main() { dbg("hello world") }
 
@@ -90,3 +90,4 @@ Instead, please place things things between braces in their own lines, like so:
         right *node
     }
 
+Error messages for type errors are quite bad for now.
