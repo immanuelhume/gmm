@@ -17,7 +17,6 @@
  *       the chidren.
  */
 
-import assert from "assert";
 import { Address, Stack, StrPool, fmtAddress } from "./util";
 
 export interface Memory {

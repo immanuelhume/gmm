@@ -20,7 +20,7 @@ import {
 } from "../src/heapviews";
 import { MachineState, Thread, ThreadCtl } from "../src/machine";
 import { Executor } from "../src/executor";
-import { assert } from "console";
+import assert from "assert";
 
 const run = (filename: string) => {
   const src = readFileSync(filename).toString();

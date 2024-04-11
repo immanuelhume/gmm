@@ -949,10 +949,10 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
   },
   [BuiltinId["panic"]]: function (state: MachineState, t: Thread, args: number[]) {
     const reprs = args.map((arg) => NodeView.of(state.heap, arg, { strPool: state.strPool }).toString()).join(" ");
-    console.log("\x1b[31m", "panic:", reprs, "\x1b[0m");
+    console.log("panic:", reprs);
     const lineno = state.srcMap.get(t.pc);
     if (lineno !== undefined) {
-      console.log("\x1b[31m", "  ", "at line", lineno, "\x1b[0m");
+      console.log("at line", lineno);
     }
     throw new PanicError(reprs); // we should never recover from this
   },

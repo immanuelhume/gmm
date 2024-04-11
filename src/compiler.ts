@@ -90,7 +90,7 @@ import {
 } from "./instructions";
 import { Address, ArrayStack, Stack, StrPool, arraysEqual } from "./util";
 import { DataType, Global, Int64View, NodeView, PointerView, StructView, builtinSymbols } from "./heapviews";
-import { assert } from "console";
+import assert from "assert";
 
 class BytecodeWriter implements Emitter {
   private _code: DataView;
@@ -1968,7 +1968,7 @@ export const compileSrc = (src: string): CompileResult => {
     for (const err of parseErrHandler.errs) {
       console.error(err);
     }
-    throw new ParseError(`encountered ${parseErrHandler.errs.length} errors`);
+    throw new ParseError(`encountered ${parseErrHandler.errs.length} errors while parsing`);
   }
 
   const ass = new Assembler();
