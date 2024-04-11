@@ -13,7 +13,7 @@ This project was built with NodeJS 21.7 and Antlr 4.12. To run locally,
     npm run runall # run all test cases
 
 Antlr4 is not required unless you modify the parser or lexer. Its output is
-checked into this repository at antlr/.
+already checked into this repository at antlr/.
 
 To run individual files, use
 
@@ -45,3 +45,27 @@ prints a message but then terminates the program.
 
 The go/pass/ folder contains test cases which are meant to pass. The go/fail
 folder holds the opposite. Check them to see the full set of features.
+
+Gmm has three primitive data types: int, float, and string. Ints and floats are
+64 bit. These three types (along with pointers) are the only primitive types
+into gmm. Other "primitives" like channels and mutexes are data structures
+implemented on top of these types.
+
+Note: due to limitations with the parser, one-liners are invalid. This is a
+purely cosmetic issue and does not affect runtime. These will not parse:
+
+    func main() { dbg("hello world") }
+
+    type point struct { x float; y float }
+
+Instead, please place things things between braces in their own lines, like so:
+
+    func main() {
+        dbg("hello world")
+    }
+
+    type point struct {
+        x float
+        y float
+    }
+
