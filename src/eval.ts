@@ -384,8 +384,11 @@ export const microcode: Record<Opcode, EvalFn> = {
     t.pc += IPackPtr.size;
   },
   [Opcode.Deref]: function (state: MachineState, t: Thread): void {
-    // @todo: check if we are trying to deref a nullptr
     const ptr = new PointerView(state.heap, t.os.pop());
+    const value = ptr.getValue();
+    if (value === state.globals[Global["nil"]]) {
+      throw new Error(`Cannot dereference a null pointer`);
+    }
     t.os.push(ptr.getValue());
     t.pc += IPackPtr.size;
   },
