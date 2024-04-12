@@ -791,7 +791,7 @@ class TypeEnv {
   }
 
   popFrame() {
-    this.frames.unshift();
+    this.frames.shift();
   }
 
   lookup(name: string): Type.T | undefined {
