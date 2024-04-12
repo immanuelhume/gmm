@@ -841,9 +841,21 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
       [
         BinaryOp.Eq,
         (state, lhsAddr, rhsAddr) => {
-          const lhs = new StringView(state.heap, lhsAddr, state).toString();
-          const rhs = new StringView(state.heap, rhsAddr, state).toString();
+          const lhs = new StringView(state.heap, lhsAddr, state).getId();
+          const rhs = new StringView(state.heap, rhsAddr, state).getId();
           if (lhs === rhs) {
+            return state.globals[Global["true"]];
+          } else {
+            return state.globals[Global["false"]];
+          }
+        },
+      ],
+      [
+        BinaryOp.Neq,
+        (state, lhsAddr, rhsAddr) => {
+          const lhs = new StringView(state.heap, lhsAddr, state).getId();
+          const rhs = new StringView(state.heap, rhsAddr, state).getId();
+          if (lhs !== rhs) {
             return state.globals[Global["true"]];
           } else {
             return state.globals[Global["false"]];
@@ -857,8 +869,9 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           const rhs = new StringView(state.heap, rhsAddr, state).toString();
 
           const res = lhs + rhs;
-          const ret = StringView.allocate(state);
-          ret.strPool?.add(res);
+          const id = state.strPool.add(res);
+          const strView = StringView.allocate(state);
+          const ret = new StringView(state.heap, strView.addr, state).setId(id);
           return ret.addr;
         },
       ],
