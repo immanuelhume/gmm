@@ -8,15 +8,17 @@
 </head>
 <body class="flex items-center justify-center min-h-screen bg-gray-900">
     <div id="playground" class="w-full max-w-4xl p-8 bg-gray-800 shadow-lg rounded-lg">
-        <select id="exampleSelector" class="mb-4 p-2 bg-gray-700 text-white border border-gray-600 rounded">
-            <option value="">Select an example</option>
-            <!-- Populated dynamically -->
-        </select>
-        <textarea id="codeInput" class="font-mono w-full p-4 mb-4 bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-gray-500 focus:border-transparent" placeholder="Write your code here..." rows="10"></textarea>
-        <button id="runButton" class="px-6 py-3 w-full bg-gray-700 text-white rounded hover:bg-gray-600 transition duration-300 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50">
-            Run
-        </button>
-        <div id="output" class="font-mono mt-4 p-4 bg-gray-700 text-white border border-gray-600 overflow-auto h-48"></div>
+        <div class="flex justify-between">
+            <select id="exampleSelector" class="mb-4 p-2 bg-gray-700 text-white border border-gray-600 rounded">
+                <option value="">Select an example</option>
+                <!-- Options populated dynamically -->
+            </select>
+            <button id="runButton" class="mb-4 px-6 py-3 bg-gray-700 text-white rounded hover:bg-gray-600 transition duration-300 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50">
+                Run
+            </button>
+        </div>
+        <textarea id="codeInput" class="font-mono w-full p-4 mb-4 bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-gray-500 focus:border-transparent rounded" placeholder="Write your code here..." rows="20"></textarea>
+        <div id="output" class="font-mono mt-4 p-4 bg-gray-700 text-white border border-gray-600 overflow-auto h-48 rounded"></div>
     </div>
     <script type="module" src="/src/playground.ts"></script>
 </body>
