@@ -57,7 +57,6 @@ import {
 } from "./instructions";
 import { MachineState, Thread } from "./machine";
 import { Channel } from "./compiler";
-import { stat } from "fs";
 
 type EvalFn = (state: MachineState, t: Thread, go?: boolean) => void;
 
