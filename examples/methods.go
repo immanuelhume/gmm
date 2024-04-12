@@ -8,10 +8,10 @@ func (lhs Point) dot(rhs Point) float {
 }
 
 func main() {
-	p1 := Point{x: 2, y: 3}
-	p2 := Point{x: 7, y: 5}
+	p1 := Point{x: 2.0, y: 3.0}
+	p2 := Point{x: 7.0, y: 5.0}
 	d := p1.dot(p2)
-	if d != 29 {
+	if d != 29.0 {
 		panic("expected 29, got", d)
 	}
 }

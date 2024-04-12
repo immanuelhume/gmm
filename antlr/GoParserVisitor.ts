@@ -21,7 +21,6 @@ import { FieldContext } from "./GoParser";
 import { ForStmtContext } from "./GoParser";
 import { ConditionContext } from "./GoParser";
 import { ForClauseContext } from "./GoParser";
-import { RangeClauseContext } from "./GoParser";
 import { ExprStmtContext } from "./GoParser";
 import { ReturnStmtContext } from "./GoParser";
 import { ExprContext } from "./GoParser";
@@ -191,12 +190,6 @@ export default class GoParserVisitor<Result> extends ParseTreeVisitor<Result> {
    * @return the visitor result
    */
   visitForClause?: (ctx: ForClauseContext) => Result;
-  /**
-   * Visit a parse tree produced by `GoParser.rangeClause`.
-   * @param ctx the parse tree
-   * @return the visitor result
-   */
-  visitRangeClause?: (ctx: RangeClauseContext) => Result;
   /**
    * Visit a parse tree produced by `GoParser.exprStmt`.
    * @param ctx the parse tree

@@ -8,9 +8,9 @@ func (p Point) dot() float {
 }
 
 func main() {
-	p := Point{x: 2, y: 3}
+	p := Point{x: 2.0, y: 3.0}
 	d := p.dot()
-	if d != 13 {
+	if d != 13.0 {
 		panic("expected 13, got", d)
 	}
 }
