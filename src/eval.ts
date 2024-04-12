@@ -20,6 +20,7 @@ import {
   LvalueView,
   LvalueKind,
   copy,
+  StringView,
 } from "./heapviews";
 import {
   IAssign,
@@ -56,6 +57,7 @@ import {
 } from "./instructions";
 import { MachineState, Thread } from "./machine";
 import { Channel } from "./compiler";
+import { stat } from "fs";
 
 type EvalFn = (state: MachineState, t: Thread, go?: boolean) => void;
 
@@ -835,7 +837,32 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
   [
     // @todo: add string concat (+) and string eq (==)
     DataType.String,
-    new Map([]),
+    new Map([
+      [
+        BinaryOp.Eq,
+        (state, lhsAddr, rhsAddr) => {
+          const lhs = new StringView(state.heap, lhsAddr, state).toString();
+          const rhs = new StringView(state.heap, rhsAddr, state).toString();
+          if (lhs === rhs) {
+            return state.globals[Global["true"]];
+          } else {
+            return state.globals[Global["false"]];
+          }
+        },
+      ],
+      [
+        BinaryOp.Add,
+        (state, lhsAddr, rhsAddr) => {
+          const lhs = new StringView(state.heap, lhsAddr, state).toString();
+          const rhs = new StringView(state.heap, rhsAddr, state).toString();
+
+          const res = lhs + rhs;
+          const ret = StringView.allocate(state);
+          ret.strPool?.add(res);
+          return ret.addr;
+        },
+      ],
+    ]),
   ],
 ]);
 
