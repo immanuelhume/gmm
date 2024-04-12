@@ -1,4 +1,4 @@
 func main() {
-	x := new(int)
-	y = *x
+	var x int
+	*x
 }
