@@ -38,7 +38,8 @@ world example looks like this:
     }
 
 We have a dbg builtin instead of Go's fmt library; dbg behaves exactly like
-JavaScript's console.log. This was mainly a development aid.
+JavaScript's console.log, but also prints the line number where it was called.
+This was mainly a development aid.
 
 The panic function helps us check if things are running properly. Like dbg, it
 prints a message but then terminates the program.
@@ -89,5 +90,10 @@ Instead, please place things things between braces in their own lines, like so:
         left  *node
         right *node
     }
+
+Struct literals, when used, must specify all fields.
+
+    u := struct{val: 1}                        // compile error!
+    v := struct{val: 1, left: nil, right: nil} // all good
 
 Error messages for type errors are quite bad for now.
