@@ -36,18 +36,16 @@ assignment : lhs=lvalueList '=' rhs=exprList ;
 
 lvalueList : lvalue (',' lvalue)* ;
 lvalue : lname | lpointer | field ;
-lpointer : '*' (lname | field) ;
+lpointer : '*' lvalue ;
 lname : WORD ; // a name which appears on LHS
 lnameList : lname (',' lname)* ;
 field : base=primaryExpr '.' last=WORD ;
 
-forStmt : 'for' (condition | forClause | rangeClause) block ;
+forStmt : 'for' (condition | forClause ) block ;
 
 condition : expr ;
 
 forClause : init=simpleStmt? ';' cond=condition? ';' post=simpleStmt? ;
-
-rangeClause : ( lvalueList '=' | lnameList ':=' ) 'range' expr ;
 
 exprStmt : expr ;
 

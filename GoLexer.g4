@@ -22,7 +22,6 @@ BREAK : 'break' -> mode(NLSEMI) ;
 CONTINUE : 'continue' -> mode(NLSEMI) ;
 IF : 'if' ;
 ELSE : 'else' ;
-RANGE : 'range' ;
 
 NEW : 'new' ;
 MAKE : 'make' ;
@@ -67,10 +66,15 @@ fragment LETTER: UNICODE_LETTER | '_' ;
 fragment UNICODE_DIGIT: [\p{Nd}] ;
 fragment UNICODE_LETTER: [\p{L}] ;
 
+MARGINALIA : '/*' .*? '*/' -> skip ;
+COMMENT : '//' ~[\r\n]* -> skip ;
+
 WS : [ \t\r\n]+ -> skip ;
 
 mode NLSEMI ; // the goal of [NLSEMI] is to check if the statement terminates, and if so, emit [EOS] token (end-of-statement)
 
 NLSEMI_WS : [ \t] -> skip ;
 EOS : ([\r\n]+) -> mode(DEFAULT_MODE) ; // technically, ';' should trigger an EOS also
+MARGINALIA_NLSEMI : '/*' ~[\r\n]*? '*/' -> skip ;
+COMMENT_NLSEMI : '//' ~[\r\n]*  -> skip ;
 OTHER : -> mode(DEFAULT_MODE), skip ;
