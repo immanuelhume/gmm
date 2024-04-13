@@ -78,11 +78,13 @@ export default class GoParser extends Parser {
   public static readonly AMPERSAND = 45;
   public static readonly WORD = 46;
   public static readonly MARGINALIA = 47;
-  public static readonly WS = 48;
-  public static readonly NLSEMI_WS = 49;
-  public static readonly EOS = 50;
-  public static readonly MARGINALIA_NLSEMI = 51;
-  public static readonly OTHER = 52;
+  public static readonly COMMENT = 48;
+  public static readonly WS = 49;
+  public static readonly NLSEMI_WS = 50;
+  public static readonly EOS = 51;
+  public static readonly MARGINALIA_NLSEMI = 52;
+  public static readonly COMMENT_NLSEMI = 53;
+  public static readonly OTHER = 54;
   public static readonly EOF = Token.EOF;
   public static readonly RULE_prog = 0;
   public static readonly RULE_stmt = 1;
@@ -246,10 +248,12 @@ export default class GoParser extends Parser {
     "AMPERSAND",
     "WORD",
     "MARGINALIA",
+    "COMMENT",
     "WS",
     "NLSEMI_WS",
     "EOS",
     "MARGINALIA_NLSEMI",
+    "COMMENT_NLSEMI",
     "OTHER",
   ];
   // tslint:disable:no-trailing-whitespace
@@ -2903,7 +2907,7 @@ export default class GoParser extends Parser {
       {
         this.state = 525;
         _la = this._input.LA(1);
-        if (!(_la === -1 || _la === 50)) {
+        if (!(_la === -1 || _la === 51)) {
           this._errHandler.recoverInline(this);
         } else {
           this._errHandler.reportMatch(this);
@@ -2957,7 +2961,7 @@ export default class GoParser extends Parser {
   }
 
   public static readonly _serializedATN: number[] = [
-    4, 1, 52, 528, 2, 0, 7, 0, 2, 1, 7, 1, 2, 2, 7, 2, 2, 3, 7, 3, 2, 4, 7, 4, 2, 5, 7, 5, 2, 6, 7, 6, 2, 7, 7, 7, 2, 8,
+    4, 1, 54, 528, 2, 0, 7, 0, 2, 1, 7, 1, 2, 2, 7, 2, 2, 3, 7, 3, 2, 4, 7, 4, 2, 5, 7, 5, 2, 6, 7, 6, 2, 7, 7, 7, 2, 8,
     7, 8, 2, 9, 7, 9, 2, 10, 7, 10, 2, 11, 7, 11, 2, 12, 7, 12, 2, 13, 7, 13, 2, 14, 7, 14, 2, 15, 7, 15, 2, 16, 7, 16,
     2, 17, 7, 17, 2, 18, 7, 18, 2, 19, 7, 19, 2, 20, 7, 20, 2, 21, 7, 21, 2, 22, 7, 22, 2, 23, 7, 23, 2, 24, 7, 24, 2,
     25, 7, 25, 2, 26, 7, 26, 2, 27, 7, 27, 2, 28, 7, 28, 2, 29, 7, 29, 2, 30, 7, 30, 2, 31, 7, 31, 2, 32, 7, 32, 2, 33,
@@ -2994,7 +2998,7 @@ export default class GoParser extends Parser {
     64, 0, 2, 42, 46, 65, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48,
     50, 52, 54, 56, 58, 60, 62, 64, 66, 68, 70, 72, 74, 76, 78, 80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100, 102, 104,
     106, 108, 110, 112, 114, 116, 118, 120, 122, 124, 126, 128, 0, 8, 3, 0, 31, 32, 34, 35, 44, 45, 1, 0, 36, 37, 1, 0,
-    38, 43, 2, 0, 33, 33, 44, 44, 1, 0, 31, 32, 1, 0, 4, 5, 1, 0, 1, 2, 1, 1, 50, 50, 531, 0, 135, 1, 0, 0, 0, 2, 148,
+    38, 43, 2, 0, 33, 33, 44, 44, 1, 0, 31, 32, 1, 0, 4, 5, 1, 0, 1, 2, 1, 1, 51, 51, 531, 0, 135, 1, 0, 0, 0, 2, 148,
     1, 0, 0, 0, 4, 153, 1, 0, 0, 0, 6, 155, 1, 0, 0, 0, 8, 164, 1, 0, 0, 0, 10, 166, 1, 0, 0, 0, 12, 170, 1, 0, 0, 0,
     14, 172, 1, 0, 0, 0, 16, 174, 1, 0, 0, 0, 18, 177, 1, 0, 0, 0, 20, 181, 1, 0, 0, 0, 22, 192, 1, 0, 0, 0, 24, 194, 1,
     0, 0, 0, 26, 197, 1, 0, 0, 0, 28, 199, 1, 0, 0, 0, 30, 207, 1, 0, 0, 0, 32, 211, 1, 0, 0, 0, 34, 218, 1, 0, 0, 0,
