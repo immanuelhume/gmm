@@ -696,6 +696,10 @@ export class PointerView extends NodeView {
     this.checkType(DataType.Pointer);
   }
   toString(): string {
+    const val = this.getValue();
+    if (val === -1) {
+      return "<nil>";
+    }
     return `Pointer ${fmtAddress(this.getValue())}`;
   }
   getValue(): Address {
