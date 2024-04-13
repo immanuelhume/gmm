@@ -25,7 +25,16 @@ To run individual files, run this from the project root:
     npm run run path/to/file.go
 
 A live editor is available at https://immanuelhume.github.io/gmm. It is able to
-load the examples in the examples/ folder.
+load the examples in the examples/ folder. To build the editor locally:
+
+    npx vite build
+
+The static files will be placed in ./dist, and can be served up with your
+choice of server, e.g.
+
+    python -m http.server 5183 --bind 127.0.0.1 --directory ./dist
+
+And it will be available at http://localhost:5183.
 
 +------------+
 |INTRODUCTION|
@@ -98,3 +107,4 @@ Struct literals, when used, must specify all fields.
     v := struct{val: 1, left: nil, right: nil} // all good
 
 Error messages for type errors are quite bad for now.
+

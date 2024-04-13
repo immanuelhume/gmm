@@ -83,7 +83,8 @@ import {
   UnaryOp,
   ILoadMethod,
   IGo,
-  ILoadGlobal,
+  // ILoadGlobal,
+  ILoadBool,
   IPackPtr,
   IDeref,
   ILoadPtrSlot,
@@ -92,7 +93,7 @@ import {
   IChanWrite,
 } from "./instructions";
 import { Address, ArrayStack, Stack, StrPool, arraysEqual } from "./util";
-import { DataType, Global, Int64View, NodeView, PointerView, StructView, builtinSymbols } from "./heapviews";
+import { DataType, Int64View, NodeView, PointerView, StructView, builtinSymbols } from "./heapviews";
 import assert from "assert";
 
 class BytecodeWriter implements Emitter {
@@ -1272,16 +1273,17 @@ export class Assembler extends GoVisitor<number> {
             ILoadC.emit(this.bc).setKind(ConstantKind.Float64).setVal(0);
             break;
           case "bool":
-            ILoadGlobal.emit(this.bc).setGlobal(Global["false"]);
+            ILoadBool.emit(this.bc).set(false);
+            // ILoadGlobal.emit(this.bc).setGlobal(Global["false"]);
             break;
         }
         break;
       case "ptr":
-        ILoadGlobal.emit(this.bc).setGlobal(Global["nil"]);
-        break;
       case "chan":
         // The default value of a channel is nil. (A channel is a pointer.)
-        ILoadGlobal.emit(this.bc).setGlobal(Global["nil"]);
+        IPush.emit(this.bc).setVal(-1);
+        IPackPtr.emit(this.bc);
+        // ILoadGlobal.emit(this.bc).setGlobal(Global["nil"]);
         break;
       case "func":
       case "method":
@@ -1991,9 +1993,11 @@ export class Assembler extends GoVisitor<number> {
   visitLitBool = (ctx: LitBoolContext): number => {
     const raw = ctx.getText();
     if (raw === "true") {
-      ILoadGlobal.emit(this.bc).setGlobal(Global["true"]);
+      ILoadBool.emit(this.bc).set(true);
+      // ILoadGlobal.emit(this.bc).setGlobal(Global["true"]);
     } else if (raw === "false") {
-      ILoadGlobal.emit(this.bc).setGlobal(Global["false"]);
+      ILoadBool.emit(this.bc).set(false);
+      // ILoadGlobal.emit(this.bc).setGlobal(Global["false"]);
     } else {
       err(ctx, `unexpected boolean literal ${raw}`);
     }
@@ -2024,7 +2028,10 @@ export class Assembler extends GoVisitor<number> {
   };
 
   visitLitNil = (_ctx: LitNilContext): number => {
-    ILoadGlobal.emit(this.bc).setGlobal(Global["nil"]);
+    // nil pointer
+    IPush.emit(this.bc).setVal(-1);
+    IPackPtr.emit(this.bc);
+    // ILoadGlobal.emit(this.bc).setGlobal(Global["nil"]);
     return 1;
   };
 

@@ -1,4 +1,4 @@
-import { EnvView, Global, Memory } from "./heapviews";
+import { EnvView, Memory } from "./heapviews";
 import { InstrView } from "./instructions";
 import { Address, ArrayStack, Stack, StrPool } from "./util";
 
@@ -56,7 +56,7 @@ export interface MachineState extends Memory, ThreadOps {
    */
   srcMap: Map<number, number>;
   strPool: StrPool;
-  globals: Record<Global, Address>;
+  // globals: Record<Global, Address>;
 }
 
 // type YoinkResult = YoinkOk | YoinkDone | Deadlock

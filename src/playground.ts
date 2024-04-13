@@ -1,17 +1,3 @@
-import { compileSrc } from "../src/compiler";
-import { Address, ArrayStack } from "../src/util";
-import {
-  BoolView,
-  BuiltinView,
-  EnvView,
-  FrameView,
-  Global,
-  PointerView,
-  StringView,
-  builtinIds,
-  builtinSymbols,
-} from "../src/heapviews";
-import { MachineState, Thread, ThreadCtl } from "../src/machine";
 import { exec } from "../src/executor";
 import examples from "virtual:examples";
 

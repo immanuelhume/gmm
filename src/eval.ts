@@ -10,7 +10,7 @@ import {
   clone,
   BuiltinId,
   BlockFrameView,
-  Global,
+  // Global,
   TupleView,
   PointerView,
   StructView,
@@ -49,7 +49,8 @@ import {
   ILoadStructFieldLoc,
   ILoadMethod,
   IGo,
-  ILoadGlobal,
+  // ILoadGlobal,
+  ILoadBool,
   IPackPtr,
   ILoadPtrSlot,
   ConstantKind,
@@ -356,12 +357,18 @@ export const microcode: Record<Opcode, EvalFn> = {
     }
     t.pc += ILoadC.size;
   },
-  [Opcode.LoadGlobal]: function (state: MachineState, t: Thread): void {
-    const instr = new ILoadGlobal(state.bytecode, t.pc);
-    const addr = state.globals[instr.global()];
-
-    t.os.push(addr);
-    t.pc += ILoadGlobal.size;
+  // [Opcode.LoadGlobal]: function (state: MachineState, t: Thread): void {
+  //   const instr = new ILoadGlobal(state.bytecode, t.pc);
+  //   const addr = state.globals[instr.global()];
+  //
+  //   t.os.push(addr);
+  //   t.pc += ILoadGlobal.size;
+  // },
+  [Opcode.LoadBool]: function (state: MachineState, t: Thread): void {
+    const instr = new ILoadBool(state.bytecode, t.pc);
+    const node = BoolView.allocate(state).set(instr.get());
+    t.os.push(node.addr);
+    t.pc += ILoadBool.size;
   },
   [Opcode.LoadStr]: function (state: MachineState, t: Thread): void {
     const instr = new ILoadStr(state.bytecode, t.pc);
@@ -384,20 +391,18 @@ export const microcode: Record<Opcode, EvalFn> = {
     t.pc += IPackPtr.size;
   },
   [Opcode.Deref]: function (state: MachineState, t: Thread): void {
-    const ptraddr = t.os.pop();
-    if (ptraddr === state.globals[Global["nil"]]) {
+    const ptr = new PointerView(state.heap, t.os.pop());
+    if (ptr.isNil()) {
       throw new PanicError("tried to dereference nil pointer");
     }
-    const ptr = new PointerView(state.heap, ptraddr);
     t.os.push(ptr.getValue());
     t.pc += IPackPtr.size;
   },
   [Opcode.LoadPtrSlot]: function (state: MachineState, t: Thread): void {
-    const ptraddr = t.os.pop();
-    if (ptraddr == state.globals[Global.nil]) {
+    const ptr = new PointerView(state.heap, t.os.pop());
+    if (ptr.isNil()) {
       throw new PanicError("tried to dereference nil pointer");
     }
-    const ptr = new PointerView(state.heap, ptraddr);
     const lvalue = LvalueView.allocate(state).setKind(LvalueKind.Deref).setLoc(ptr.getValue());
     t.os.push(lvalue.addr);
     t.pc += ILoadPtrSlot.size;
@@ -580,9 +585,9 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           const [lhs, rhs] = extractFloat64s(state.heap, lhsAddr, rhsAddr);
 
           if (lhs !== rhs) {
-            return state.globals[Global["true"]];
+            return BoolView.tru(state).addr;
           } else {
-            return state.globals[Global["false"]];
+            return BoolView.fal(state).addr;
           }
         },
       ],
@@ -592,9 +597,11 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           const [lhs, rhs] = extractFloat64s(state.heap, lhsAddr, rhsAddr);
 
           if (lhs === rhs) {
-            return state.globals[Global["true"]];
+            return BoolView.allocate(state).set(true).addr;
+            // return state.globals[Global["true"]];
           } else {
-            return state.globals[Global["false"]];
+            return BoolView.allocate(state).set(false).addr;
+            // return state.globals[Global["false"]];
           }
         },
       ],
@@ -624,9 +631,11 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           const [lhs, rhs] = extractFloat64s(state.heap, lhsAddr, rhsAddr);
 
           if (lhs <= rhs) {
-            return state.globals[Global["true"]];
+            return BoolView.allocate(state).set(true).addr;
+            // return state.globals[Global["true"]];
           } else {
-            return state.globals[Global["false"]];
+            return BoolView.allocate(state).set(false).addr;
+            // return state.globals[Global["false"]];
           }
         },
       ],
@@ -636,9 +645,11 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           const [lhs, rhs] = extractFloat64s(state.heap, lhsAddr, rhsAddr);
 
           if (lhs >= rhs) {
-            return state.globals[Global["true"]];
+            return BoolView.allocate(state).set(true).addr;
+            // return state.globals[Global["true"]];
           } else {
-            return state.globals[Global["false"]];
+            return BoolView.allocate(state).set(false).addr;
+            // return state.globals[Global["false"]];
           }
         },
       ],
@@ -647,9 +658,11 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
         (state, lhsAddr, rhsAddr) => {
           const [lhs, rhs] = extractFloat64s(state.heap, lhsAddr, rhsAddr);
           if (lhs < rhs) {
-            return state.globals[Global["true"]];
+            return BoolView.allocate(state).set(true).addr;
+            // return state.globals[Global["true"]];
           } else {
-            return state.globals[Global["false"]];
+            return BoolView.allocate(state).set(false).addr;
+            // return state.globals[Global["false"]];
           }
         },
       ],
@@ -659,9 +672,11 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           const [lhs, rhs] = extractFloat64s(state.heap, lhsAddr, rhsAddr);
 
           if (lhs > rhs) {
-            return state.globals[Global["true"]];
+            return BoolView.allocate(state).set(true).addr;
+            // return state.globals[Global["true"]];
           } else {
-            return state.globals[Global["false"]];
+            return BoolView.allocate(state).set(false).addr;
+            // return state.globals[Global["false"]];
           }
         },
       ],
@@ -696,9 +711,11 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           const [lhs, rhs] = extractInt64s(state.heap, lhsAddr, rhsAddr);
 
           if (lhs !== rhs) {
-            return state.globals[Global["true"]];
+            return BoolView.allocate(state).set(true).addr;
+            // return state.globals[Global["true"]];
           } else {
-            return state.globals[Global["false"]];
+            return BoolView.allocate(state).set(false).addr;
+            // return state.globals[Global["false"]];
           }
         },
       ],
@@ -708,9 +725,11 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           const [lhs, rhs] = extractInt64s(state.heap, lhsAddr, rhsAddr);
 
           if (lhs === rhs) {
-            return state.globals[Global["true"]];
+            return BoolView.allocate(state).set(true).addr;
+            // return state.globals[Global["true"]];
           } else {
-            return state.globals[Global["false"]];
+            return BoolView.allocate(state).set(false).addr;
+            // return state.globals[Global["false"]];
           }
         },
       ],
@@ -740,9 +759,11 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           const [lhs, rhs] = extractInt64s(state.heap, lhsAddr, rhsAddr);
 
           if (lhs <= rhs) {
-            return state.globals[Global["true"]];
+            return BoolView.allocate(state).set(true).addr;
+            // return state.globals[Global["true"]];
           } else {
-            return state.globals[Global["false"]];
+            return BoolView.allocate(state).set(false).addr;
+            // return state.globals[Global["false"]];
           }
         },
       ],
@@ -752,9 +773,11 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           const [lhs, rhs] = extractInt64s(state.heap, lhsAddr, rhsAddr);
 
           if (lhs >= rhs) {
-            return state.globals[Global["true"]];
+            return BoolView.allocate(state).set(true).addr;
+            // return state.globals[Global["true"]];
           } else {
-            return state.globals[Global["false"]];
+            return BoolView.allocate(state).set(false).addr;
+            // return state.globals[Global["false"]];
           }
         },
       ],
@@ -763,9 +786,11 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
         (state, lhsAddr, rhsAddr) => {
           const [lhs, rhs] = extractInt64s(state.heap, lhsAddr, rhsAddr);
           if (lhs < rhs) {
-            return state.globals[Global["true"]];
+            return BoolView.allocate(state).set(true).addr;
+            // return state.globals[Global["true"]];
           } else {
-            return state.globals[Global["false"]];
+            return BoolView.allocate(state).set(false).addr;
+            // return state.globals[Global["false"]];
           }
         },
       ],
@@ -775,9 +800,11 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           const [lhs, rhs] = extractInt64s(state.heap, lhsAddr, rhsAddr);
 
           if (lhs > rhs) {
-            return state.globals[Global["true"]];
+            return BoolView.allocate(state).set(true).addr;
+            // return state.globals[Global["true"]];
           } else {
-            return state.globals[Global["false"]];
+            return BoolView.allocate(state).set(false).addr;
+            // return state.globals[Global["false"]];
           }
         },
       ],
@@ -789,23 +816,28 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
       [
         BinaryOp.Eq,
         (state, lhsAddr, rhsAddr) => {
-          /**
-           * Booleans are globals, so we can directly compare addresses.
-           */
-          if (lhsAddr === rhsAddr) {
-            return state.globals[Global["true"]];
+          const lhs = new BoolView(state.heap, lhsAddr).get();
+          const rhs = new BoolView(state.heap, rhsAddr).get();
+          if (lhs === rhs) {
+            return BoolView.allocate(state).set(true).addr;
+            // return state.globals[Global["true"]];
           } else {
-            return state.globals[Global["false"]];
+            return BoolView.allocate(state).set(false).addr;
+            // return state.globals[Global["false"]];
           }
         },
       ],
       [
         BinaryOp.Neq,
         (state, lhsAddr, rhsAddr) => {
-          if (lhsAddr !== rhsAddr) {
-            return state.globals[Global["true"]];
+          const lhs = new BoolView(state.heap, lhsAddr).get();
+          const rhs = new BoolView(state.heap, rhsAddr).get();
+          if (lhs !== rhs) {
+            return BoolView.allocate(state).set(true).addr;
+            // return state.globals[Global["true"]];
           } else {
-            return state.globals[Global["false"]];
+            return BoolView.allocate(state).set(false).addr;
+            // return state.globals[Global["false"]];
           }
         },
       ],
@@ -820,9 +852,11 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           const lhs = new PointerView(state.heap, lhsAddr).getValue();
           const rhs = new PointerView(state.heap, rhsAddr).getValue();
           if (lhs === rhs) {
-            return state.globals[Global["true"]];
+            return BoolView.allocate(state).set(true).addr;
+            // return state.globals[Global["true"]];
           } else {
-            return state.globals[Global["false"]];
+            return BoolView.allocate(state).set(false).addr;
+            // return state.globals[Global["false"]];
           }
         },
       ],
@@ -832,9 +866,11 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           const lhs = new PointerView(state.heap, lhsAddr).getValue();
           const rhs = new PointerView(state.heap, rhsAddr).getValue();
           if (lhs !== rhs) {
-            return state.globals[Global["true"]];
+            return BoolView.allocate(state).set(true).addr;
+            // return state.globals[Global["true"]];
           } else {
-            return state.globals[Global["false"]];
+            return BoolView.allocate(state).set(false).addr;
+            // return state.globals[Global["false"]];
           }
         },
       ],
@@ -849,9 +885,11 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           const lhs = new StringView(state.heap, lhsAddr, state).getId();
           const rhs = new StringView(state.heap, rhsAddr, state).getId();
           if (lhs === rhs) {
-            return state.globals[Global["true"]];
+            return BoolView.allocate(state).set(true).addr;
+            // return state.globals[Global["true"]];
           } else {
-            return state.globals[Global["false"]];
+            return BoolView.allocate(state).set(false).addr;
+            // return state.globals[Global["false"]];
           }
         },
       ],
@@ -861,9 +899,11 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
           const lhs = new StringView(state.heap, lhsAddr, state).getId();
           const rhs = new StringView(state.heap, rhsAddr, state).getId();
           if (lhs !== rhs) {
-            return state.globals[Global["true"]];
+            return BoolView.allocate(state).set(true).addr;
+            // return state.globals[Global["true"]];
           } else {
-            return state.globals[Global["false"]];
+            return BoolView.allocate(state).set(false).addr;
+            // return state.globals[Global["false"]];
           }
         },
       ],
@@ -915,16 +955,20 @@ const execLogicalOp = (state: MachineState, t: Thread, op: LogicalOp): void => {
   switch (op) {
     case LogicalOp.And:
       if (lhs && rhs) {
-        t.os.push(state.globals[Global["true"]]);
+        t.os.push(BoolView.allocate(state).set(true).addr);
+        // t.os.push(state.globals[Global["true"]]);
       } else {
-        t.os.push(state.globals[Global["false"]]);
+        t.os.push(BoolView.allocate(state).set(false).addr);
+        // t.os.push(state.globals[Global["false"]]);
       }
       break;
     case LogicalOp.Or:
       if (lhs || rhs) {
-        t.os.push(state.globals[Global["true"]]);
+        t.os.push(BoolView.allocate(state).set(true).addr);
+        // t.os.push(state.globals[Global["true"]]);
       } else {
-        t.os.push(state.globals[Global["false"]]);
+        t.os.push(BoolView.allocate(state).set(false).addr);
+        // t.os.push(state.globals[Global["false"]]);
       }
       break;
     default:
@@ -990,9 +1034,11 @@ const unaryBuiltins = new Map<DataType, Map<UnaryOp, UnaryOpFn>>([
         (state, addr) => {
           const val = new BoolView(state.heap, addr).get();
           if (val) {
-            return state.globals[Global.false];
+            return BoolView.allocate(state).set(false).addr;
+            // return state.globals[Global.false];
           } else {
-            return state.globals[Global.true];
+            return BoolView.allocate(state).set(true).addr;
+            // return state.globals[Global.true];
           }
         },
       ],
@@ -1064,7 +1110,7 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
       });
       return { restore: true };
     } else {
-      mu.setField(0, state.globals[Global["true"]]);
+      mu.setField(0, BoolView.tru(state).addr);
       if (id.getValue() === 0) {
         // An ID of zero means the mutex has not been access before. We
         // initialize it now by getting a unique lock ID.
@@ -1085,7 +1131,7 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
     const id = new Int64View(state.heap, mu.getField(1));
 
     if (locked.get()) {
-      mu.setField(0, state.globals[Global["false"]]);
+      mu.setField(0, BoolView.fal(state).addr);
       state.pub("mutex-unlock", id.getValue(), t.id);
     }
 
