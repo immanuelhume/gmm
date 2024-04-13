@@ -12,16 +12,16 @@ func main() {
 		panic("expected hello, got ", x)
 	}
 
-	if (x != z) {
+	if x != z {
 		panic("expected hello, got ", x)
 	}
 
-	if (x+y) != c {
+	if (x + y) != c {
 		panic("expected helloworld, got ", x+y)
 	}
 
 	if (x + y + x) != (c + z) {
 		panic("expected helloworldhello, got ", x+y+x)
 	}
-
 }
+

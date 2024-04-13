@@ -837,15 +837,12 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
     ]),
   ],
   [
-    // @todo: add string concat (+) and string eq (==)
     DataType.String,
     new Map([
       [
         BinaryOp.Eq,
         (state, lhsAddr, rhsAddr) => {
-          const lhs = new StringView(state.heap, lhsAddr, state).getId();
-          const rhs = new StringView(state.heap, rhsAddr, state).getId();
-          if (lhs === rhs) {
+          if (lhsAddr === rhsAddr) {
             return state.globals[Global["true"]];
           } else {
             return state.globals[Global["false"]];
@@ -855,9 +852,7 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
       [
         BinaryOp.Neq,
         (state, lhsAddr, rhsAddr) => {
-          const lhs = new StringView(state.heap, lhsAddr, state).getId();
-          const rhs = new StringView(state.heap, rhsAddr, state).getId();
-          if (lhs !== rhs) {
+          if (lhsAddr !== rhsAddr) {
             return state.globals[Global["true"]];
           } else {
             return state.globals[Global["false"]];
@@ -867,14 +862,32 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
       [
         BinaryOp.Add,
         (state, lhsAddr, rhsAddr) => {
-          const lhs = new StringView(state.heap, lhsAddr, state).toString();
-          const rhs = new StringView(state.heap, rhsAddr, state).toString();
+          const lhsId = new StringView(state.heap, lhsAddr, state).getId();
+          const rhsId = new StringView(state.heap, rhsAddr, state).getId();
 
-          const res = lhs + rhs;
-          const id = state.strPool.add(res);
-          const strView = StringView.allocate(state);
-          const ret = new StringView(state.heap, strView.addr, state).setId(id);
-          return ret.addr;
+          const lhsStr = state.strPool.getStr(lhsId);
+          const rhsStr = state.strPool.getStr(rhsId);
+
+          if (lhsStr === undefined) {
+            throw new Error(`string of ID ${lhsId} not found`);
+          }
+          if (rhsStr === undefined) {
+            throw new Error(`string of ID ${rhsId} not found`);
+          }
+
+          const newStr = lhsStr + rhsStr;
+          const newId = state.strPool.add(newStr);
+
+          // Dynamically created strings should only allocate if the string
+          // does not already exist in the pool.
+          const existing = state.strPool.getAddress(newId);
+          if (existing !== undefined) {
+            return existing;
+          }
+
+          const newAddr = StringView.allocate(state).setId(newId).addr;
+          state.strPool.setAddress(newId, newAddr);
+          return newAddr;
         },
       ],
     ]),
