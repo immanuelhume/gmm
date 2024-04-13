@@ -13,11 +13,12 @@ Go minus minus. A stack-based virtual machine for a small subset of Go.
 This project was built with NodeJS 21.7 and Antlr 4.12. To run locally,
 
     git clone git@github.com:immanuelhume/gmm
-    npm i
+    cd gmm
+    npm i          # install dependencies
     npm run runall # run all test cases
 
-Antlr4 is not required unless you modify the parser or lexer. Its output is
-already checked into this repository at antlr/.
+Antlr4 binaries are not required unless you modify the parser or lexer. Its
+output is already checked into this repository at antlr/.
 
 To run individual files, run this from the project root:
 
