@@ -842,7 +842,9 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
       [
         BinaryOp.Eq,
         (state, lhsAddr, rhsAddr) => {
-          if (lhsAddr === rhsAddr) {
+          const lhs = new StringView(state.heap, lhsAddr, state).getId();
+          const rhs = new StringView(state.heap, rhsAddr, state).getId();
+          if (lhs === rhs) {
             return state.globals[Global["true"]];
           } else {
             return state.globals[Global["false"]];
@@ -852,7 +854,9 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
       [
         BinaryOp.Neq,
         (state, lhsAddr, rhsAddr) => {
-          if (lhsAddr !== rhsAddr) {
+          const lhs = new StringView(state.heap, lhsAddr, state).getId();
+          const rhs = new StringView(state.heap, rhsAddr, state).getId();
+          if (lhs !== rhs) {
             return state.globals[Global["true"]];
           } else {
             return state.globals[Global["false"]];
