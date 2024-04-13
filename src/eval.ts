@@ -20,6 +20,7 @@ import {
   LvalueView,
   LvalueKind,
   copy,
+  StringView,
 } from "./heapviews";
 import {
   IAssign,
@@ -383,8 +384,11 @@ export const microcode: Record<Opcode, EvalFn> = {
     t.pc += IPackPtr.size;
   },
   [Opcode.Deref]: function (state: MachineState, t: Thread): void {
-    // @todo: check if we are trying to deref a nullptr
-    const ptr = new PointerView(state.heap, t.os.pop());
+    const ptraddr = t.os.pop();
+    if (ptraddr === state.globals[Global["nil"]]) {
+      throw new PanicError("tried to dereference nil pointer");
+    }
+    const ptr = new PointerView(state.heap, ptraddr);
     t.os.push(ptr.getValue());
     t.pc += IPackPtr.size;
   },
@@ -833,9 +837,64 @@ export const binaryBuiltins = new Map<DataType, Map<BinaryOp, BinaryOpFn>>([
     ]),
   ],
   [
-    // @todo: add string concat (+) and string eq (==)
     DataType.String,
-    new Map([]),
+    new Map([
+      [
+        BinaryOp.Eq,
+        (state, lhsAddr, rhsAddr) => {
+          const lhs = new StringView(state.heap, lhsAddr, state).getId();
+          const rhs = new StringView(state.heap, rhsAddr, state).getId();
+          if (lhs === rhs) {
+            return state.globals[Global["true"]];
+          } else {
+            return state.globals[Global["false"]];
+          }
+        },
+      ],
+      [
+        BinaryOp.Neq,
+        (state, lhsAddr, rhsAddr) => {
+          const lhs = new StringView(state.heap, lhsAddr, state).getId();
+          const rhs = new StringView(state.heap, rhsAddr, state).getId();
+          if (lhs !== rhs) {
+            return state.globals[Global["true"]];
+          } else {
+            return state.globals[Global["false"]];
+          }
+        },
+      ],
+      [
+        BinaryOp.Add,
+        (state, lhsAddr, rhsAddr) => {
+          const lhsId = new StringView(state.heap, lhsAddr, state).getId();
+          const rhsId = new StringView(state.heap, rhsAddr, state).getId();
+
+          const lhsStr = state.strPool.getStr(lhsId);
+          const rhsStr = state.strPool.getStr(rhsId);
+
+          if (lhsStr === undefined) {
+            throw new Error(`string of ID ${lhsId} not found`);
+          }
+          if (rhsStr === undefined) {
+            throw new Error(`string of ID ${rhsId} not found`);
+          }
+
+          const newStr = lhsStr + rhsStr;
+          const newId = state.strPool.add(newStr);
+
+          // Dynamically created strings should only allocate if the string
+          // does not already exist in the pool.
+          const existing = state.strPool.getAddress(newId);
+          if (existing !== undefined) {
+            return existing;
+          }
+
+          const newAddr = StringView.allocate(state).setId(newId).addr;
+          state.strPool.setAddress(newId, newAddr);
+          return newAddr;
+        },
+      ],
+    ]),
   ],
 ]);
 

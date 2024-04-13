@@ -74,7 +74,7 @@ WS : [ \t\r\n]+ -> skip ;
 mode NLSEMI ; // the goal of [NLSEMI] is to check if the statement terminates, and if so, emit [EOS] token (end-of-statement)
 
 NLSEMI_WS : [ \t] -> skip ;
-EOS : ([\r\n]+) -> mode(DEFAULT_MODE) ; // technically, ';' should trigger an EOS also
+EOS : ([\r\n]+ | '/*' .*? '*/' | EOF) -> mode(DEFAULT_MODE) ; // technically, ';' should trigger an EOS also
 MARGINALIA_NLSEMI : '/*' ~[\r\n]*? '*/' -> skip ;
 COMMENT_NLSEMI : '//' ~[\r\n]*  -> skip ;
 OTHER : -> mode(DEFAULT_MODE), skip ;
