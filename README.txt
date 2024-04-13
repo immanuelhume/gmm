@@ -19,7 +19,7 @@ This project was built with NodeJS 21.7 and Antlr 4.12. To run locally,
 Antlr4 is not required unless you modify the parser or lexer. Its output is
 already checked into this repository at antlr/.
 
-To run individual files, use
+To run individual files, run this from the project root:
 
     npm run run path/to/file.go
 
