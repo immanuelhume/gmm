@@ -393,7 +393,11 @@ export const microcode: Record<Opcode, EvalFn> = {
     t.pc += IPackPtr.size;
   },
   [Opcode.LoadPtrSlot]: function (state: MachineState, t: Thread): void {
-    const ptr = new PointerView(state.heap, t.os.pop());
+    const ptraddr = t.os.pop();
+    if (ptraddr == state.globals[Global.nil]) {
+      throw new PanicError("tried to dereference nil pointer");
+    }
+    const ptr = new PointerView(state.heap, ptraddr);
     const lvalue = LvalueView.allocate(state).setKind(LvalueKind.Deref).setLoc(ptr.getValue());
     t.os.push(lvalue.addr);
     t.pc += ILoadPtrSlot.size;
