@@ -1,4 +1,4 @@
 func main() {
-	var x int
-	*x
+	var x *int
+	dbg(*x)
 }
