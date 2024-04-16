@@ -45,15 +45,15 @@ export enum DataType {
   Struct,
   Lvalue,
 }
-
-/**
- * Global values, which should eventually appear as singletons in memory.
- */
-export enum Global {
-  "true" = 0x00,
-  "false",
-  "nil",
-}
+//
+// /**
+//  * Global values, which should eventually appear as singletons in memory.
+//  */
+// export enum Global {
+//   "true" = 0x00,
+//   "false",
+//   "nil",
+// }
 
 export enum BuiltinId {
   "dbg" = 0x00,
@@ -567,6 +567,12 @@ export class BoolView extends NodeView {
     const addr = allocate(state, DataType.Bool, 1, 0);
     return new BoolView(state.heap, addr);
   }
+  static tru(state: Memory): BoolView {
+    return BoolView.allocate(state).set(true);
+  }
+  static fal(state: Memory): BoolView {
+    return BoolView.allocate(state).set(false);
+  }
 
   constructor(heap: DataView, addr: Address) {
     super(heap, addr);
@@ -696,7 +702,14 @@ export class PointerView extends NodeView {
     this.checkType(DataType.Pointer);
   }
   toString(): string {
+    const val = this.getValue();
+    if (val === -1) {
+      return "<nil>";
+    }
     return `Pointer ${fmtAddress(this.getValue())}`;
+  }
+  isNil(): boolean {
+    return this.getValue() === -1;
   }
   getValue(): Address {
     return this.getChild(0);

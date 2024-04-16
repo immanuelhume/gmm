@@ -5,7 +5,7 @@ import {
   BuiltinView,
   EnvView,
   FrameView,
-  Global,
+  // Global,
   PointerView,
   StringView,
   builtinIds,
@@ -86,11 +86,11 @@ export const exec = (src: string, quiet = false): void => {
   }
 
   // And the globals.
-  const globals: Record<Global, Address> = {
-    [Global["true"]]: BoolView.allocate(mem).set(true).addr,
-    [Global["false"]]: BoolView.allocate(mem).set(false).addr,
-    [Global["nil"]]: PointerView.allocate(mem).setValue(-1).addr,
-  };
+  // const globals: Record<Global, Address> = {
+  //   [Global["true"]]: BoolView.allocate(mem).set(true).addr,
+  //   [Global["false"]]: BoolView.allocate(mem).set(false).addr,
+  //   [Global["nil"]]: PointerView.allocate(mem).setValue(-1).addr,
+  // };
 
   // The initial thread.
   const init: Thread = {
@@ -111,7 +111,7 @@ export const exec = (src: string, quiet = false): void => {
     bytecode,
     srcMap,
     strPool,
-    globals,
+    // globals,
 
     sub(e, eId, threadId, f) {
       tctl.sub(e, eId, threadId, f);
