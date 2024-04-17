@@ -1653,6 +1653,18 @@ export class Assembler extends GoVisitor<number> {
     const fn = func._fn;
     const argc = args.arg_list().length;
 
+    {
+      const type = this.typeComp(fn);
+      if (type.length !== 1) {
+        err(ctx, `cannot call non-function ${fn.getText()}`);
+        throw "Unreachable";
+      }
+      const kind = type[0].data.kind;
+      if (kind !== "func" && kind !== "method") {
+        err(ctx, `cannot call non-function ${fn.getText()}`);
+      }
+    }
+
     this.visit(fn); // emit code to evaluate the callable thing
     this.visit(args); // emit code to evaluate each arg
 
