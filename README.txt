@@ -65,10 +65,10 @@ prints a message but then terminates the program.
 The go/pass/ folder contains test cases which are meant to pass. The go/fail
 folder holds the opposite. Check them to see the full set of features.
 
-Gmm has three primitive data types: int, float, and string. Ints and floats are
-64 bit. These three types (along with pointers) are the only primitive types
-in gmm. Other "primitives" like channels and mutexes are data structures
-implemented on top of these types.
+Gmm has three primitive data types: int, float, bool, and string. Ints and
+floats are 64 bit. These four types (along with pointers) are the only
+primitive types in gmm. Other "primitives" like channels and mutexes are data
+structures implemented on top of these types.
 
 +-------+
 |GOTCHAS|
@@ -103,8 +103,8 @@ Instead, please place things things between braces in their own lines, like so:
 
 Struct literals, when used, must specify all fields.
 
-    u := struct{val: 1}                        // compile error!
-    v := struct{val: 1, left: nil, right: nil} // all good
+    u := node{val: 1}                        // compile error!
+    v := node{val: 1, left: nil, right: nil} // all good
 
 Error messages for type errors are quite bad for now.
 
