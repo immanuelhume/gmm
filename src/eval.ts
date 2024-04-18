@@ -249,7 +249,7 @@ export const microcode: Record<Opcode, EvalFn> = {
     const rcv = t.os.pop();
     const fnAddr = t.os.pop(); // this could be an Fn or a Builtin!
 
-    const mthd = MethodView.allocate(state).setReceiver(rcv).setFn(fnAddr);
+    const mthd = MethodView.allocate(state).setReceiver(clone(state, rcv)).setFn(fnAddr);
     t.os.push(mthd.addr);
 
     t.pc += ILoadMethod.size;
@@ -1100,13 +1100,6 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
       t.isLive = false;
       state.sub("mutex-unlock", id.getValue(), t.id, (t, _src) => {
         t.isLive = true;
-      });
-      // @todo: check if this sub here works. The intent is to put the thread
-      // back to sleep, if someone else got to lock the mutex before it while
-      // it was waiting.
-      state.sub("mutex-lock", id.getValue(), t.id, (t, src) => {
-        if (src === t.id) return;
-        t.isLive = false;
       });
       return { restore: true };
     } else {
