@@ -249,7 +249,7 @@ export const microcode: Record<Opcode, EvalFn> = {
     const rcv = t.os.pop();
     const fnAddr = t.os.pop(); // this could be an Fn or a Builtin!
 
-    const mthd = MethodView.allocate(state).setReceiver(rcv).setFn(fnAddr);
+    const mthd = MethodView.allocate(state).setReceiver(clone(state, rcv)).setFn(fnAddr);
     t.os.push(mthd.addr);
 
     t.pc += ILoadMethod.size;
