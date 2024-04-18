@@ -1101,13 +1101,6 @@ const builtinFns: Record<BuiltinId, BuiltinEvalFn> = {
       state.sub("mutex-unlock", id.getValue(), t.id, (t, _src) => {
         t.isLive = true;
       });
-      // @todo: check if this sub here works. The intent is to put the thread
-      // back to sleep, if someone else got to lock the mutex before it while
-      // it was waiting.
-      state.sub("mutex-lock", id.getValue(), t.id, (t, src) => {
-        if (src === t.id) return;
-        t.isLive = false;
-      });
       return { restore: true };
     } else {
       mu.setField(0, BoolView.tru(state).addr);
