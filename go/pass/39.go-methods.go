@@ -11,7 +11,9 @@ func main() {
 
 	x := <-res
 
-	dbg("sum of tree is", x)
+    if x != 6 {
+        panic("expected 6, got", x)
+    }
 }
 
 type node struct {
