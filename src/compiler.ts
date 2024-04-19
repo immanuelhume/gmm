@@ -1452,6 +1452,7 @@ export class Assembler extends GoVisitor<number> {
 
     IReturn.emit(this.bc);
 
+    ldf.setLast(this.bc.prevWc()); // goroutines need this info to know where to stop
     goto.setWhere(this.bc.wc());
 
     const fnName = ctx._rcvType.getText() + "::" + ctx._methodName.getText();
