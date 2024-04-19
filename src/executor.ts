@@ -54,7 +54,8 @@ class Executor {
           );
         }
         microcode[opcode](this.common, t);
-        if (t.pc === t.lastPc) {
+        const isLast = t.pc === t.lastPc;
+        if (isLast || t.isZombie) {
           this.tctl.pub("fin", t.id, t.id);
           t.isZombie = true; // set itself to a zombie
           break;

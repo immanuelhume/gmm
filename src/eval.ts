@@ -221,6 +221,10 @@ export const microcode: Record<Opcode, EvalFn> = {
     // We don't need to bump the PC here. Since we jump back to wherever we
     // called the function from.
     const addr = t.rts.pop();
+    if (t.rts.toList().length === 0) {
+      t.isZombie = true;
+      return;
+    }
     const typ = NodeView.getDataType(state.heap, addr);
     switch (typ) {
       case DataType.CallFrame:
@@ -508,6 +512,7 @@ export const microcode: Record<Opcode, EvalFn> = {
           t.isLive = true;
         });
         t.pc += IChanWrite.size;
+        break;
       case -1: // Someone is waiting to read.
         copy(state, towrite, data.addr);
         status.setValue(1);
